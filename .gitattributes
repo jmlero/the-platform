@@ -1,0 +1,4 @@
+* text=auto
+
+deck/internal/webui/dist/** linguist-generated=true whitespace=-trailing-space
+docs/architecture/*.html linguist-generated=true

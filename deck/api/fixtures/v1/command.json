@@ -1,0 +1,10 @@
+{
+  "id": "command_fixture_001",
+  "run_id": "run_fixture_001",
+  "sequence": 1,
+  "type": "cancel",
+  "status": "pending",
+  "reason": "Operator reduced authority before another side effect.",
+  "requested_by": "human_fixture_001",
+  "created_at": 1784376120000
+}

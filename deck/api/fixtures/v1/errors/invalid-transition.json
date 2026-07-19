@@ -1,0 +1,7 @@
+{
+  "error": "run cannot transition from planning to completed",
+  "code": "invalid_transition",
+  "message": "run cannot transition from planning to completed",
+  "retryable": false,
+  "request_id": "request_fixture_invalid_transition"
+}

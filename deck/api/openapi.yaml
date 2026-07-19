@@ -1,0 +1,1269 @@
+openapi: 3.1.0
+info:
+  title: AppDeck Agent API
+  version: 1.0.0
+  description: |-
+    Work-control API for creating and inspecting work, claiming tasks, submitting
+    plans, requesting human decisions, reporting progress, and attaching evidence.
+
+    Protocol conventions for major version 1:
+
+    - `/api/v1` is the transport major version. Additive fields and capability
+      identifiers do not change that version; incompatible semantics require `/api/v2`.
+    - Fields named `*_at`, `now`, and `server_time` are UTC Unix timestamps in
+      milliseconds. Durations explicitly named `*_seconds` are integer seconds.
+    - Clients may send `X-Request-ID`. AppDeck echoes an accepted value or creates
+      one, returns it in every response, and includes it in structured API errors.
+    - API errors have stable `code`, `message`, `retryable`, and `request_id` fields.
+      The `error` string remains a compatibility alias for `message` in version 1.
+    - Operations that advertise pagination use a bounded `limit`, an opaque
+      `cursor`, and an object containing `items` and optional `next_cursor`.
+      Clients must not interpret cursor contents. Existing array responses are
+      unpaginated unless their operation advertises a paginated capability.
+    - Capability identifiers are additive. Clients must require only capabilities
+      needed for the behavior they are about to enable.
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Local AppDeck
+tags:
+  - name: Provider
+  - name: Workspace
+  - name: Tasks
+  - name: Agents
+  - name: Runs
+  - name: Decisions
+  - name: Events
+
+paths:
+  /provider:
+    get:
+      tags: [Provider]
+      operationId: getProviderInfo
+      x-capability: provider.info
+      summary: Discover protocol compatibility and readiness
+      description: >-
+        This read-only operation remains available when the canonical store is
+        unavailable so clients can distinguish incompatibility from degraded readiness.
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      responses:
+        "200":
+          description: Provider identity, protocol, capabilities, time, and readiness
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProviderInfo"
+
+  /bootstrap:
+    get:
+      tags: [Workspace]
+      operationId: getBootstrap
+      summary: Get the current workspace snapshot
+      responses:
+        "200":
+          description: Tasks, agents, pending decisions, and recent events
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Bootstrap"
+
+  /tasks:
+    get:
+      tags: [Tasks]
+      operationId: listTasks
+      x-capability: work.ready.list
+      summary: List all tasks in priority order
+      parameters:
+        - name: status
+          in: query
+          description: Optional exact task-status filter; Marina uses `ready` for work discovery.
+          schema:
+            $ref: "#/components/schemas/TaskStatus"
+      responses:
+        "200":
+          description: Task list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Task"
+    post:
+      tags: [Tasks]
+      operationId: createTask
+      summary: Create a backlog or ready task
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTask"
+      responses:
+        "201":
+          description: Created task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+
+  /tasks/{taskId}:
+    parameters:
+      - $ref: "#/components/parameters/TaskId"
+    get:
+      tags: [Tasks]
+      operationId: getTask
+      x-capability: work.inspect
+      summary: Get a task with its runs, events, decisions, and artifacts
+      responses:
+        "200":
+          description: Complete task detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Tasks]
+      operationId: updateTask
+      summary: Update the durable task definition
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTask"
+      responses:
+        "200":
+          description: Updated task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /tasks/{taskId}/move:
+    parameters:
+      - $ref: "#/components/parameters/TaskId"
+    post:
+      tags: [Tasks]
+      operationId: moveTask
+      summary: Perform a guarded manual task transition
+      description: >-
+        Intended for backlog release and requeue actions. Active execution states
+        are controlled by run operations and cannot be moved manually.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  $ref: "#/components/schemas/TaskStatus"
+      responses:
+        "200":
+          description: Moved task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+
+  /tasks/{taskId}/claim:
+    parameters:
+      - $ref: "#/components/parameters/TaskId"
+    post:
+      tags: [Runs]
+      operationId: claimTask
+      x-capability: work.claim.atomic
+      summary: Atomically claim a ready task
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [agent_id]
+              properties:
+                agent_id:
+                  type: string
+                lease_seconds:
+                  type: integer
+                  minimum: 1
+                  default: 30
+      responses:
+        "201":
+          description: New planning run with an exclusive lease
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Run"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /agents:
+    get:
+      tags: [Agents]
+      operationId: listAgents
+      summary: List known agents and their presence
+      responses:
+        "200":
+          description: Agent list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Agent"
+    post:
+      tags: [Agents]
+      operationId: registerAgent
+      x-capability: agent.register
+      summary: Register or reconnect an agent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterAgent"
+      responses:
+        "201":
+          description: Registered agent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Agent"
+
+  /runs/{runId}/heartbeat:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+    post:
+      tags: [Runs]
+      operationId: heartbeatRun
+      x-capability: run.lease.renew
+      summary: Renew an active run lease
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [agent_id]
+              properties:
+                agent_id:
+                  type: string
+                lease_seconds:
+                  type: integer
+                  minimum: 1
+                  default: 30
+      responses:
+        "204":
+          description: Lease renewed
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /runs/{runId}/plan:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+    post:
+      tags: [Runs]
+      operationId: submitPlan
+      x-capability: run.plan.submit
+      summary: Submit the plan for an active planning run
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [plan]
+              properties:
+                plan:
+                  type: string
+                require_approval:
+                  type: boolean
+                  default: true
+      responses:
+        "200":
+          description: Optional decision created for human approval
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  decision:
+                    oneOf:
+                      - $ref: "#/components/schemas/Decision"
+                      - type: "null"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /runs/{runId}/progress:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+    post:
+      tags: [Runs]
+      operationId: reportProgress
+      x-capability: run.progress.append
+      summary: Append a durable progress event
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                message:
+                  type: string
+                payload:
+                  type: object
+                  additionalProperties: true
+      responses:
+        "204":
+          description: Progress recorded
+
+  /runs/{runId}/start:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+    post:
+      tags: [Runs]
+      operationId: startRun
+      x-capability: run.start
+      summary: Resume a run after its plan is approved
+      description: >-
+        The control plane verifies that the latest plan decision is answered and
+        matches the recommended approval option before starting execution.
+      responses:
+        "204":
+          description: Approved run started
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+
+  /runs/{runId}/verify:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+    post:
+      tags: [Runs]
+      operationId: beginVerification
+      x-capability: run.verify
+      summary: Move a running attempt into verification
+      responses:
+        "204":
+          description: Run is verifying
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+
+  /runs/{runId}/complete:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+    post:
+      tags: [Runs]
+      operationId: completeRun
+      x-capability: run.complete
+      summary: Complete a verified run with evidence
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [summary, evidence]
+              properties:
+                summary:
+                  type: string
+                evidence:
+                  type: string
+                  description: Markdown verification report
+      responses:
+        "204":
+          description: Run completed and evidence artifact created
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+
+  /runs/{runId}/block:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+    post:
+      tags: [Runs]
+      operationId: blockRun
+      x-capability: run.block
+      summary: Stop an active attempt and mark its task blocked
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+      responses:
+        "204":
+          description: Run and task marked blocked
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+
+  /decisions:
+    get:
+      tags: [Decisions]
+      operationId: listDecisions
+      x-capability: decision.list
+      summary: List human decision requests
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, answered, cancelled]
+      responses:
+        "200":
+          description: Decision list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Decision"
+
+  /decisions/{decisionId}/answer:
+    parameters:
+      - name: decisionId
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      tags: [Decisions]
+      operationId: answerDecision
+      x-capability: decision.answer
+      summary: Record the human answer to a pending decision
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [answer]
+              properties:
+                answer:
+                  type: string
+      responses:
+        "200":
+          description: Answered decision
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Decision"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /decisions/{decisionId}:
+    parameters:
+      - name: decisionId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Decisions]
+      operationId: getDecision
+      x-capability: decision.inspect
+      summary: Get one decision so an agent can wait for its answer
+      responses:
+        "200":
+          description: Decision state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Decision"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /events:
+    get:
+      tags: [Events]
+      operationId: listEvents
+      x-capability: event.list
+      summary: List durable workspace events
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+        - name: after_id
+          in: query
+          description: Return events newer than this event ID in ascending order
+          schema:
+            type: integer
+            format: int64
+      responses:
+        "200":
+          description: Event list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Event"
+
+  /events/stream:
+    get:
+      tags: [Events]
+      operationId: streamEvents
+      x-capability: event.stream
+      summary: Subscribe to live durable events and agent heartbeats
+      parameters:
+        - name: Last-Event-ID
+          in: header
+          schema:
+            type: integer
+            format: int64
+      responses:
+        "200":
+          description: Server-Sent Event stream with JSON-encoded Event values
+          content:
+            text/event-stream:
+              schema:
+                type: string
+
+components:
+  headers:
+    RequestId:
+      description: Correlates this response with service logs and structured errors.
+      schema:
+        type: string
+        maxLength: 128
+
+  parameters:
+    RequestId:
+      name: X-Request-ID
+      in: header
+      required: false
+      description: Optional caller correlation ID containing letters, digits, `-`, `_`, `.`, or `:`.
+      schema:
+        type: string
+        maxLength: 128
+    TaskId:
+      name: taskId
+      in: path
+      required: true
+      schema:
+        type: string
+    RunId:
+      name: runId
+      in: path
+      required: true
+      schema:
+        type: string
+
+  responses:
+    NotFound:
+      description: The requested resource does not exist
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Conflict:
+      description: The resource changed or is no longer available for the operation
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    InvalidInput:
+      description: Invalid input or state transition
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    ProviderInfo:
+      type: object
+      x-fixture: ./fixtures/v1/provider-info.json
+      required: [provider, protocol_version, capabilities, server_time, ready, readiness]
+      properties:
+        provider:
+          type: string
+          const: appdeck
+        protocol_version:
+          type: string
+          const: "1.0"
+          description: Work-control semantic version implemented behind `/api/v1`.
+        capabilities:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+          example:
+            - provider.info
+            - work.ready.list
+            - work.inspect
+            - work.claim.atomic
+            - run.lease.renew
+        server_time:
+          type: integer
+          format: int64
+          description: Current UTC Unix time in milliseconds.
+        ready:
+          type: boolean
+          description: Whether the provider can currently serve canonical work-control state.
+        readiness:
+          type: object
+          additionalProperties:
+            type: string
+          example:
+            store: available
+
+    TaskStatus:
+      type: string
+      enum:
+        - backlog
+        - ready
+        - planning
+        - waiting_decision
+        - running
+        - verifying
+        - done
+        - blocked
+        - failed
+        - cancelled
+
+    Priority:
+      type: string
+      enum: [low, medium, high, urgent]
+
+    Task:
+      type: object
+      x-fixture: ./fixtures/v1/task.json
+      required:
+        - id
+        - project_id
+        - title
+        - description
+        - acceptance_criteria
+        - status
+        - priority
+        - budget_minutes
+        - version
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+        project_id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        acceptance_criteria:
+          type: string
+        status:
+          $ref: "#/components/schemas/TaskStatus"
+        priority:
+          $ref: "#/components/schemas/Priority"
+        budget_minutes:
+          type: integer
+        assigned_agent_id:
+          type: string
+        version:
+          type: integer
+        created_at:
+          type: integer
+          format: int64
+        updated_at:
+          type: integer
+          format: int64
+
+    CreateTask:
+      type: object
+      required: [title]
+      properties:
+        project_id:
+          type: string
+          default: prj_default
+        title:
+          type: string
+        description:
+          type: string
+        acceptance_criteria:
+          type: string
+        status:
+          type: string
+          enum: [backlog, ready]
+          default: backlog
+        priority:
+          $ref: "#/components/schemas/Priority"
+        budget_minutes:
+          type: integer
+          minimum: 1
+          default: 30
+
+    UpdateTask:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        acceptance_criteria:
+          type: string
+        priority:
+          $ref: "#/components/schemas/Priority"
+        budget_minutes:
+          type: integer
+          minimum: 1
+        version:
+          type: integer
+          description: Optional optimistic concurrency version
+
+    Agent:
+      type: object
+      x-fixture: ./fixtures/v1/agent.json
+      required: [id, name, kind, status, capabilities, last_seen_at, created_at]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        kind:
+          type: string
+        status:
+          type: string
+          enum: [idle, active, waiting, offline]
+        capabilities:
+          type: array
+          items:
+            type: string
+        last_seen_at:
+          type: integer
+          format: int64
+        created_at:
+          type: integer
+          format: int64
+
+    RegisterAgent:
+      type: object
+      required: [name]
+      properties:
+        id:
+          type: string
+          description: Stable agent ID; generated when omitted
+        name:
+          type: string
+        kind:
+          type: string
+          default: external
+        status:
+          type: string
+          default: idle
+        capabilities:
+          type: array
+          items:
+            type: string
+
+    Run:
+      type: object
+      x-fixture: ./fixtures/v1/run.json
+      required: [id, task_id, agent_id, status, plan, result_summary, started_at, updated_at]
+      properties:
+        id:
+          type: string
+        task_id:
+          type: string
+        agent_id:
+          type: string
+        status:
+          type: string
+          enum: [planning, waiting_decision, running, verifying, completed, blocked, failed, cancelled]
+        plan:
+          type: string
+        result_summary:
+          type: string
+        lease_expires_at:
+          type: integer
+          format: int64
+        started_at:
+          type: integer
+          format: int64
+        finished_at:
+          type: integer
+          format: int64
+        updated_at:
+          type: integer
+          format: int64
+
+    Decision:
+      type: object
+      required:
+        - id
+        - task_id
+        - question
+        - options
+        - recommendation
+        - status
+        - answer
+        - created_at
+      properties:
+        id:
+          type: string
+        task_id:
+          type: string
+        run_id:
+          type: string
+        question:
+          type: string
+        options:
+          type: array
+          items:
+            type: string
+        recommendation:
+          type: string
+        status:
+          type: string
+          enum: [pending, answered, cancelled]
+        answer:
+          type: string
+        created_at:
+          type: integer
+          format: int64
+        answered_at:
+          type: integer
+          format: int64
+
+    Event:
+      type: object
+      required: [id, type, message, payload, created_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Zero for ephemeral presence events
+        task_id:
+          type: string
+        run_id:
+          type: string
+        agent_id:
+          type: string
+        type:
+          type: string
+        message:
+          type: string
+        payload:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: integer
+          format: int64
+
+    Lease:
+      type: object
+      x-implementation-status: planned
+      x-fixture: ./fixtures/v1/lease.json
+      description: >-
+        Target version-1 lease authority record. No operation advertises this
+        shape until guarded versions and fencing are implemented.
+      required: [run_id, agent_id, version, fence_token, expires_at, renewed_at]
+      properties:
+        run_id:
+          type: string
+        agent_id:
+          type: string
+        version:
+          type: integer
+          minimum: 1
+        fence_token:
+          type: integer
+          format: int64
+          minimum: 1
+        expires_at:
+          type: integer
+          format: int64
+        renewed_at:
+          type: integer
+          format: int64
+
+    PlanRevision:
+      type: object
+      x-implementation-status: planned
+      x-fixture: ./fixtures/v1/plan.json
+      description: Target immutable plan revision; the current plan endpoint still accepts Markdown.
+      required:
+        - id
+        - run_id
+        - revision
+        - task_version
+        - context_digest
+        - risk_class
+        - summary
+        - steps
+        - verification_strategy
+        - expected_side_effects
+        - rollback_approach
+        - policy_version
+        - created_at
+      properties:
+        id:
+          type: string
+        run_id:
+          type: string
+        revision:
+          type: integer
+          minimum: 1
+        task_version:
+          type: integer
+          minimum: 1
+        context_digest:
+          type: string
+        risk_class:
+          type: string
+          enum: [low, medium, high, critical]
+        summary:
+          type: string
+        steps:
+          type: array
+          items:
+            type: object
+            required: [id, description]
+            properties:
+              id:
+                type: string
+              description:
+                type: string
+        verification_strategy:
+          type: array
+          items:
+            type: string
+        expected_side_effects:
+          type: array
+          items:
+            type: string
+        rollback_approach:
+          type: string
+        policy_version:
+          type: string
+        created_at:
+          type: integer
+          format: int64
+
+    Command:
+      type: object
+      x-implementation-status: planned
+      x-fixture: ./fixtures/v1/command.json
+      description: Target durable operator command; command endpoints are not implemented yet.
+      required: [id, run_id, sequence, type, status, reason, requested_by, created_at]
+      properties:
+        id:
+          type: string
+        run_id:
+          type: string
+        sequence:
+          type: integer
+          format: int64
+          minimum: 1
+        type:
+          type: string
+          enum: [pause, resume, cancel, replan, retry, reduce_authority]
+        status:
+          type: string
+          enum: [pending, acknowledged, rejected, completed]
+        reason:
+          type: string
+        requested_by:
+          type: string
+        created_at:
+          type: integer
+          format: int64
+
+    EventEnvelope:
+      type: object
+      x-implementation-status: planned
+      x-fixture: ./fixtures/v1/event.json
+      description: >-
+        Target normalized cross-product event. The current Event schema remains
+        the prototype workspace timeline representation.
+      required:
+        - id
+        - sequence
+        - type
+        - schema_version
+        - producer
+        - project_id
+        - task_id
+        - run_id
+        - execution_id
+        - correlation_id
+        - causation_id
+        - occurred_at
+        - ingested_at
+        - severity
+        - task_version
+        - source_revision
+        - policy_version
+        - payload
+      properties:
+        id:
+          type: string
+        sequence:
+          type: integer
+          format: int64
+          minimum: 1
+        type:
+          type: string
+        schema_version:
+          type: string
+        producer:
+          type: string
+        project_id:
+          type: string
+        task_id:
+          type: string
+        run_id:
+          type: string
+        execution_id:
+          type: string
+        attempt_id:
+          type: string
+        correlation_id:
+          type: string
+        causation_id:
+          type: string
+        occurred_at:
+          type: integer
+          format: int64
+        ingested_at:
+          type: integer
+          format: int64
+        severity:
+          type: string
+          enum: [debug, info, warning, error]
+        task_version:
+          type: integer
+          minimum: 1
+        source_revision:
+          type: string
+        policy_version:
+          type: string
+        payload:
+          type: object
+          additionalProperties: true
+
+    Budget:
+      type: object
+      x-implementation-status: planned
+      x-fixture: ./fixtures/v1/budget.json
+      description: Target structured execution budget; AppDeck currently exposes budget_minutes only.
+      required:
+        - deadline_at
+        - max_attempts
+        - max_tokens
+        - max_cost_minor
+        - currency
+        - max_concurrency
+        - authority
+      properties:
+        deadline_at:
+          type: integer
+          format: int64
+        max_attempts:
+          type: integer
+          minimum: 1
+        max_tokens:
+          type: integer
+          format: int64
+          minimum: 0
+        max_cost_minor:
+          type: integer
+          format: int64
+          minimum: 0
+        currency:
+          type: string
+        max_concurrency:
+          type: integer
+          minimum: 1
+        authority:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+
+    Evidence:
+      type: object
+      x-implementation-status: planned
+      x-fixture: ./fixtures/v1/evidence.json
+      description: Target structured, source-bound evidence record.
+      required:
+        - id
+        - run_id
+        - type
+        - producer
+        - verifier
+        - subject_digest
+        - source_revision
+        - command
+        - outcome
+        - provenance_uri
+        - provenance_digest
+        - observed_at
+        - policy_version
+      properties:
+        id:
+          type: string
+        run_id:
+          type: string
+        type:
+          type: string
+        producer:
+          type: string
+        verifier:
+          type: string
+        subject_digest:
+          type: string
+        source_revision:
+          type: string
+        command:
+          type: string
+        outcome:
+          type: string
+          enum: [passed, failed]
+        provenance_uri:
+          type: string
+        provenance_digest:
+          type: string
+        observed_at:
+          type: integer
+          format: int64
+        expires_at:
+          type: integer
+          format: int64
+        policy_version:
+          type: string
+
+    Artifact:
+      type: object
+      required: [id, task_id, run_id, name, kind, uri, content, created_at]
+      properties:
+        id:
+          type: string
+        task_id:
+          type: string
+        run_id:
+          type: string
+        name:
+          type: string
+        kind:
+          type: string
+        uri:
+          type: string
+        content:
+          type: string
+        created_at:
+          type: integer
+          format: int64
+
+    TaskDetail:
+      type: object
+      required: [task, runs, events, decisions, artifacts]
+      properties:
+        task:
+          $ref: "#/components/schemas/Task"
+        runs:
+          type: array
+          items:
+            $ref: "#/components/schemas/Run"
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/Event"
+        decisions:
+          type: array
+          items:
+            $ref: "#/components/schemas/Decision"
+        artifacts:
+          type: array
+          items:
+            $ref: "#/components/schemas/Artifact"
+
+    Bootstrap:
+      type: object
+      required: [tasks, agents, decisions, events, now]
+      properties:
+        tasks:
+          type: array
+          items:
+            $ref: "#/components/schemas/Task"
+        agents:
+          type: array
+          items:
+            $ref: "#/components/schemas/Agent"
+        decisions:
+          type: array
+          items:
+            $ref: "#/components/schemas/Decision"
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/Event"
+        now:
+          type: integer
+          format: int64
+
+    Error:
+      type: object
+      x-fixtures:
+        - ./fixtures/v1/errors/conflict.json
+        - ./fixtures/v1/errors/internal-error.json
+        - ./fixtures/v1/errors/invalid-input.json
+        - ./fixtures/v1/errors/invalid-transition.json
+        - ./fixtures/v1/errors/not-found.json
+      required: [error, code, message, retryable, request_id]
+      properties:
+        error:
+          type: string
+          deprecated: true
+          description: Version-1 compatibility alias for `message`.
+        code:
+          type: string
+          description: Stable machine-readable classification.
+          enum:
+            - not_found
+            - conflict
+            - invalid_input
+            - invalid_transition
+            - internal_error
+        message:
+          type: string
+          description: Redacted human-readable explanation.
+        retryable:
+          type: boolean
+          description: Whether retrying the unchanged request may succeed later.
+        request_id:
+          type: string
+          description: Correlation ID also returned in the `X-Request-ID` header.

@@ -1,0 +1,21 @@
+.DS_Store
+.env
+.env.*
+!.env.example
+
+# Runtime data
+data/
+*.db
+*.db-shm
+*.db-wal
+
+# Go
+/appdeck
+/bin/
+coverage.out
+
+# Frontend
+web/node_modules/
+web/.svelte-kit/
+web/build/
+web/coverage/

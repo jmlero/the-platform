@@ -1,0 +1,97 @@
+package main
+
+import (
+	"bytes"
+	"io"
+	"net/http"
+	"strings"
+	"testing"
+	"time"
+)
+
+func TestVersionCommand(t *testing.T) {
+	previousVersion := version
+	version = "test-version"
+	t.Cleanup(func() { version = previousVersion })
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if code := run([]string{"version"}, &stdout, &stderr); code != 0 {
+		t.Fatalf("exit code = %d, stderr = %q", code, stderr.String())
+	}
+	if stdout.String() != "test-version\n" {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+}
+
+func TestDoctorCommand(t *testing.T) {
+	previousTransport := http.DefaultTransport
+	http.DefaultTransport = roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		if request.Method != http.MethodGet || request.URL.Path != "/api/v1/provider" {
+			return textResponse(http.StatusNotFound, `{"error":"unexpected route"}`), nil
+		}
+		if request.Header.Get("X-Request-ID") == "" {
+			t.Error("doctor request correlation ID is empty")
+		}
+		return textResponse(http.StatusOK, `{
+			"provider":"appdeck",
+			"protocol_version":"1.0",
+			"capabilities":["provider.info","work.inspect","run.lease.renew","run.block"],
+			"server_time":1784368800000,
+			"ready":true,
+			"readiness":{"store":"available"}
+		}`), nil
+	})
+	t.Cleanup(func() { http.DefaultTransport = previousTransport })
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := run([]string{"doctor", "--appdeck-url", "http://appdeck.test"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit code = %d, stderr = %q", code, stderr.String())
+	}
+	if stdout.String() != "AppDeck: available\n" {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (roundTrip roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
+	return roundTrip(request)
+}
+
+func textResponse(status int, body string) *http.Response {
+	return &http.Response{
+		StatusCode: status,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+}
+
+func TestUnknownCommandIsUsageError(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if code := run([]string{"unknown"}, &stdout, &stderr); code != 2 {
+		t.Fatalf("exit code = %d", code)
+	}
+	if !strings.Contains(stderr.String(), "unknown command") {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
+func TestEnvironmentDurationIsValidated(t *testing.T) {
+	t.Setenv("MARINA_TEST_DURATION", "not-a-duration")
+	if _, err := envDurationOrDefault("MARINA_TEST_DURATION", time.Minute); err == nil {
+		t.Fatal("invalid environment duration was accepted")
+	}
+
+	t.Setenv("MARINA_TEST_DURATION", "45s")
+	value, err := envDurationOrDefault("MARINA_TEST_DURATION", time.Minute)
+	if err != nil {
+		t.Fatalf("parse duration: %v", err)
+	}
+	if value != 45*time.Second {
+		t.Fatalf("duration = %s, want 45s", value)
+	}
+}

@@ -1,0 +1,7 @@
+{
+  "error": "resource version does not match",
+  "code": "conflict",
+  "message": "resource version does not match",
+  "retryable": false,
+  "request_id": "request_fixture_conflict"
+}

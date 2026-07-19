@@ -1,0 +1,11 @@
+.git
+.gitignore
+.DS_Store
+.env*
+bin
+data
+*.db*
+web/node_modules
+web/.svelte-kit
+web/build
+coverage.out

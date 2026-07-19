@@ -1,0 +1,16 @@
+{
+  "id": "evidence_fixture_001",
+  "run_id": "run_fixture_001",
+  "type": "test",
+  "producer": "marina",
+  "verifier": "go_test",
+  "subject_digest": "sha256:51e0635f3659101795c8f07e04a7c09f89164ad93a86ae87b0f0706ebd67e8ca",
+  "source_revision": "6be7d803a65a5667e9c9b91f649ec8c01c901bd9",
+  "command": "go test ./...",
+  "outcome": "passed",
+  "provenance_uri": "artifact://conformance/go-test.json",
+  "provenance_digest": "sha256:56c780b69a97ac3918bd451db6f3e004c3c02f4f2ecb0941a792157b502b7a36",
+  "observed_at": 1784376240000,
+  "expires_at": 1784462640000,
+  "policy_version": "policy_fixture_v1"
+}

@@ -1,0 +1,24 @@
+{
+  "id": "event_fixture_001",
+  "sequence": 4,
+  "type": "execution.progressed",
+  "schema_version": "1.0",
+  "producer": "marina",
+  "project_id": "prj_default",
+  "task_id": "task_fixture_001",
+  "run_id": "run_fixture_001",
+  "execution_id": "execution_fixture_001",
+  "attempt_id": "attempt_fixture_001",
+  "correlation_id": "correlation_fixture_001",
+  "causation_id": "event_fixture_000",
+  "occurred_at": 1784376180000,
+  "ingested_at": 1784376181000,
+  "severity": "info",
+  "task_version": 7,
+  "source_revision": "6be7d803a65a5667e9c9b91f649ec8c01c901bd9",
+  "policy_version": "policy_fixture_v1",
+  "payload": {
+    "phase": "contract_verification",
+    "message": "The exact provider run was observed."
+  }
+}

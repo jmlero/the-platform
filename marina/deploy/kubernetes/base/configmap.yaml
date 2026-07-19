@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: marina-config
+data:
+  MARINA_ADDR: ":8090"
+  MARINA_APPDECK_URL: "http://appdeck:8080"
+  MARINA_JOURNAL_PATH: "/data/marina.db"
+  MARINA_LEASE_RENEW_BEFORE: "10s"
+  MARINA_RUN_LEASE: "30s"
+  MARINA_RECONCILE_INTERVAL: "10s"

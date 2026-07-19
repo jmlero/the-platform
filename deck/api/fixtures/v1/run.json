@@ -1,0 +1,11 @@
+{
+  "id": "run_fixture_001",
+  "task_id": "task_fixture_001",
+  "agent_id": "agent_marina_fixture",
+  "status": "planning",
+  "plan": "",
+  "result_summary": "",
+  "lease_expires_at": 1784377860000,
+  "started_at": 1784376060000,
+  "updated_at": 1784376060000
+}

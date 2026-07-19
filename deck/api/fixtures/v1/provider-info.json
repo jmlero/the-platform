@@ -1,0 +1,28 @@
+{
+  "provider": "appdeck",
+  "protocol_version": "1.0",
+  "capabilities": [
+    "agent.register",
+    "decision.answer",
+    "decision.inspect",
+    "decision.list",
+    "event.list",
+    "event.stream",
+    "provider.info",
+    "run.block",
+    "run.complete",
+    "run.lease.renew",
+    "run.plan.submit",
+    "run.progress.append",
+    "run.start",
+    "run.verify",
+    "work.claim.atomic",
+    "work.inspect",
+    "work.ready.list"
+  ],
+  "server_time": 1784376000000,
+  "ready": true,
+  "readiness": {
+    "store": "available"
+  }
+}

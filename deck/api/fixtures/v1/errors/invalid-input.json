@@ -1,0 +1,7 @@
+{
+  "error": "request input is invalid",
+  "code": "invalid_input",
+  "message": "request input is invalid",
+  "retryable": false,
+  "request_id": "request_fixture_invalid_input"
+}

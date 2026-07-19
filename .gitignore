@@ -1,0 +1,13 @@
+.DS_Store
+.codex/
+.idea/
+.vscode/
+
+**/.env
+**/.env.*
+!**/.env.example
+
+**/coverage.out
+**/*.db
+**/*.db-shm
+**/*.db-wal

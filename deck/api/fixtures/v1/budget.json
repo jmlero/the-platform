@@ -1,0 +1,12 @@
+{
+  "deadline_at": 1784379600000,
+  "max_attempts": 3,
+  "max_tokens": 120000,
+  "max_cost_minor": 2500,
+  "currency": "EUR",
+  "max_concurrency": 1,
+  "authority": [
+    "inspect_work",
+    "publish_progress"
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "error": "not found",
+  "code": "not_found",
+  "message": "not found",
+  "retryable": false,
+  "request_id": "request_fixture_not_found"
+}

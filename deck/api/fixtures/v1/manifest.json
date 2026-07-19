@@ -1,0 +1,100 @@
+{
+  "protocol_version": "1.0",
+  "fixtures": [
+    {
+      "kind": "provider_info",
+      "schema": "ProviderInfo",
+      "path": "provider-info.json",
+      "implementation_status": "implemented"
+    },
+    {
+      "kind": "agent",
+      "schema": "Agent",
+      "path": "agent.json",
+      "implementation_status": "implemented"
+    },
+    {
+      "kind": "task",
+      "schema": "Task",
+      "path": "task.json",
+      "implementation_status": "implemented"
+    },
+    {
+      "kind": "run",
+      "schema": "Run",
+      "path": "run.json",
+      "implementation_status": "implemented"
+    },
+    {
+      "kind": "lease",
+      "schema": "Lease",
+      "path": "lease.json",
+      "implementation_status": "planned"
+    },
+    {
+      "kind": "plan",
+      "schema": "PlanRevision",
+      "path": "plan.json",
+      "implementation_status": "planned"
+    },
+    {
+      "kind": "command",
+      "schema": "Command",
+      "path": "command.json",
+      "implementation_status": "planned"
+    },
+    {
+      "kind": "event",
+      "schema": "EventEnvelope",
+      "path": "event.json",
+      "implementation_status": "planned"
+    },
+    {
+      "kind": "budget",
+      "schema": "Budget",
+      "path": "budget.json",
+      "implementation_status": "planned"
+    },
+    {
+      "kind": "evidence",
+      "schema": "Evidence",
+      "path": "evidence.json",
+      "implementation_status": "planned"
+    },
+    {
+      "kind": "error.conflict",
+      "schema": "Error",
+      "path": "errors/conflict.json",
+      "implementation_status": "implemented",
+      "http_status": 409
+    },
+    {
+      "kind": "error.internal_error",
+      "schema": "Error",
+      "path": "errors/internal-error.json",
+      "implementation_status": "implemented",
+      "http_status": 500
+    },
+    {
+      "kind": "error.invalid_input",
+      "schema": "Error",
+      "path": "errors/invalid-input.json",
+      "implementation_status": "implemented",
+      "http_status": 422
+    },
+    {
+      "kind": "error.invalid_transition",
+      "schema": "Error",
+      "path": "errors/invalid-transition.json",
+      "implementation_status": "implemented",
+      "http_status": 422
+    },
+    {
+      "kind": "error.not_found",
+      "schema": "Error",
+      "path": "errors/not-found.json",
+      "implementation_status": "implemented",
+      "http_status": 404
+    }
+  ]
+}

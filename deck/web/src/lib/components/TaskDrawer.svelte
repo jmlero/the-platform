@@ -1,0 +1,839 @@
+<script lang="ts">
+  import {
+    ArrowRight,
+    Bot,
+    Check,
+    CheckCircle2,
+    ChevronRight,
+    Clock3,
+    FileCheck2,
+    GitPullRequestArrow,
+    History,
+    ListChecks,
+    Pencil,
+    RotateCcw,
+    Save,
+    ShieldCheck,
+    X
+  } from '@lucide/svelte';
+  import { eventLabel, formatDate, initials, statusLabels, timeAgo } from '$lib/format';
+  import type {
+    Agent,
+    Decision,
+    Priority,
+    Task,
+    TaskDetail,
+    TaskStatus,
+    UpdateTaskInput
+  } from '$lib/types';
+
+  export let detail: TaskDetail;
+  export let agents: Agent[] = [];
+  export let onclose: () => void;
+  export let onrefresh: () => Promise<void>;
+  export let onmove: (task: Task, status: TaskStatus) => Promise<void>;
+  export let onsave: (task: Task, input: UpdateTaskInput) => Promise<void>;
+  export let onanswer: (decision: Decision, answer: string) => Promise<void>;
+
+  let tab: 'overview' | 'activity' | 'evidence' = 'overview';
+  let editing = false;
+  let busy = false;
+  let error = '';
+  let loadedID = '';
+  let title = '';
+  let description = '';
+  let acceptanceCriteria = '';
+  let priority: Priority = 'medium';
+  let budgetMinutes = 30;
+
+  $: task = detail.task;
+  $: run = detail.runs[0];
+  $: agent = agents.find((candidate) => candidate.id === (run?.agent_id ?? task.assigned_agent_id));
+  $: pendingDecision = detail.decisions.find((decision) => decision.status === 'pending');
+  $: progressEvent = detail.events.find(
+    (event) => event.type === 'run.progress' && typeof event.payload?.percent === 'number'
+  );
+  $: progress = progressEvent ? Number(progressEvent.payload?.percent) : task.status === 'done' ? 100 : 0;
+  $: if (task.id !== loadedID) {
+    loadedID = task.id;
+    title = task.title;
+    description = task.description;
+    acceptanceCriteria = task.acceptance_criteria;
+    priority = task.priority;
+    budgetMinutes = task.budget_minutes;
+    editing = false;
+    tab = 'overview';
+    error = '';
+  }
+
+  function targetStatus(current: TaskStatus): TaskStatus | null {
+    if (current === 'backlog') return 'ready';
+    if (current === 'ready') return 'backlog';
+    if (['blocked', 'failed', 'cancelled', 'done'].includes(current)) return 'ready';
+    return null;
+  }
+
+  function actionLabel(current: TaskStatus): string {
+    if (current === 'backlog') return 'Move to ready';
+    if (current === 'ready') return 'Return to backlog';
+    if (current === 'done') return 'Run again';
+    return 'Requeue task';
+  }
+
+  async function move() {
+    const target = targetStatus(task.status);
+    if (!target) return;
+    busy = true;
+    error = '';
+    try {
+      await onmove(task, target);
+      await onrefresh();
+    } catch (caught) {
+      error = caught instanceof Error ? caught.message : 'Could not move the task.';
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function save() {
+    if (!title.trim()) {
+      error = 'The outcome cannot be empty.';
+      return;
+    }
+    busy = true;
+    error = '';
+    try {
+      await onsave(task, {
+        title: title.trim(),
+        description: description.trim(),
+        acceptance_criteria: acceptanceCriteria.trim(),
+        priority,
+        budget_minutes: Number(budgetMinutes),
+        version: task.version
+      });
+      editing = false;
+      await onrefresh();
+    } catch (caught) {
+      error = caught instanceof Error ? caught.message : 'Could not save the task.';
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function answer(decision: Decision, option: string) {
+    busy = true;
+    error = '';
+    try {
+      await onanswer(decision, option);
+      await onrefresh();
+    } catch (caught) {
+      error = caught instanceof Error ? caught.message : 'Could not record the decision.';
+    } finally {
+      busy = false;
+    }
+  }
+
+  function handleKeydown(event: KeyboardEvent) {
+    if (event.key === 'Escape') onclose();
+  }
+</script>
+
+<svelte:window on:keydown={handleKeydown} />
+
+<div class="drawer-backdrop" role="presentation" on:click|self={onclose}>
+  <div class="drawer" role="dialog" aria-modal="true" aria-labelledby="task-title" tabindex="-1">
+    <header class="drawer-header">
+      <div class="breadcrumb">
+        <span>APP</span><ChevronRight size={12} /><span>{task.id.slice(-6).toUpperCase()}</span>
+      </div>
+      <div class="header-actions">
+        {#if !editing}
+          <button type="button" on:click={() => (editing = true)} aria-label="Edit task">
+            <Pencil size={15} />
+          </button>
+        {/if}
+        <button type="button" on:click={onclose} aria-label="Close task">
+          <X size={17} />
+        </button>
+      </div>
+    </header>
+
+    <div class="drawer-scroll">
+      <section class="task-heading">
+        <div class="status-line">
+          <span class="status status-{task.status}"><i></i>{statusLabels[task.status]}</span>
+          <span class="priority priority-{task.priority}">{task.priority} priority</span>
+        </div>
+
+        {#if editing}
+          <input class="title-input" bind:value={title} aria-label="Task title" />
+        {:else}
+          <h1 id="task-title">{task.title}</h1>
+        {/if}
+
+        <div class="task-meta">
+          <span><Clock3 size={13} /> {task.budget_minutes} minute budget</span>
+          <span><History size={13} /> Updated {timeAgo(task.updated_at)}</span>
+        </div>
+      </section>
+
+      {#if run && ['running', 'verifying', 'done'].includes(task.status)}
+        <section class="run-progress">
+          <div class="progress-copy">
+            <span>{task.status === 'done' ? 'Completed' : task.status === 'verifying' ? 'Verifying' : 'Executing approved plan'}</span>
+            <strong>{progress}%</strong>
+          </div>
+          <div class="progress-track"><span style={`width: ${progress}%`}></span></div>
+        </section>
+      {/if}
+
+      {#if pendingDecision}
+        <section class="decision-callout">
+          <div class="callout-title">
+            <span class="callout-icon"><GitPullRequestArrow size={17} /></span>
+            <div>
+              <span class="eyebrow">Agent is paused</span>
+              <h2>{pendingDecision.question}</h2>
+            </div>
+          </div>
+          <div class="recommendation">
+            Recommended: <strong>{pendingDecision.recommendation}</strong>
+          </div>
+          <div class="decision-actions">
+            {#each pendingDecision.options as option}
+              <button
+                type="button"
+                class:approve={option === pendingDecision.recommendation}
+                disabled={busy}
+                on:click={() => answer(pendingDecision, option)}
+              >
+                {#if option === pendingDecision.recommendation}<Check size={15} />{/if}
+                {option}
+              </button>
+            {/each}
+          </div>
+        </section>
+      {/if}
+
+      {#if error}<p class="drawer-error">{error}</p>{/if}
+
+      <nav class="tabs" aria-label="Task detail sections">
+        <button class:active={tab === 'overview'} type="button" on:click={() => (tab = 'overview')}>
+          <ListChecks size={14} /> Overview
+        </button>
+        <button class:active={tab === 'activity'} type="button" on:click={() => (tab = 'activity')}>
+          <History size={14} /> Activity <span>{detail.events.length}</span>
+        </button>
+        <button class:active={tab === 'evidence'} type="button" on:click={() => (tab = 'evidence')}>
+          <FileCheck2 size={14} /> Evidence <span>{detail.artifacts.length}</span>
+        </button>
+      </nav>
+
+      {#if tab === 'overview'}
+        <div class="tab-content overview">
+          <section>
+            <span class="section-label">Context</span>
+            {#if editing}
+              <textarea bind:value={description} rows="5" placeholder="Task context and constraints"></textarea>
+            {:else}
+              <p class:empty-copy={!task.description}>{task.description || 'No additional context yet.'}</p>
+            {/if}
+          </section>
+
+          <section>
+            <span class="section-label">Acceptance criteria</span>
+            {#if editing}
+              <textarea
+                bind:value={acceptanceCriteria}
+                rows="5"
+                placeholder="Observable completion checks"
+              ></textarea>
+            {:else}
+              <div class="acceptance">
+                <span><ShieldCheck size={16} /></span>
+                <p class:empty-copy={!task.acceptance_criteria}>
+                  {task.acceptance_criteria || 'No acceptance criteria defined.'}
+                </p>
+              </div>
+            {/if}
+          </section>
+
+          {#if editing}
+            <section class="edit-grid">
+              <label>
+                Priority
+                <select bind:value={priority}>
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                  <option value="urgent">Urgent</option>
+                </select>
+              </label>
+              <label>
+                Budget in minutes
+                <input type="number" min="1" max="1440" bind:value={budgetMinutes} />
+              </label>
+            </section>
+            <div class="edit-actions">
+              <button class="secondary" type="button" on:click={() => (editing = false)}>Cancel</button>
+              <button class="primary" type="button" disabled={busy} on:click={save}>
+                <Save size={15} /> Save changes
+              </button>
+            </div>
+          {/if}
+
+          {#if run}
+            <section>
+              <span class="section-label">Latest run</span>
+              <div class="run-card">
+                <div class="run-agent">
+                  <span class="agent-avatar">
+                    {#if agent}{initials(agent.name)}{:else}<Bot size={14} />{/if}
+                  </span>
+                  <div>
+                    <strong>{agent?.name ?? run.agent_id}</strong>
+                    <small>{run.status} · started {formatDate(run.started_at)}</small>
+                  </div>
+                </div>
+                {#if run.plan}
+                  <div class="plan">
+                    <span>Approved plan</span>
+                    <pre>{run.plan}</pre>
+                  </div>
+                {/if}
+                {#if run.result_summary}
+                  <div class="result">
+                    <CheckCircle2 size={15} />
+                    {run.result_summary}
+                  </div>
+                {/if}
+              </div>
+            </section>
+          {/if}
+        </div>
+      {:else if tab === 'activity'}
+        <div class="tab-content timeline">
+          {#each detail.events as event (event.id)}
+            <article class:decision-event={event.type.startsWith('decision.')}>
+              <span class="timeline-dot"></span>
+              <div class="timeline-copy">
+                <div>
+                  <strong>{eventLabel(event.type)}</strong>
+                  <time>{formatDate(event.created_at)}</time>
+                </div>
+                <p>{event.message}</p>
+              </div>
+            </article>
+          {/each}
+        </div>
+      {:else}
+        <div class="tab-content evidence-list">
+          {#each detail.artifacts as artifact (artifact.id)}
+            <article class="artifact">
+              <header>
+                <span><FileCheck2 size={16} /></span>
+                <div>
+                  <strong>{artifact.name}</strong>
+                  <small>{artifact.kind} · {formatDate(artifact.created_at)}</small>
+                </div>
+              </header>
+              <pre>{artifact.content}</pre>
+            </article>
+          {:else}
+            <div class="empty-evidence">
+              <FileCheck2 size={25} />
+              <h3>No evidence attached yet</h3>
+              <p>Artifacts will appear here when an agent verifies a run.</p>
+            </div>
+          {/each}
+        </div>
+      {/if}
+    </div>
+
+    {#if targetStatus(task.status) && !editing}
+      <footer class="drawer-footer">
+        <button type="button" disabled={busy} on:click={move}>
+          {#if task.status === 'backlog'}<ArrowRight size={15} />{:else}<RotateCcw size={15} />{/if}
+          {busy ? 'Moving…' : actionLabel(task.status)}
+        </button>
+      </footer>
+    {/if}
+  </div>
+</div>
+
+<style>
+  .drawer-backdrop {
+    position: fixed;
+    z-index: 70;
+    inset: 0;
+    background: rgba(3, 4, 6, 0.54);
+    backdrop-filter: blur(3px);
+  }
+
+  .drawer {
+    position: absolute;
+    top: 0;
+    right: 0;
+    display: flex;
+    width: min(620px, 100%);
+    height: 100%;
+    flex-direction: column;
+    background: #0f1216;
+    border-left: 1px solid var(--line-strong);
+    box-shadow: -30px 0 70px rgba(0, 0, 0, 0.34);
+    animation: enter 180ms ease-out;
+  }
+
+  @keyframes enter {
+    from { transform: translateX(28px); opacity: 0.4; }
+  }
+
+  .drawer-header,
+  .header-actions,
+  .breadcrumb,
+  .status-line,
+  .task-meta,
+  .progress-copy,
+  .callout-title,
+  .decision-actions,
+  .tabs,
+  .acceptance,
+  .run-agent,
+  .result,
+  .artifact header,
+  .edit-actions {
+    display: flex;
+    align-items: center;
+  }
+
+  .drawer-header {
+    height: 58px;
+    flex: 0 0 auto;
+    justify-content: space-between;
+    padding: 0 18px 0 22px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .breadcrumb {
+    gap: 5px;
+    color: var(--subtle);
+    font-family: "SFMono-Regular", Consolas, monospace;
+    font-size: 0.63rem;
+  }
+
+  .header-actions {
+    gap: 7px;
+  }
+
+  .header-actions button {
+    display: grid;
+    width: 32px;
+    height: 32px;
+    color: var(--muted);
+    background: transparent;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    cursor: pointer;
+    place-items: center;
+  }
+
+  .drawer-scroll {
+    min-height: 0;
+    flex: 1;
+    overflow-y: auto;
+  }
+
+  .task-heading {
+    padding: 24px 24px 18px;
+  }
+
+  .status-line {
+    justify-content: space-between;
+  }
+
+  .status,
+  .priority {
+    font-size: 0.63rem;
+    font-weight: 750;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .status {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--cyan);
+  }
+
+  .status i {
+    width: 7px;
+    height: 7px;
+    background: currentColor;
+    border-radius: 999px;
+    box-shadow: 0 0 0 4px currentColor;
+    opacity: 0.9;
+  }
+
+  .status i::after { opacity: 0.1; }
+  .status-waiting_decision { color: var(--amber); }
+  .status-running, .status-done { color: var(--acid); }
+  .status-blocked, .status-failed { color: var(--red); }
+  .status-backlog, .status-cancelled { color: var(--subtle); }
+  .status-planning { color: var(--violet); }
+
+  .priority { color: var(--muted); }
+  .priority-urgent { color: var(--red); }
+  .priority-high { color: var(--violet); }
+
+  h1 {
+    margin: 17px 0 13px;
+    font-size: clamp(1.35rem, 3vw, 1.7rem);
+    font-weight: 650;
+    letter-spacing: -0.035em;
+    line-height: 1.22;
+  }
+
+  .title-input {
+    width: 100%;
+    margin: 15px 0 11px;
+    padding: 8px 10px;
+    color: var(--text);
+    font-size: 1.3rem;
+    font-weight: 650;
+    background: rgba(255, 255, 255, 0.035);
+    border: 1px solid var(--line-strong);
+    border-radius: 10px;
+  }
+
+  .task-meta {
+    gap: 16px;
+    color: var(--subtle);
+    font-size: 0.66rem;
+  }
+
+  .task-meta span {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .run-progress {
+    margin: 0 24px 18px;
+    padding: 12px 14px;
+    background: rgba(255, 255, 255, 0.025);
+    border: 1px solid var(--line);
+    border-radius: 11px;
+  }
+
+  .progress-copy {
+    justify-content: space-between;
+    color: var(--muted);
+    font-size: 0.67rem;
+  }
+
+  .progress-copy strong { color: var(--acid); }
+
+  .progress-track {
+    height: 4px;
+    margin-top: 9px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.055);
+    border-radius: 999px;
+  }
+
+  .progress-track span {
+    display: block;
+    height: 100%;
+    background: var(--acid);
+    border-radius: inherit;
+    transition: width 400ms ease;
+  }
+
+  .decision-callout {
+    margin: 0 24px 18px;
+    padding: 15px;
+    background: linear-gradient(135deg, var(--amber-soft), rgba(243, 184, 92, 0.035));
+    border: 1px solid rgba(243, 184, 92, 0.24);
+    border-radius: 13px;
+  }
+
+  .callout-title { gap: 11px; }
+
+  .callout-icon {
+    display: grid;
+    width: 36px;
+    height: 36px;
+    flex: 0 0 auto;
+    color: var(--amber);
+    background: rgba(243, 184, 92, 0.13);
+    border-radius: 10px;
+    place-items: center;
+  }
+
+  .decision-callout h2 {
+    margin: 4px 0 0;
+    font-size: 0.81rem;
+    font-weight: 650;
+    line-height: 1.4;
+  }
+
+  .recommendation {
+    margin-top: 12px;
+    color: var(--muted);
+    font-size: 0.66rem;
+  }
+
+  .recommendation strong { color: var(--text); }
+
+  .decision-actions { gap: 8px; margin-top: 12px; }
+
+  .decision-actions button,
+  .edit-actions button,
+  .drawer-footer button {
+    display: inline-flex;
+    min-height: 37px;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    padding: 0 13px;
+    color: var(--muted);
+    font-size: 0.68rem;
+    font-weight: 700;
+    background: transparent;
+    border: 1px solid var(--line-strong);
+    border-radius: 9px;
+    cursor: pointer;
+  }
+
+  .decision-actions button.approve,
+  .edit-actions .primary,
+  .drawer-footer button {
+    color: #11150d;
+    background: var(--acid);
+    border-color: var(--acid);
+  }
+
+  .drawer-error {
+    margin: 0 24px 14px;
+    padding: 9px 11px;
+    color: var(--red);
+    font-size: 0.68rem;
+    background: var(--red-soft);
+    border-radius: 9px;
+  }
+
+  .tabs {
+    position: sticky;
+    z-index: 2;
+    top: 0;
+    gap: 2px;
+    padding: 0 20px;
+    background: rgba(15, 18, 22, 0.95);
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    backdrop-filter: blur(10px);
+  }
+
+  .tabs button {
+    position: relative;
+    display: inline-flex;
+    height: 46px;
+    align-items: center;
+    gap: 6px;
+    padding: 0 10px;
+    color: var(--muted);
+    font-size: 0.67rem;
+    font-weight: 650;
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+  }
+
+  .tabs button.active { color: var(--text); }
+
+  .tabs button.active::after {
+    position: absolute;
+    right: 8px;
+    bottom: -1px;
+    left: 8px;
+    height: 2px;
+    background: var(--acid);
+    content: "";
+  }
+
+  .tabs button span {
+    padding: 2px 5px;
+    color: var(--subtle);
+    font-size: 0.55rem;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 5px;
+  }
+
+  .tab-content { padding: 22px 24px 40px; }
+
+  .overview { display: grid; gap: 23px; }
+
+  .overview .section-label,
+  .edit-grid label {
+    display: block;
+    margin-bottom: 8px;
+    color: var(--subtle);
+    font-size: 0.62rem;
+    font-weight: 750;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .overview section > p,
+  .acceptance p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.77rem;
+    line-height: 1.65;
+    white-space: pre-wrap;
+  }
+
+  .empty-copy { color: var(--subtle) !important; font-style: italic; }
+
+  textarea,
+  select,
+  .edit-grid input {
+    width: 100%;
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.035);
+    border: 1px solid var(--line-strong);
+    border-radius: 10px;
+  }
+
+  textarea { padding: 10px 11px; line-height: 1.5; resize: vertical; }
+  select, .edit-grid input { height: 39px; padding: 0 10px; }
+
+  .acceptance {
+    align-items: flex-start;
+    gap: 11px;
+    padding: 12px;
+    background: var(--cyan-soft);
+    border: 1px solid rgba(108, 216, 232, 0.14);
+    border-radius: 11px;
+  }
+
+  .acceptance > span { color: var(--cyan); }
+
+  .edit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .edit-actions { justify-content: flex-end; gap: 8px; margin-top: -10px; }
+
+  .run-card {
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.025);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+  }
+
+  .run-agent { gap: 10px; padding: 12px; }
+
+  .agent-avatar {
+    display: grid;
+    width: 34px;
+    height: 34px;
+    color: #11150d;
+    font-size: 0.64rem;
+    font-weight: 850;
+    background: var(--acid);
+    border-radius: 10px;
+    place-items: center;
+  }
+
+  .run-agent strong, .run-agent small { display: block; }
+  .run-agent strong { font-size: 0.72rem; }
+  .run-agent small { margin-top: 3px; color: var(--subtle); font-size: 0.6rem; }
+
+  .plan { padding: 12px; border-top: 1px solid var(--line); }
+  .plan > span { color: var(--subtle); font-size: 0.6rem; font-weight: 750; text-transform: uppercase; }
+  .plan pre, .artifact pre {
+    margin: 8px 0 0;
+    color: var(--muted);
+    font-family: inherit;
+    font-size: 0.69rem;
+    line-height: 1.6;
+    white-space: pre-wrap;
+  }
+
+  .result {
+    gap: 8px;
+    padding: 11px 12px;
+    color: var(--acid);
+    font-size: 0.68rem;
+    background: var(--acid-soft);
+    border-top: 1px solid rgba(184, 243, 107, 0.11);
+  }
+
+  .timeline { padding-left: 34px; }
+
+  .timeline article {
+    position: relative;
+    min-height: 63px;
+    padding: 0 0 16px 19px;
+    border-left: 1px solid var(--line);
+  }
+
+  .timeline article:last-child { border-left-color: transparent; }
+
+  .timeline-dot {
+    position: absolute;
+    top: 2px;
+    left: -5px;
+    width: 9px;
+    height: 9px;
+    background: var(--panel-soft);
+    border: 2px solid var(--muted);
+    border-radius: 999px;
+  }
+
+  .decision-event .timeline-dot { border-color: var(--amber); }
+
+  .timeline-copy > div { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+  .timeline-copy strong { font-size: 0.66rem; }
+  .timeline-copy time { color: var(--subtle); font-size: 0.59rem; }
+  .timeline-copy p { margin: 5px 0 0; color: var(--muted); font-size: 0.69rem; line-height: 1.45; }
+
+  .evidence-list { display: grid; gap: 12px; }
+
+  .artifact {
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.025);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+  }
+
+  .artifact header { gap: 9px; padding: 11px 12px; border-bottom: 1px solid var(--line); }
+  .artifact header > span { display: grid; width: 30px; height: 30px; color: var(--acid); background: var(--acid-soft); border-radius: 8px; place-items: center; }
+  .artifact strong, .artifact small { display: block; }
+  .artifact strong { font-size: 0.7rem; }
+  .artifact small { margin-top: 3px; color: var(--subtle); font-size: 0.59rem; }
+  .artifact pre { margin: 0; padding: 13px; }
+
+  .empty-evidence { display: grid; min-height: 240px; place-content: center; justify-items: center; text-align: center; color: var(--subtle); }
+  .empty-evidence h3 { margin: 11px 0 4px; color: var(--muted); font-size: 0.8rem; }
+  .empty-evidence p { margin: 0; font-size: 0.67rem; }
+
+  .drawer-footer {
+    display: flex;
+    min-height: 61px;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 10px 18px;
+    background: #101318;
+    border-top: 1px solid var(--line);
+  }
+
+  .drawer-footer button:disabled, .decision-actions button:disabled { cursor: wait; opacity: 0.55; }
+
+  @media (max-width: 540px) {
+    .task-heading, .tab-content { padding-right: 18px; padding-left: 18px; }
+    .decision-callout, .run-progress { margin-right: 18px; margin-left: 18px; }
+    .edit-grid { grid-template-columns: 1fr; }
+    .task-meta { flex-direction: column; align-items: flex-start; gap: 6px; }
+  }
+</style>
