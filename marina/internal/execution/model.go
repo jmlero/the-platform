@@ -91,36 +91,58 @@ type Budget struct {
 }
 
 type NewExecution struct {
-	WorkProvider   string
-	ExternalWorkID string
-	ExternalRunID  string
-	AgentID        string
-	LeaseExpiresAt time.Time
-	Budget         Budget
+	WorkProvider       string
+	ProjectID          string
+	ExternalWorkID     string
+	ExternalRunID      string
+	AgentID            string
+	ExternalRunVersion int64
+	FenceToken         int64
+	TaskVersion        int
+	TaskDigest         string
+	BindingVersion     int64
+	LeaseExpiresAt     time.Time
+	Budget             Budget
 }
 
 type Execution struct {
-	ID             string
-	WorkProvider   string
-	ExternalWorkID string
-	ExternalRunID  string
-	AgentID        string
-	State          State
-	Attempt        int
-	LeaseExpiresAt time.Time
-	DeadlineAt     time.Time
-	MaxAttempts    int
-	MaxTokens      int64
-	MaxCostMicros  int64
-	UsedTokens     int64
-	UsedCostMicros int64
-	RuntimeHandle  string
-	FailureClass   FailureClass
-	FailureMessage string
-	Version        int64
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
-	FinishedAt     *time.Time
+	ID                 string
+	WorkProvider       string
+	ProjectID          string
+	ExternalWorkID     string
+	ExternalRunID      string
+	AgentID            string
+	ExternalRunVersion int64
+	FenceToken         int64
+	TaskVersion        int
+	TaskDigest         string
+	BindingVersion     int64
+	State              State
+	Attempt            int
+	LeaseExpiresAt     time.Time
+	DeadlineAt         time.Time
+	MaxAttempts        int
+	MaxTokens          int64
+	MaxCostMicros      int64
+	UsedTokens         int64
+	UsedCostMicros     int64
+	RuntimeHandle      string
+	FailureClass       FailureClass
+	FailureMessage     string
+	CommandCursor      int64
+	RetryAttempt       int
+	NextEligibleAt     *time.Time
+	LastErrorClass     FailureClass
+	ExhaustionReason   string
+	Version            int64
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+	FinishedAt         *time.Time
+}
+
+func (execution Execution) AuthoritySafe(now time.Time, safetyWindow time.Duration) bool {
+	return !execution.State.Terminal() && execution.ExternalRunVersion > 0 && execution.FenceToken > 0 &&
+		now.Add(safetyWindow).Before(execution.LeaseExpiresAt) && !execution.BudgetExpired(now)
 }
 
 func (execution Execution) LeaseExpired(now time.Time) bool {

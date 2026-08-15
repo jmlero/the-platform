@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -57,11 +58,16 @@ func runDoctor(arguments []string, stdout io.Writer, stderr io.Writer) int {
 	flags := flag.NewFlagSet("doctor", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	serverURL := flags.String("appdeck-url", envOrDefault("MARINA_APPDECK_URL", "http://localhost:8080"), "AppDeck server URL")
+	tokenFile := flags.String(
+		"appdeck-token-file",
+		envOrDefault("MARINA_APPDECK_TOKEN_FILE", ""),
+		"file containing the AppDeck service Bearer token",
+	)
 	if err := flags.Parse(arguments); err != nil {
 		return 2
 	}
 
-	client, err := appdeck.New(*serverURL, &http.Client{Timeout: 5 * time.Second})
+	client, err := newAppDeckClient(*serverURL, *tokenFile, &http.Client{Timeout: 5 * time.Second})
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "configure AppDeck: %v\n", err)
 		return 1
@@ -97,6 +103,11 @@ func runServe(arguments []string, stderr io.Writer) int {
 	}
 	address := flags.String("addr", envOrDefault("MARINA_ADDR", ":8090"), "HTTP listen address")
 	serverURL := flags.String("appdeck-url", envOrDefault("MARINA_APPDECK_URL", "http://localhost:8080"), "AppDeck server URL")
+	tokenFile := flags.String(
+		"appdeck-token-file",
+		envOrDefault("MARINA_APPDECK_TOKEN_FILE", ""),
+		"file containing the AppDeck service Bearer token",
+	)
 	journalPath := flags.String(
 		"journal-path",
 		envOrDefault("MARINA_JOURNAL_PATH", filepath.Join("data", "marina.db")),
@@ -121,7 +132,7 @@ func runServe(arguments []string, stderr io.Writer) int {
 		return 2
 	}
 
-	client, err := appdeck.New(*serverURL, &http.Client{Timeout: 5 * time.Second})
+	client, err := newAppDeckClient(*serverURL, *tokenFile, &http.Client{Timeout: 5 * time.Second})
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "configure AppDeck: %v\n", err)
 		return 1
@@ -132,7 +143,7 @@ func runServe(arguments []string, stderr io.Writer) int {
 	defer cancelStartup()
 	providerInfo, compatibilityErr := client.CheckCompatibility(
 		startupCtx,
-		workcontrol.ReconciliationCapabilities(),
+		workcontrol.MilestoneOneCapabilities(),
 	)
 	if compatibilityErr != nil {
 		logger.Warn(
@@ -157,6 +168,32 @@ func runServe(arguments []string, stderr io.Writer) int {
 			logger.Error("close execution journal", "error", err)
 		}
 	}()
+	identity, err := journal.EnsureInstallationIdentity(startupCtx)
+	if err != nil {
+		logger.Error("persist stable Marina identity", "error", err)
+		return 1
+	}
+	binding, err := journal.EnsureProjectBinding(startupCtx, execution.ProjectBinding{
+		ProjectID: envOrDefault("MARINA_APPDECK_PROJECT_ID", "prj_default"), Provider: "appdeck",
+		Repository: envOrDefault("MARINA_REPOSITORY", "disabled://milestone-one"), Runtime: "disabled:milestone-one",
+		PolicyVersion: envOrDefault("MARINA_POLICY_VERSION", "milestone-one"), ContextConfig: "disabled:milestone-one",
+		ArtifactConfig: "disabled:milestone-one", DeliveryConfig: "disabled:milestone-one",
+		BudgetMinutes: 30, MaxConcurrency: 1,
+	})
+	if err != nil {
+		logger.Error("persist project binding", "error", err)
+		return 1
+	}
+	controllerEnabled := compatibilityErr == nil
+	registration := workcontrol.AgentRegistration{ID: identity.LogicalAgentID,
+		InstallationID: identity.InstallationID, Name: "Marina controller", Kind: "controller",
+		Capabilities: []string{"work-control", "reconciliation"}}
+	if controllerEnabled {
+		if _, err := client.RegisterAgent(startupCtx, registration); err != nil {
+			logger.Error("register stable logical agent", "error", err)
+			return 1
+		}
+	}
 
 	planner, err := reconcile.NewPlanner(journal, *renewBefore)
 	if err != nil {
@@ -180,10 +217,20 @@ func runServe(arguments []string, stderr io.Writer) int {
 		return 1
 	}
 	leaseManager.WithBudgetStopper(leaseReconciler)
-	startupCycle := leaseManager.Cycle(startupCtx)
-	logLeaseCycle(logger, startupCycle, "startup")
-	if startupCycle.Err != nil {
+	leaseManager.WithRetryJournal(journal)
+	controlController, err := reconcile.NewControlController(client, journal, binding, identity, *runLease)
+	if err != nil {
+		logger.Error("configure milestone-one control controller", "error", err)
 		return 1
+	}
+	if controllerEnabled {
+		startupControl := controlController.Cycle(startupCtx)
+		logControlCycle(logger, startupControl, "startup")
+		startupCycle := leaseManager.Cycle(startupCtx)
+		logLeaseCycle(logger, startupCycle, "startup")
+		if startupCycle.Err != nil {
+			return 1
+		}
 	}
 
 	server := &http.Server{
@@ -201,9 +248,31 @@ func runServe(arguments []string, stderr io.Writer) int {
 	controllers.Add(1)
 	go func() {
 		defer controllers.Done()
-		leaseManager.Run(ctx, func(cycle reconcile.LeaseCycle) {
-			logLeaseCycle(logger, cycle, "scheduled")
-		})
+		ticker := time.NewTicker(*reconcileInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if !controllerEnabled {
+					operationCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+					_, compatibilityErr := client.CheckCompatibility(operationCtx, workcontrol.MilestoneOneCapabilities())
+					if compatibilityErr == nil {
+						_, compatibilityErr = client.RegisterAgent(operationCtx, registration)
+					}
+					cancel()
+					if compatibilityErr != nil {
+						logger.Warn("milestone-one controllers remain disabled", "error", compatibilityErr)
+						continue
+					}
+					controllerEnabled = true
+					logger.Info("milestone-one controllers enabled after provider recovery")
+				}
+				logControlCycle(logger, controlController.Cycle(ctx), "scheduled")
+				logLeaseCycle(logger, leaseManager.Cycle(ctx), "scheduled")
+			}
+		}
 	}()
 	defer func() {
 		stop()
@@ -244,6 +313,15 @@ func runServe(arguments []string, stderr io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+func logControlCycle(logger *slog.Logger, cycle reconcile.ControlCycle, trigger string) {
+	logger.Info("milestone-one control cycle completed", "trigger", trigger,
+		"acquisitions", cycle.Acquisitions, "commands", cycle.Commands, "published", cycle.Published,
+		"error_count", len(cycle.Errors))
+	for _, err := range cycle.Errors {
+		logger.Warn("milestone-one control operation deferred", "trigger", trigger, "error", err)
+	}
 }
 
 func logLeaseCycle(logger *slog.Logger, cycle reconcile.LeaseCycle, trigger string) {
@@ -305,6 +383,14 @@ func envOrDefault(name string, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func newAppDeckClient(serverURL string, tokenFile string, httpClient *http.Client) (*appdeck.Client, error) {
+	options := make([]appdeck.Option, 0, 1)
+	if strings.TrimSpace(tokenFile) != "" {
+		options = append(options, appdeck.WithBearerTokenFile(tokenFile))
+	}
+	return appdeck.New(serverURL, httpClient, options...)
 }
 
 func envDurationOrDefault(name string, fallback time.Duration) (time.Duration, error) {

@@ -1,16 +1,18 @@
-# Marina and AppDeck Build TODO
+# The Platform Build TODO
 
-This is the prioritized implementation backlog for the first laptop-off vertical slice. It records build order, not a permanent architecture. Product direction remains in the [AppDeck vision](deck/VISION.md) and [Marina vision](marina/VISION.md); cross-product boundaries, protocols, and failure semantics are defined in [ARCHITECTURE.md](ARCHITECTURE.md).
+This is the prioritized implementation backlog for the first laptop-off vertical slice. It records build order, not a permanent architecture. Product direction remains in the [AppDeck vision](VISION_DECK.md) and [Marina vision](VISION.md); cross-product boundaries, protocols, and failure semantics are defined in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 Work is tagged by its primary product module or ownership boundary:
 
 - **[AppDeck]** — the human-facing work-control product.
 - **[Marina]** — the autonomous factory engine.
+- **[CLI]** — the standalone operator command-line client for AppDeck's public API.
+- **[TUI]** — the later standalone terminal interface, sequenced after the CLI.
 - **[Joint]** — contract, deployment, or end-to-end evidence that must exercise both real products.
 
 A joint item is not complete when only mocks pass. It requires compatible contracts, deterministic tests in each product, and at least one paired test using real AppDeck and Marina behavior over their public protocol. Recovery behavior and truthful operator-visible state are part of the acceptance criteria, not follow-up polish.
 
-Marina must not automatically claim real, mutating work until the Milestone 1 safety gate is complete.
+The Milestone 1 safety gate is complete. Marina may automatically claim control-only work through its durable handoff, but no runtime or source-control mutation is enabled.
 
 ## Now — establish the executable foundation
 
@@ -48,59 +50,59 @@ Marina must not automatically claim real, mutating work until the Milestone 1 sa
 - [x] [Marina] Validate required provider capabilities at startup and report missing capabilities precisely without disabling unrelated read-only behavior.
 - [x] [Joint] Define shared JSON fixtures for tasks, runs, leases, plans, commands, events, budgets, evidence, and every classified error response.
 - [x] [Marina] Split the implemented work-control boundary into focused provider-information, registry, discovery, acquisition, planning, run-control, and event capabilities; add command and evidence ports only when those operations exist.
-- [ ] [Joint] Add a reusable Marina work-control conformance suite and run it against a real AppDeck binary in CI.
+- [x] [Joint] Add a reusable Marina work-control conformance suite and run it against a real AppDeck binary in CI.
   - [x] The reusable suite, isolated real-AppDeck runner, and monorepo CI job are implemented.
-  - [ ] Record the first passing GitHub Actions run after publishing the monorepo.
+  - [x] The first published monorepo run passed on `main`: [GitHub Actions run 29690709563](https://github.com/jmlero/the-platform/actions/runs/29690709563).
 - [x] [Joint] Declare and test the supported AppDeck protocol range for every Marina release.
-- [ ] [Joint] Select and record the first Marina-to-AppDeck service-authentication mechanism and project-scoped authorization model.
-- [ ] [AppDeck] Authenticate Marina as a stable service identity and authorize every API operation by project and capability before enabling automatic claims.
-- [ ] [Marina] Load the AppDeck credential through a secret reference, rotate it without losing run identity, and never persist or log its value.
+- [x] [Joint] Select and record the first Marina-to-AppDeck service-authentication mechanism and project-scoped authorization model in [decision 0003](docs/decisions/0003-service-authentication.md).
+- [x] [AppDeck] Authenticate Marina as a stable service identity and authorize every service API operation by project and capability before enabling automatic claims.
+- [x] [Marina] Load the AppDeck credential through a file secret reference, rotate it without losing run identity, and never persist or log its value.
 
 ### Idempotent acquisition and fenced authority
 
-- [ ] [AppDeck] Persist idempotency keys and original results for claims and all run mutations; reject reuse with a different payload.
-- [ ] [AppDeck] Add guarded resource versions and a monotonically changing lease fence token to runs.
-- [ ] [AppDeck] Require the current run version, fence token, logical agent identity, and idempotency key for plans, progress, transitions, commands, evidence, and terminal updates.
-- [ ] [AppDeck] Store the claimed task version and acceptance-criteria digest on each run so later task edits cannot silently change active work.
-- [ ] [AppDeck] Add claim lookup by idempotency key and paginated discovery of active runs assigned to a stable logical agent and project.
-- [ ] [AppDeck] Make registration idempotent for a stable Marina installation identity and distinguish controller presence from ephemeral runtime attempts.
-- [ ] [Marina] Add versioned project bindings for AppDeck project ID, repository, runtime, policy, context, artifact, delivery, budget, and concurrency configuration.
-- [ ] [Marina] Persist a stable installation and logical-agent identity outside ephemeral process state.
-- [ ] [Marina] Add durable acquisition-intent records containing task version and claim key before making the external claim call.
-- [ ] [Marina] Implement a bounded work-intake controller that applies project concurrency and policy, claims idempotently, and binds the exact returned run before any runtime starts.
-- [ ] [Marina] Reconcile unresolved acquisition intents through claim lookup or assigned-run discovery; never recover by issuing a new blind claim.
-- [ ] [Joint] Inject crashes before the claim, after AppDeck commits, after a lost response, and before Marina binds the run; prove that exactly one provider run and one Marina execution exist.
-- [ ] [Joint] Race claim recovery against AppDeck's lease reaper and prove stale workers cannot regain authority with an older fence.
+- [x] [AppDeck] Persist idempotency keys and original results for claims and all run mutations; reject reuse with a different payload.
+- [x] [AppDeck] Add guarded resource versions and a monotonically changing lease fence token to runs.
+- [x] [AppDeck] Require the current run version, fence token, logical agent identity, and idempotency key for plans, progress, transitions, commands, evidence, and terminal updates.
+- [x] [AppDeck] Store the claimed task version and acceptance-criteria digest on each run so later task edits cannot silently change active work.
+- [x] [AppDeck] Add claim lookup by idempotency key and paginated discovery of active runs assigned to a stable logical agent and project.
+- [x] [AppDeck] Make registration idempotent for a stable Marina installation identity and distinguish controller presence from ephemeral runtime attempts.
+- [x] [Marina] Add versioned project bindings for AppDeck project ID, repository, runtime, policy, context, artifact, delivery, budget, and concurrency configuration.
+- [x] [Marina] Persist a stable installation and logical-agent identity outside ephemeral process state.
+- [x] [Marina] Add durable acquisition-intent records containing task version and claim key before making the external claim call.
+- [x] [Marina] Implement a bounded work-intake controller that applies project concurrency and policy, claims idempotently, and binds the exact returned run before any runtime starts.
+- [x] [Marina] Reconcile unresolved acquisition intents through claim lookup or assigned-run discovery; never recover by issuing a new blind claim.
+- [x] [Joint] Inject crashes before the claim, after AppDeck commits, after a lost response, and before Marina binds the run; prove that exactly one provider run and one Marina execution exist.
+- [x] [Joint] Race claim recovery against AppDeck's lease reaper and prove stale workers cannot regain authority with an older fence.
 
 ### Durable commands and projection
 
-- [ ] [AppDeck] Introduce a durable operator-command resource with monotonic sequence and pending, acknowledged, rejected, and completed states.
-- [ ] [AppDeck] Support at least pause, resume, cancel, replan, retry, and reduce-authority commands without directly editing active lifecycle columns from the UI.
-- [ ] [Marina] Persist a per-run command cursor, consume commands in order, and acknowledge each command idempotently.
-- [ ] [Marina] Make cancellation and authority reduction pre-empt ordinary progress and stop new side effects before lease expiry.
-- [ ] [Marina] Add a durable provider outbox for normalized progress, failure, usage, evidence, command acknowledgements, and terminal projections.
-- [ ] [AppDeck] Deduplicate projected events by producer event ID while preserving a monotonic per-execution sequence and correlation chain.
-- [ ] [Joint] Prove that an AppDeck outage accumulates a bounded Marina outbox and replay produces no duplicate timeline or lifecycle transitions.
-- [ ] [Joint] Prove that an operator cancellation during a simulated active execution prevents further controller side effects, invalidates stale authority, and converges both ledgers.
+- [x] [AppDeck] Introduce a durable operator-command resource with monotonic sequence and pending, acknowledged, rejected, and completed states.
+- [x] [AppDeck] Support at least pause, resume, cancel, replan, retry, and reduce-authority commands without directly editing active lifecycle columns from the UI.
+- [x] [Marina] Persist a per-run command cursor, consume commands in order, and acknowledge each command idempotently.
+- [x] [Marina] Make cancellation and authority reduction pre-empt ordinary progress and stop new side effects before lease expiry.
+- [x] [Marina] Add a durable provider outbox for normalized progress, failure, usage, evidence, command acknowledgements, and terminal projections.
+- [x] [AppDeck] Deduplicate projected events by producer event ID while preserving a monotonic per-execution sequence and correlation chain.
+- [x] [Joint] Prove that an AppDeck outage accumulates a bounded Marina outbox and replay produces no duplicate timeline or lifecycle transitions.
+- [x] [Joint] Prove that an operator cancellation during a simulated active execution prevents further controller side effects, invalidates stale authority, and converges both ledgers.
 
 ### Complete controller failure behavior
 
-- [ ] [Marina] Add bounded retry, timeout, cancellation, and failure classification to every external operation.
-- [ ] [Marina] Publish normalized progress and classified failure events to AppDeck through the outbox.
-- [ ] [Marina] Define the lease safety window in which no new mutating step may start if AppDeck cannot renew authority.
-- [ ] [Marina] Reconcile planning, waiting-decision, running, and verifying actions only after inspecting their exact external resource.
-- [ ] [Marina] Persist retry attempt, next eligible time, last classified error, and exhaustion reason rather than hiding backoff state in memory.
-- [ ] [Marina] Add controller-level concurrency guards and optimistic conflicts so overlapping cycles cannot perform the same side effect.
-- [ ] [Joint] Verify budget exhaustion, provider cancellation, provider failure, stale fence, and Marina restart against the real AppDeck API.
+- [x] [Marina] Add bounded retry, timeout, cancellation, and failure classification to every external operation.
+- [x] [Marina] Publish normalized progress and classified failure events to AppDeck through the outbox.
+- [x] [Marina] Define the lease safety window in which no new mutating step may start if AppDeck cannot renew authority.
+- [x] [Marina] Reconcile planning, waiting-decision, running, and verifying actions only after inspecting their exact external resource.
+- [x] [Marina] Persist retry attempt, next eligible time, last classified error, and exhaustion reason rather than hiding backoff state in memory.
+- [x] [Marina] Add controller-level concurrency guards and optimistic conflicts so overlapping cycles cannot perform the same side effect.
+- [x] [Joint] Verify budget exhaustion, provider cancellation, provider failure, stale fence, and Marina restart against the real AppDeck API.
 
 ### Milestone 1 exit gate
 
-- [ ] One ready AppDeck task is claimed exactly once through a persisted acquisition intent.
-- [ ] Lost requests and responses at every handoff recover without a duplicate run or unjournaled active claim.
-- [ ] Progress and failure projections are durable, ordered per execution, and deduplicated.
-- [ ] Pause or cancel is durably acknowledged and stale controller writes are rejected.
-- [ ] Restarting AppDeck or Marina preserves the exact run, task snapshot, lease authority, budgets, and truthful visible state.
-- [ ] No runtime or source-control mutation is enabled yet; this gate proves the control system first.
+- [x] One ready AppDeck task is claimed exactly once through a persisted acquisition intent.
+- [x] Lost requests and responses at every handoff recover without a duplicate run or unjournaled active claim.
+- [x] Progress and failure projections are durable, ordered per execution, and deduplicated.
+- [x] Pause or cancel is durably acknowledged and stale controller writes are rejected.
+- [x] Restarting AppDeck or Marina preserves the exact run, task snapshot, lease authority, budgets, and truthful visible state.
+- [x] No runtime or source-control mutation is enabled yet; this gate proves the control system first.
 
 ## Milestone 2 — always-on pair and first Kubernetes runtime
 
@@ -108,7 +110,7 @@ Marina must not automatically claim real, mutating work until the Milestone 1 sa
 
 - [x] [Marina] Build a static, non-root control-service image for Linux AMD64 and ARM64.
 - [x] [Marina] Add a single-replica Kubernetes base with `ReadWriteOnce` journal storage, `Recreate` rollout semantics, resource limits, and real probes.
-- [ ] [AppDeck] Add a non-root single-replica Kubernetes base with its own `ReadWriteOnce` SQLite volume, `Recreate` updates, startup/liveness/readiness probes, and demo mode disabled.
+- [x] [AppDeck] Add a non-root single-replica Kubernetes base with its own `ReadWriteOnce` SQLite volume, `Recreate` updates, startup/liveness/readiness probes, and demo mode disabled.
 - [ ] [AppDeck] Add authenticated human sessions before exposing the always-on installation.
 - [ ] [Joint] Deploy the selected service-authentication and run-fencing mechanisms using rotatable secret references.
 - [ ] [Joint] Add a paired local environment that starts production AppDeck and Marina binaries with separate databases and no in-process shortcut.
@@ -116,6 +118,14 @@ Marina must not automatically claim real, mutating work until the Milestone 1 sa
 - [ ] [Joint] Verify backup and restore of both databases independently, then reconcile the exact cross-product run without timestamp-based last-write-wins repair.
 - [ ] [AppDeck] Show provider connectivity, synchronization lag, lease expiry, degraded dependencies, and stale or rejected projections truthfully.
 - [ ] [Joint] Select and deploy the paired control plane to the first always-on Kubernetes cluster.
+
+### Operator clients
+
+- [x] [CLI] Create a separate top-level `cli/` project with its own module, binary, tests, and configuration; communicate with AppDeck only through supported public HTTP/JSON APIs.
+- [ ] [CLI] Add independent packaging and release automation.
+- [x] [CLI] Ship a small first workflow: configure the AppDeck endpoint and credentials, verify connectivity, create and list work, and inspect task and run state.
+- [ ] [CLI] Add pause, resume, cancel, replan, and retry workflows using AppDeck's durable command API.
+- [ ] [TUI] Create a separate top-level `tui/` project after the CLI workflows and client boundary stabilize; use the public API or a reusable public client library, never AppDeck internals.
 
 ### Provider-neutral runtime lifecycle
 
@@ -151,6 +161,7 @@ Marina must not automatically claim real, mutating work until the Milestone 1 sa
 - [ ] [AppDeck] Store immutable, numbered plan revisions with context digest, risk class, verification strategy, expected side effects, and rollback approach.
 - [ ] [AppDeck] Bind every decision request and answer to an exact run, plan revision, and expiry; reject stale answers.
 - [ ] [AppDeck] Support change requests by creating a new plan revision rather than blocking the task or overwriting history.
+- [ ] [AppDeck] Add project-scoped agent-native channels where humans and agents can converse, reference canonical tasks, runs, decisions, artifacts, and evidence, and promote a message into a bounded versioned task without making chat a second ledger or a source of ambient execution authority.
 - [ ] [Marina] Evaluate versioned project policy before claim, runtime start, external mutation, completion, and any expansion of authority.
 - [ ] [Joint] Display the active task, plan, policy, and authority versions in AppDeck for every consequential action.
 
@@ -221,7 +232,8 @@ Marina must not automatically claim real, mutating work until the Milestone 1 sa
 
 - [ ] Choose where the first always-on Kubernetes installation runs.
 - [x] Choose SQLite as Marina's durable journal for the single-replica stage.
-- [ ] Choose human authentication for AppDeck and service authentication for Marina.
+- [ ] Choose human authentication for AppDeck.
+- [x] Choose scoped opaque credentials for initial Marina-to-AppDeck service authentication.
 - [ ] Choose the first artifact-store implementation, backup method, and retention policy.
 - [ ] Choose the first real agent harness for the Kubernetes runtime.
 - [ ] Choose the source-control credential broker or installation mechanism.

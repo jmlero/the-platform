@@ -1,4 +1,6 @@
-.PHONY: setup web build run dev-api dev-web check test clean
+IMAGE ?= appdeck:dev
+
+.PHONY: setup web build run dev-api dev-web check test image manifests clean
 
 setup:
 	npm --prefix web install
@@ -26,6 +28,12 @@ check:
 test:
 	go test ./...
 	npm --prefix web test
+
+image:
+	docker build --tag $(IMAGE) .
+
+manifests:
+	kustomize build deploy/kubernetes/base
 
 clean:
 	go clean

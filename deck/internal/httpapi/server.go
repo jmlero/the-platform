@@ -18,9 +18,20 @@ import (
 )
 
 type Server struct {
-	store  *store.Store
-	logger *slog.Logger
+	store             *store.Store
+	logger            *slog.Logger
+	serviceAuthorizer *FileServiceAuthorizer
 }
+
+type Option func(*Server)
+
+func WithServiceAuthorizer(authorizer *FileServiceAuthorizer) Option {
+	return func(server *Server) {
+		server.serviceAuthorizer = authorizer
+	}
+}
+
+type serviceIdentityContextKey struct{}
 
 type bootstrapResponse struct {
 	Tasks     []domain.Task     `json:"tasks"`
@@ -30,41 +41,222 @@ type bootstrapResponse struct {
 	Now       int64             `json:"now"`
 }
 
-func New(store *store.Store, logger *slog.Logger) *Server {
-	return &Server{store: store, logger: logger}
+func New(store *store.Store, logger *slog.Logger, options ...Option) *Server {
+	server := &Server{store: store, logger: logger}
+	for _, option := range options {
+		option(server)
+	}
+	return server
 }
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.health)
-	mux.HandleFunc("GET /api/v1/provider", s.providerInfo)
+	mux.HandleFunc("GET /readyz", s.readiness)
+	mux.HandleFunc("GET /api/v1/provider", s.requireService(capabilityProviderInfo, s.providerInfo))
 	mux.HandleFunc("GET /api/v1/bootstrap", s.bootstrap)
-	mux.HandleFunc("GET /api/v1/tasks", s.listTasks)
+	mux.HandleFunc("GET /api/v1/tasks", s.requireService(capabilityWorkReadyList, s.listTasks))
 	mux.HandleFunc("POST /api/v1/tasks", s.createTask)
-	mux.HandleFunc("GET /api/v1/tasks/{id}", s.getTask)
+	mux.HandleFunc("GET /api/v1/tasks/{id}", s.requireService(capabilityWorkInspect, s.getTask))
 	mux.HandleFunc("PATCH /api/v1/tasks/{id}", s.updateTask)
 	mux.HandleFunc("POST /api/v1/tasks/{id}/move", s.moveTask)
-	mux.HandleFunc("POST /api/v1/tasks/{id}/claim", s.claimTask)
+	mux.HandleFunc("POST /api/v1/tasks/{id}/claim", s.requireService(capabilityWorkClaim, s.claimTask))
+	mux.HandleFunc("GET /api/v1/claims/{key}", s.requireService(capabilityClaimLookup, s.lookupClaim))
 	mux.HandleFunc("GET /api/v1/agents", s.listAgents)
-	mux.HandleFunc("POST /api/v1/agents", s.registerAgent)
-	mux.HandleFunc("POST /api/v1/runs/{id}/heartbeat", s.heartbeatRun)
-	mux.HandleFunc("POST /api/v1/runs/{id}/plan", s.submitPlan)
-	mux.HandleFunc("POST /api/v1/runs/{id}/start", s.startRun)
-	mux.HandleFunc("POST /api/v1/runs/{id}/progress", s.reportProgress)
-	mux.HandleFunc("POST /api/v1/runs/{id}/verify", s.beginVerification)
-	mux.HandleFunc("POST /api/v1/runs/{id}/complete", s.completeRun)
-	mux.HandleFunc("POST /api/v1/runs/{id}/block", s.blockRun)
-	mux.HandleFunc("GET /api/v1/decisions", s.listDecisions)
-	mux.HandleFunc("GET /api/v1/decisions/{id}", s.getDecision)
-	mux.HandleFunc("POST /api/v1/decisions/{id}/answer", s.answerDecision)
-	mux.HandleFunc("GET /api/v1/events", s.listEvents)
-	mux.HandleFunc("GET /api/v1/events/stream", s.streamEvents)
+	mux.HandleFunc("POST /api/v1/agents", s.requireService(capabilityAgentRegister, s.registerAgent))
+	mux.HandleFunc("POST /api/v1/runs/{id}/heartbeat", s.requireService(capabilityLeaseRenew, s.heartbeatRun))
+	mux.HandleFunc("POST /api/v1/runs/{id}/plan", s.requireService(capabilityPlanSubmit, s.submitPlan))
+	mux.HandleFunc("POST /api/v1/runs/{id}/start", s.requireService(capabilityRunStart, s.startRun))
+	mux.HandleFunc("POST /api/v1/runs/{id}/progress", s.requireService(capabilityProgressAppend, s.reportProgress))
+	mux.HandleFunc("POST /api/v1/runs/{id}/verify", s.requireService(capabilityRunVerify, s.beginVerification))
+	mux.HandleFunc("POST /api/v1/runs/{id}/complete", s.requireService(capabilityRunComplete, s.completeRun))
+	mux.HandleFunc("POST /api/v1/runs/{id}/block", s.requireService(capabilityRunBlock, s.blockRun))
+	mux.HandleFunc("GET /api/v1/runs", s.requireService(capabilityAssignedRuns, s.listAssignedRuns))
+	mux.HandleFunc("GET /api/v1/runs/{id}/commands", s.requireService(capabilityCommandList, s.listCommands))
+	mux.HandleFunc("POST /api/v1/runs/{id}/commands/{commandId}/ack", s.requireService(capabilityCommandAck, s.acknowledgeCommand))
+	mux.HandleFunc("POST /api/v1/runs/{id}/events", s.requireService(capabilityEventAppend, s.appendProjectedEvent))
+	mux.HandleFunc("GET /api/v1/decisions", s.requireService(capabilityDecisionList, s.listDecisions))
+	mux.HandleFunc("GET /api/v1/decisions/{id}", s.requireService(capabilityDecisionInspect, s.getDecision))
+	mux.HandleFunc("POST /api/v1/decisions/{id}/answer", s.requireService(capabilityDecisionAnswer, s.answerDecision))
+	mux.HandleFunc("GET /api/v1/events", s.requireService(capabilityEventList, s.listEvents))
+	mux.HandleFunc("GET /api/v1/events/stream", s.requireService(capabilityEventStream, s.streamEvents))
+
+	// Local operator routes remain separate from the authenticated service
+	// surface until human sessions are implemented. They must not be exposed to
+	// an untrusted network.
+	mux.HandleFunc("GET /api/v1/operator/tasks/{id}", s.getTask)
+	mux.HandleFunc("POST /api/v1/operator/decisions/{id}/answer", s.answerDecision)
+	mux.HandleFunc("POST /api/v1/operator/runs/{id}/commands", s.createOperatorCommand)
+	mux.HandleFunc("GET /api/v1/operator/events/stream", s.streamEvents)
 	return s.middleware(mux)
+}
+
+func (s *Server) lookupClaim(w http.ResponseWriter, r *http.Request) {
+	projectID := strings.TrimSpace(r.URL.Query().Get("project_id"))
+	if projectID == "" || !s.requireProject(w, r, projectID) {
+		return
+	}
+	actorID := "local-prototype"
+	if identity, ok := serviceIdentityFromRequest(r); ok {
+		actorID = "service:" + identity.ID
+	}
+	run, err := s.store.LookupClaim(r.Context(), projectID, actorID, r.PathValue("key"))
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, run)
+}
+
+func (s *Server) listAssignedRuns(w http.ResponseWriter, r *http.Request) {
+	projectID := strings.TrimSpace(r.URL.Query().Get("project_id"))
+	agentID := strings.TrimSpace(r.URL.Query().Get("agent_id"))
+	if projectID == "" || agentID == "" {
+		s.writeError(w, fmt.Errorf("project_id and agent_id are required: %w", domain.ErrInvalidInput))
+		return
+	}
+	if !s.requireProject(w, r, projectID) {
+		return
+	}
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	items, next, err := s.store.ListAssignedRuns(r.Context(), projectID, agentID, r.URL.Query().Get("cursor"), limit)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": items, "next_cursor": next})
+}
+
+func (s *Server) createOperatorCommand(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Type   string `json:"type"`
+		Reason string `json:"reason"`
+	}
+	if err := readJSON(r, &input); err != nil {
+		s.writeError(w, err)
+		return
+	}
+	command, err := s.store.CreateCommand(r.Context(), r.PathValue("id"), input.Type, input.Reason, "operator:local")
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, command)
+}
+
+func (s *Server) listCommands(w http.ResponseWriter, r *http.Request) {
+	if !s.requireRunProject(w, r, r.PathValue("id")) {
+		return
+	}
+	after, _ := strconv.ParseInt(r.URL.Query().Get("after_sequence"), 10, 64)
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	commands, err := s.store.ListCommands(r.Context(), r.PathValue("id"), after, limit)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": commands})
+}
+
+func (s *Server) acknowledgeCommand(w http.ResponseWriter, r *http.Request) {
+	if !s.requireRunProject(w, r, r.PathValue("id")) {
+		return
+	}
+	var input struct {
+		AgentID         string `json:"agent_id"`
+		ExpectedVersion int64  `json:"expected_version"`
+		FenceToken      int64  `json:"fence_token"`
+		Status          string `json:"status"`
+		Result          string `json:"result"`
+	}
+	if err := readJSON(r, &input); err != nil {
+		s.writeError(w, err)
+		return
+	}
+	mutation, err := mutationFromRequest(r)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	mutation.Guard = &store.RunGuard{AgentID: input.AgentID, ExpectedVersion: input.ExpectedVersion, FenceToken: input.FenceToken}
+	if err := s.store.AcknowledgeCommand(r.Context(), mutation, r.PathValue("id"), r.PathValue("commandId"), input.Status, input.Result); err != nil {
+		s.writeError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) appendProjectedEvent(w http.ResponseWriter, r *http.Request) {
+	if !s.requireRunProject(w, r, r.PathValue("id")) {
+		return
+	}
+	var input struct {
+		AgentID         string         `json:"agent_id"`
+		ExpectedVersion int64          `json:"expected_version"`
+		FenceToken      int64          `json:"fence_token"`
+		Producer        string         `json:"producer"`
+		ProducerEventID string         `json:"producer_event_id"`
+		ExecutionID     string         `json:"execution_id"`
+		Sequence        int64          `json:"sequence"`
+		Type            string         `json:"type"`
+		Message         string         `json:"message"`
+		Payload         map[string]any `json:"payload"`
+		OccurredAt      int64          `json:"occurred_at"`
+	}
+	if err := readJSON(r, &input); err != nil {
+		s.writeError(w, err)
+		return
+	}
+	mutation, err := mutationFromRequest(r)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	mutation.Guard = &store.RunGuard{AgentID: input.AgentID, ExpectedVersion: input.ExpectedVersion, FenceToken: input.FenceToken}
+	projected := domain.ProjectedEvent{Producer: input.Producer, ProducerEventID: input.ProducerEventID,
+		ExecutionID: input.ExecutionID, Sequence: input.Sequence, Type: input.Type, Message: input.Message,
+		Payload: input.Payload, OccurredAt: input.OccurredAt}
+	if err := s.store.AppendProjectedEvent(r.Context(), mutation, r.PathValue("id"), projected); err != nil {
+		s.writeError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"status": "ok", "service": "appdeck", "time": time.Now().UTC().Format(time.RFC3339),
+	})
+}
+
+func (s *Server) readiness(w http.ResponseWriter, r *http.Request) {
+	ready := true
+	checks := map[string]string{
+		"store":        "available",
+		"service_auth": "disabled",
+	}
+	if err := s.store.Health(r.Context()); err != nil {
+		ready = false
+		checks["store"] = "unavailable"
+	}
+	if s.serviceAuthorizer != nil {
+		checks["service_auth"] = "available"
+		if _, err := s.serviceAuthorizer.load(); err != nil {
+			ready = false
+			checks["service_auth"] = "unavailable"
+		}
+	}
+
+	status := http.StatusOK
+	state := "ready"
+	if !ready {
+		status = http.StatusServiceUnavailable
+		state = "degraded"
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, status, map[string]any{
+		"status": state, "service": "appdeck", "readiness": checks,
+		"time": time.Now().UTC().Format(time.RFC3339),
 	})
 }
 
@@ -120,7 +312,7 @@ func (s *Server) listTasks(w http.ResponseWriter, r *http.Request) {
 	}
 	status := strings.TrimSpace(r.URL.Query().Get("status"))
 	if status == "" {
-		writeJSON(w, http.StatusOK, tasks)
+		writeJSON(w, http.StatusOK, filterTasksForServiceIdentity(r, tasks))
 		return
 	}
 	validStatus := false
@@ -136,7 +328,7 @@ func (s *Server) listTasks(w http.ResponseWriter, r *http.Request) {
 	}
 	filtered := make([]domain.Task, 0, len(tasks))
 	for _, task := range tasks {
-		if task.Status == status {
+		if task.Status == status && serviceIdentityAllowsProject(r, task.ProjectID) {
 			filtered = append(filtered, task)
 		}
 	}
@@ -161,6 +353,9 @@ func (s *Server) getTask(w http.ResponseWriter, r *http.Request) {
 	detail, err := s.store.GetTaskDetail(r.Context(), r.PathValue("id"))
 	if err != nil {
 		s.writeError(w, err)
+		return
+	}
+	if !s.requireProject(w, r, detail.Task.ProjectID) {
 		return
 	}
 	writeJSON(w, http.StatusOK, detail)
@@ -198,15 +393,30 @@ func (s *Server) moveTask(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) claimTask(w http.ResponseWriter, r *http.Request) {
 	var input struct {
-		AgentID      string `json:"agent_id"`
-		LeaseSeconds int    `json:"lease_seconds"`
+		AgentID             string `json:"agent_id"`
+		ExpectedTaskVersion int    `json:"expected_task_version"`
+		LeaseSeconds        int    `json:"lease_seconds"`
 	}
 	if err := readJSON(r, &input); err != nil {
 		s.writeError(w, err)
 		return
 	}
-	run, err := s.store.ClaimTask(
-		r.Context(), r.PathValue("id"), input.AgentID, time.Duration(input.LeaseSeconds)*time.Second,
+	task, err := s.store.GetTask(r.Context(), r.PathValue("id"))
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	if !s.requireProject(w, r, task.ProjectID) {
+		return
+	}
+	mutation, err := mutationFromRequest(r)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	run, err := s.store.ClaimTaskVersioned(
+		r.Context(), mutation, r.PathValue("id"), input.ExpectedTaskVersion,
+		input.AgentID, time.Duration(input.LeaseSeconds)*time.Second,
 	)
 	if err != nil {
 		s.writeError(w, err)
@@ -230,6 +440,10 @@ func (s *Server) registerAgent(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, err)
 		return
 	}
+	if strings.TrimSpace(agent.ID) == "" || strings.TrimSpace(agent.InstallationID) == "" {
+		s.writeError(w, fmt.Errorf("stable id and installation_id are required: %w", domain.ErrInvalidInput))
+		return
+	}
 	registered, err := s.store.RegisterAgent(r.Context(), agent)
 	if err != nil {
 		s.writeError(w, err)
@@ -239,16 +453,27 @@ func (s *Server) registerAgent(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) heartbeatRun(w http.ResponseWriter, r *http.Request) {
+	if !s.requireRunProject(w, r, r.PathValue("id")) {
+		return
+	}
 	var input struct {
-		AgentID      string `json:"agent_id"`
-		LeaseSeconds int    `json:"lease_seconds"`
+		AgentID         string `json:"agent_id"`
+		ExpectedVersion int64  `json:"expected_version"`
+		FenceToken      int64  `json:"fence_token"`
+		LeaseSeconds    int    `json:"lease_seconds"`
 	}
 	if err := readJSON(r, &input); err != nil {
 		s.writeError(w, err)
 		return
 	}
+	mutation, err := mutationFromRequest(r)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	mutation.Guard = &store.RunGuard{AgentID: input.AgentID, ExpectedVersion: input.ExpectedVersion, FenceToken: input.FenceToken}
 	if err := s.store.HeartbeatRun(
-		r.Context(), r.PathValue("id"), input.AgentID, time.Duration(input.LeaseSeconds)*time.Second,
+		r.Context(), mutation, r.PathValue("id"), input.AgentID, time.Duration(input.LeaseSeconds)*time.Second,
 	); err != nil {
 		s.writeError(w, err)
 		return
@@ -257,7 +482,13 @@ func (s *Server) heartbeatRun(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) submitPlan(w http.ResponseWriter, r *http.Request) {
+	if !s.requireRunProject(w, r, r.PathValue("id")) {
+		return
+	}
 	var input struct {
+		AgentID         string `json:"agent_id"`
+		ExpectedVersion int64  `json:"expected_version"`
+		FenceToken      int64  `json:"fence_token"`
 		Plan            string `json:"plan"`
 		RequireApproval bool   `json:"require_approval"`
 	}
@@ -265,7 +496,15 @@ func (s *Server) submitPlan(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, err)
 		return
 	}
-	decision, err := s.store.SubmitPlan(r.Context(), r.PathValue("id"), input.Plan, input.RequireApproval)
+	mutation, err := mutationFromRequest(r)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	mutation.Guard = &store.RunGuard{AgentID: input.AgentID, ExpectedVersion: input.ExpectedVersion, FenceToken: input.FenceToken}
+	decision, err := s.store.SubmitPlan(
+		r.Context(), mutation, r.PathValue("id"), input.Plan, input.RequireApproval,
+	)
 	if err != nil {
 		s.writeError(w, err)
 		return
@@ -274,15 +513,29 @@ func (s *Server) submitPlan(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) reportProgress(w http.ResponseWriter, r *http.Request) {
+	if !s.requireRunProject(w, r, r.PathValue("id")) {
+		return
+	}
 	var input struct {
-		Message string         `json:"message"`
-		Payload map[string]any `json:"payload"`
+		AgentID         string         `json:"agent_id"`
+		ExpectedVersion int64          `json:"expected_version"`
+		FenceToken      int64          `json:"fence_token"`
+		Message         string         `json:"message"`
+		Payload         map[string]any `json:"payload"`
 	}
 	if err := readJSON(r, &input); err != nil {
 		s.writeError(w, err)
 		return
 	}
-	if err := s.store.ReportProgress(r.Context(), r.PathValue("id"), input.Message, input.Payload); err != nil {
+	mutation, err := mutationFromRequest(r)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	mutation.Guard = &store.RunGuard{AgentID: input.AgentID, ExpectedVersion: input.ExpectedVersion, FenceToken: input.FenceToken}
+	if err := s.store.ReportProgress(
+		r.Context(), mutation, r.PathValue("id"), input.Message, input.Payload,
+	); err != nil {
 		s.writeError(w, err)
 		return
 	}
@@ -290,7 +543,21 @@ func (s *Server) reportProgress(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) startRun(w http.ResponseWriter, r *http.Request) {
-	if err := s.store.StartRun(r.Context(), r.PathValue("id")); err != nil {
+	if !s.requireRunProject(w, r, r.PathValue("id")) {
+		return
+	}
+	input, err := readRunGuard(r)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	mutation, err := mutationFromRequest(r)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	mutation.Guard = input
+	if err := s.store.StartRun(r.Context(), mutation, r.PathValue("id")); err != nil {
 		s.writeError(w, err)
 		return
 	}
@@ -298,7 +565,21 @@ func (s *Server) startRun(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) beginVerification(w http.ResponseWriter, r *http.Request) {
-	if err := s.store.BeginVerification(r.Context(), r.PathValue("id")); err != nil {
+	if !s.requireRunProject(w, r, r.PathValue("id")) {
+		return
+	}
+	input, err := readRunGuard(r)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	mutation, err := mutationFromRequest(r)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	mutation.Guard = input
+	if err := s.store.BeginVerification(r.Context(), mutation, r.PathValue("id")); err != nil {
 		s.writeError(w, err)
 		return
 	}
@@ -306,15 +587,29 @@ func (s *Server) beginVerification(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) completeRun(w http.ResponseWriter, r *http.Request) {
+	if !s.requireRunProject(w, r, r.PathValue("id")) {
+		return
+	}
 	var input struct {
-		Summary  string `json:"summary"`
-		Evidence string `json:"evidence"`
+		AgentID         string `json:"agent_id"`
+		ExpectedVersion int64  `json:"expected_version"`
+		FenceToken      int64  `json:"fence_token"`
+		Summary         string `json:"summary"`
+		Evidence        string `json:"evidence"`
 	}
 	if err := readJSON(r, &input); err != nil {
 		s.writeError(w, err)
 		return
 	}
-	if err := s.store.CompleteRun(r.Context(), r.PathValue("id"), input.Summary, input.Evidence); err != nil {
+	mutation, err := mutationFromRequest(r)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	mutation.Guard = &store.RunGuard{AgentID: input.AgentID, ExpectedVersion: input.ExpectedVersion, FenceToken: input.FenceToken}
+	if err := s.store.CompleteRun(
+		r.Context(), mutation, r.PathValue("id"), input.Summary, input.Evidence,
+	); err != nil {
 		s.writeError(w, err)
 		return
 	}
@@ -322,8 +617,14 @@ func (s *Server) completeRun(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) blockRun(w http.ResponseWriter, r *http.Request) {
+	if !s.requireRunProject(w, r, r.PathValue("id")) {
+		return
+	}
 	var input struct {
-		Reason string `json:"reason"`
+		AgentID         string `json:"agent_id"`
+		ExpectedVersion int64  `json:"expected_version"`
+		FenceToken      int64  `json:"fence_token"`
+		Reason          string `json:"reason"`
 	}
 	if err := readJSON(r, &input); err != nil {
 		s.writeError(w, err)
@@ -333,7 +634,13 @@ func (s *Server) blockRun(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, fmt.Errorf("reason is required: %w", domain.ErrInvalidInput))
 		return
 	}
-	if err := s.store.BlockRun(r.Context(), r.PathValue("id"), input.Reason); err != nil {
+	mutation, err := mutationFromRequest(r)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	mutation.Guard = &store.RunGuard{AgentID: input.AgentID, ExpectedVersion: input.ExpectedVersion, FenceToken: input.FenceToken}
+	if err := s.store.BlockRun(r.Context(), mutation, r.PathValue("id"), input.Reason); err != nil {
 		s.writeError(w, err)
 		return
 	}
@@ -346,7 +653,12 @@ func (s *Server) listDecisions(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, decisions)
+	filtered, err := s.filterDecisionsForServiceIdentity(r, decisions)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, filtered)
 }
 
 func (s *Server) getDecision(w http.ResponseWriter, r *http.Request) {
@@ -355,10 +667,21 @@ func (s *Server) getDecision(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, err)
 		return
 	}
+	if !s.requireTaskProject(w, r, decision.TaskID) {
+		return
+	}
 	writeJSON(w, http.StatusOK, decision)
 }
 
 func (s *Server) answerDecision(w http.ResponseWriter, r *http.Request) {
+	decision, err := s.store.GetDecision(r.Context(), r.PathValue("id"))
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	if !s.requireTaskProject(w, r, decision.TaskID) {
+		return
+	}
 	var input struct {
 		Answer string `json:"answer"`
 	}
@@ -366,7 +689,7 @@ func (s *Server) answerDecision(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, err)
 		return
 	}
-	decision, err := s.store.AnswerDecision(r.Context(), r.PathValue("id"), input.Answer)
+	decision, err = s.store.AnswerDecision(r.Context(), r.PathValue("id"), input.Answer)
 	if err != nil {
 		s.writeError(w, err)
 		return
@@ -382,7 +705,12 @@ func (s *Server) listEvents(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, events)
+	filtered, err := s.filterEventsForServiceIdentity(r, events)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, filtered)
 }
 
 func (s *Server) streamEvents(w http.ResponseWriter, r *http.Request) {
@@ -402,6 +730,10 @@ func (s *Server) streamEvents(w http.ResponseWriter, r *http.Request) {
 	if lastEventID > 0 {
 		missed, err := s.store.ListEvents(r.Context(), 500, lastEventID)
 		if err == nil {
+			missed, err = s.filterEventsForServiceIdentity(r, missed)
+			if err != nil {
+				return
+			}
 			for _, event := range missed {
 				if err := writeSSE(w, event); err != nil {
 					return
@@ -421,6 +753,13 @@ func (s *Server) streamEvents(w http.ResponseWriter, r *http.Request) {
 		case event, ok := <-events:
 			if !ok {
 				return
+			}
+			allowed, err := s.serviceIdentityAllowsEvent(r, event)
+			if err != nil {
+				return
+			}
+			if !allowed {
+				continue
 			}
 			if err := writeSSE(w, event); err != nil {
 				return
@@ -447,6 +786,178 @@ func writeSSE(w http.ResponseWriter, event domain.Event) error {
 	return err
 }
 
+func (s *Server) requireService(capability string, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if s.serviceAuthorizer == nil {
+			next(w, r)
+			return
+		}
+		identity, err := s.serviceAuthorizer.Authorize(r, capability)
+		if err != nil {
+			s.writeServiceAuthError(w, err)
+			return
+		}
+		ctx := context.WithValue(r.Context(), serviceIdentityContextKey{}, identity)
+		next(w, r.WithContext(ctx))
+	}
+}
+
+func mutationFromRequest(r *http.Request) (store.Mutation, error) {
+	actorID := "local-prototype"
+	if identity, ok := serviceIdentityFromRequest(r); ok {
+		actorID = "service:" + identity.ID
+	}
+	values := r.Header.Values("Idempotency-Key")
+	if len(values) > 1 {
+		return store.Mutation{}, fmt.Errorf("Idempotency-Key must be sent at most once: %w", domain.ErrInvalidInput)
+	}
+	if len(values) == 0 {
+		return store.Mutation{}, fmt.Errorf("Idempotency-Key is required: %w", domain.ErrInvalidInput)
+	}
+	return store.NewMutation(actorID, values[0])
+}
+
+func readRunGuard(r *http.Request) (*store.RunGuard, error) {
+	var input struct {
+		AgentID         string `json:"agent_id"`
+		ExpectedVersion int64  `json:"expected_version"`
+		FenceToken      int64  `json:"fence_token"`
+	}
+	if err := readJSON(r, &input); err != nil {
+		return nil, err
+	}
+	guard := &store.RunGuard{AgentID: input.AgentID, ExpectedVersion: input.ExpectedVersion, FenceToken: input.FenceToken}
+	if strings.TrimSpace(guard.AgentID) == "" || guard.ExpectedVersion < 1 || guard.FenceToken < 1 {
+		return nil, fmt.Errorf("agent_id, expected_version, and fence_token are required: %w", domain.ErrInvalidInput)
+	}
+	return guard, nil
+}
+
+func (s *Server) writeServiceAuthError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, ErrServiceUnauthenticated):
+		w.Header().Set("WWW-Authenticate", `Bearer realm="appdeck"`)
+		s.writeAPIError(w, http.StatusUnauthorized, errorCodeUnauthenticated, "service authentication required", false)
+	case errors.Is(err, ErrServiceForbidden):
+		s.writeAPIError(w, http.StatusForbidden, errorCodeForbidden, "service operation is not authorized", false)
+	case errors.Is(err, ErrServiceAuthUnavailable):
+		s.logger.Error("service authorization policy unavailable", "error", err)
+		s.writeAPIError(w, http.StatusServiceUnavailable, errorCodeServiceUnavailable, "service authorization is unavailable", true)
+	default:
+		s.logger.Error("service authorization failed", "error", err)
+		s.writeAPIError(w, http.StatusInternalServerError, errorCodeInternal, "internal server error", true)
+	}
+}
+
+func serviceIdentityFromRequest(r *http.Request) (ServiceIdentity, bool) {
+	identity, ok := r.Context().Value(serviceIdentityContextKey{}).(ServiceIdentity)
+	return identity, ok
+}
+
+func serviceIdentityAllowsProject(r *http.Request, projectID string) bool {
+	identity, ok := serviceIdentityFromRequest(r)
+	return !ok || identity.AllowsProject(projectID)
+}
+
+func (s *Server) requireProject(w http.ResponseWriter, r *http.Request, projectID string) bool {
+	if serviceIdentityAllowsProject(r, projectID) {
+		return true
+	}
+	s.writeServiceAuthError(w, ErrServiceForbidden)
+	return false
+}
+
+func (s *Server) requireTaskProject(w http.ResponseWriter, r *http.Request, taskID string) bool {
+	task, err := s.store.GetTask(r.Context(), taskID)
+	if err != nil {
+		s.writeError(w, err)
+		return false
+	}
+	return s.requireProject(w, r, task.ProjectID)
+}
+
+func (s *Server) requireRunProject(w http.ResponseWriter, r *http.Request, runID string) bool {
+	projectID, err := s.store.ProjectIDForRun(r.Context(), runID)
+	if err != nil {
+		s.writeError(w, err)
+		return false
+	}
+	return s.requireProject(w, r, projectID)
+}
+
+func filterTasksForServiceIdentity(r *http.Request, tasks []domain.Task) []domain.Task {
+	if _, ok := serviceIdentityFromRequest(r); !ok {
+		return tasks
+	}
+	filtered := make([]domain.Task, 0, len(tasks))
+	for _, task := range tasks {
+		if serviceIdentityAllowsProject(r, task.ProjectID) {
+			filtered = append(filtered, task)
+		}
+	}
+	return filtered
+}
+
+func (s *Server) filterDecisionsForServiceIdentity(
+	r *http.Request,
+	decisions []domain.Decision,
+) ([]domain.Decision, error) {
+	if _, ok := serviceIdentityFromRequest(r); !ok {
+		return decisions, nil
+	}
+	filtered := make([]domain.Decision, 0, len(decisions))
+	projects := make(map[string]string)
+	for _, decision := range decisions {
+		projectID, ok := projects[decision.TaskID]
+		if !ok {
+			task, err := s.store.GetTask(r.Context(), decision.TaskID)
+			if err != nil {
+				return nil, err
+			}
+			projectID = task.ProjectID
+			projects[decision.TaskID] = projectID
+		}
+		if serviceIdentityAllowsProject(r, projectID) {
+			filtered = append(filtered, decision)
+		}
+	}
+	return filtered, nil
+}
+
+func (s *Server) filterEventsForServiceIdentity(
+	r *http.Request,
+	events []domain.Event,
+) ([]domain.Event, error) {
+	if _, ok := serviceIdentityFromRequest(r); !ok {
+		return events, nil
+	}
+	filtered := make([]domain.Event, 0, len(events))
+	for _, event := range events {
+		allowed, err := s.serviceIdentityAllowsEvent(r, event)
+		if err != nil {
+			return nil, err
+		}
+		if allowed {
+			filtered = append(filtered, event)
+		}
+	}
+	return filtered, nil
+}
+
+func (s *Server) serviceIdentityAllowsEvent(r *http.Request, event domain.Event) (bool, error) {
+	if _, ok := serviceIdentityFromRequest(r); !ok {
+		return true, nil
+	}
+	if event.TaskID == nil {
+		return false, nil
+	}
+	task, err := s.store.GetTask(r.Context(), *event.TaskID)
+	if err != nil {
+		return false, err
+	}
+	return serviceIdentityAllowsProject(r, task.ProjectID), nil
+}
+
 func (s *Server) middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		started := time.Now()
@@ -459,7 +970,7 @@ func (s *Server) middleware(next http.Handler) http.Handler {
 		w.Header().Set("Referrer-Policy", "same-origin")
 		if origin := r.Header.Get("Origin"); origin != "" && isDevelopmentOrigin(origin) {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Last-Event-ID, X-Request-ID")
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Idempotency-Key, Last-Event-ID, X-Request-ID")
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS")
 			w.Header().Set("Access-Control-Expose-Headers", "X-Request-ID")
 			w.Header().Set("Vary", "Origin")

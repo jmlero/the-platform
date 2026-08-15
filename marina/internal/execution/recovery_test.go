@@ -53,6 +53,26 @@ func TestPlanRecoveryPrioritizesSafetyAndResumesByState(t *testing.T) {
 			renewBefore: 10 * time.Minute,
 			want:        RecoveryRenewLease,
 		},
+		{
+			name: "durable retry backoff defers phase work",
+			mutate: func(record *Execution) {
+				next := now.Add(time.Minute)
+				record.NextEligibleAt = &next
+				record.RetryAttempt = 1
+			},
+			want: RecoveryNone,
+		},
+		{
+			name: "lease safety overrides retry backoff",
+			mutate: func(record *Execution) {
+				next := now.Add(time.Hour)
+				record.NextEligibleAt = &next
+				record.RetryAttempt = 1
+				record.LeaseExpiresAt = now.Add(time.Minute)
+			},
+			renewBefore: 2 * time.Minute,
+			want:        RecoveryRenewLease,
+		},
 		{name: "planning resumes", want: RecoveryResumePlanning},
 		{
 			name: "decision is reconciled",

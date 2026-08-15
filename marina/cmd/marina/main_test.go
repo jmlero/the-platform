@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -25,6 +27,11 @@ func TestVersionCommand(t *testing.T) {
 }
 
 func TestDoctorCommand(t *testing.T) {
+	tokenPath := filepath.Join(t.TempDir(), "appdeck-token")
+	const token = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	if err := os.WriteFile(tokenPath, []byte(token+"\n"), 0o600); err != nil {
+		t.Fatalf("write AppDeck token: %v", err)
+	}
 	previousTransport := http.DefaultTransport
 	http.DefaultTransport = roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		if request.Method != http.MethodGet || request.URL.Path != "/api/v1/provider" {
@@ -33,10 +40,13 @@ func TestDoctorCommand(t *testing.T) {
 		if request.Header.Get("X-Request-ID") == "" {
 			t.Error("doctor request correlation ID is empty")
 		}
+		if request.Header.Get("Authorization") != "Bearer "+token {
+			t.Errorf("doctor Authorization = %q", request.Header.Get("Authorization"))
+		}
 		return textResponse(http.StatusOK, `{
 			"provider":"appdeck",
 			"protocol_version":"1.0",
-			"capabilities":["provider.info","work.inspect","run.lease.renew","run.block"],
+			"capabilities":["provider.info","agent.register","work.ready.list","work.inspect","work.claim.atomic","work.claim.lookup","run.assigned.list","run.lease.renew","run.block","command.list","command.ack","event.append"],
 			"server_time":1784368800000,
 			"ready":true,
 			"readiness":{"store":"available"}
@@ -46,7 +56,11 @@ func TestDoctorCommand(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	code := run([]string{"doctor", "--appdeck-url", "http://appdeck.test"}, &stdout, &stderr)
+	code := run([]string{
+		"doctor",
+		"--appdeck-url", "https://appdeck.test",
+		"--appdeck-token-file", tokenPath,
+	}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit code = %d, stderr = %q", code, stderr.String())
 	}

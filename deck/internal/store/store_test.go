@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"reflect"
+	"sync"
 	"testing"
 	"time"
 
@@ -31,37 +33,43 @@ func TestHumanAgentLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("register agent: %v", err)
 	}
-	run, err := appStore.ClaimTask(ctx, task.ID, agent.ID, time.Minute)
+	run, err := appStore.ClaimTask(ctx, testMutation("claim-lifecycle"), task.ID, agent.ID, time.Minute)
 	if err != nil {
 		t.Fatalf("claim task: %v", err)
 	}
-	if _, err := appStore.ClaimTask(ctx, task.ID, agent.ID, time.Minute); !errors.Is(err, domain.ErrConflict) {
+	if _, err := appStore.ClaimTask(ctx, testMutation("claim-duplicate"), task.ID, agent.ID, time.Minute); !errors.Is(err, domain.ErrConflict) {
 		t.Fatalf("duplicate claim error = %v, want conflict", err)
 	}
 
-	decision, err := appStore.SubmitPlan(ctx, run.ID, "Implement, test, and report.", true)
+	decision, err := appStore.SubmitPlan(
+		ctx, testMutation("plan-lifecycle"), run.ID, "Implement, test, and report.", true,
+	)
 	if err != nil {
 		t.Fatalf("submit plan: %v", err)
 	}
 	if decision == nil || decision.Status != "pending" {
 		t.Fatalf("decision = %#v, want pending decision", decision)
 	}
-	if err := appStore.StartRun(ctx, run.ID); !errors.Is(err, domain.ErrConflict) {
+	if err := appStore.StartRun(ctx, testMutation("start-lifecycle"), run.ID); !errors.Is(err, domain.ErrConflict) {
 		t.Fatalf("start before approval error = %v, want conflict", err)
 	}
 	if _, err := appStore.AnswerDecision(ctx, decision.ID, "Approve plan"); err != nil {
 		t.Fatalf("answer decision: %v", err)
 	}
-	if err := appStore.StartRun(ctx, run.ID); err != nil {
+	if err := appStore.StartRun(ctx, testMutation("start-lifecycle"), run.ID); err != nil {
 		t.Fatalf("start run: %v", err)
 	}
-	if err := appStore.ReportProgress(ctx, run.ID, "Work completed", map[string]any{"percent": 90}); err != nil {
+	if err := appStore.ReportProgress(
+		ctx, testMutation("progress-lifecycle"), run.ID, "Work completed", map[string]any{"percent": 90},
+	); err != nil {
 		t.Fatalf("report progress: %v", err)
 	}
-	if err := appStore.BeginVerification(ctx, run.ID); err != nil {
+	if err := appStore.BeginVerification(ctx, testMutation("verify-lifecycle"), run.ID); err != nil {
 		t.Fatalf("begin verification: %v", err)
 	}
-	if err := appStore.CompleteRun(ctx, run.ID, "All checks passed", "- Acceptance criterion passed"); err != nil {
+	if err := appStore.CompleteRun(
+		ctx, testMutation("complete-lifecycle"), run.ID, "All checks passed", "- Acceptance criterion passed",
+	); err != nil {
 		t.Fatalf("complete run: %v", err)
 	}
 
@@ -99,10 +107,306 @@ func TestManualMoveRejectsActiveTask(t *testing.T) {
 	if _, err := appStore.RegisterAgent(ctx, domain.Agent{ID: "agt_test", Name: "Test"}); err != nil {
 		t.Fatalf("register agent: %v", err)
 	}
-	if _, err := appStore.ClaimTask(ctx, task.ID, "agt_test", time.Minute); err != nil {
+	if _, err := appStore.ClaimTask(ctx, testMutation("claim-manual-move"), task.ID, "agt_test", time.Minute); err != nil {
 		t.Fatalf("claim task: %v", err)
 	}
 	if _, err := appStore.MoveTask(ctx, task.ID, domain.TaskBacklog); !errors.Is(err, domain.ErrInvalidTransition) {
 		t.Fatalf("move active task error = %v, want invalid transition", err)
 	}
+}
+
+func TestClaimIdempotencySurvivesRestartAndRejectsDifferentPayload(t *testing.T) {
+	ctx := context.Background()
+	databasePath := filepath.Join(t.TempDir(), "appdeck-idempotency-restart.db")
+	appStore, err := Open(ctx, databasePath)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	task, err := appStore.CreateTask(ctx, domain.CreateTaskInput{
+		Title: "Replay a lost claim response", Status: domain.TaskReady, Priority: "high", BudgetMinutes: 10,
+	})
+	if err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+	if _, err := appStore.RegisterAgent(ctx, domain.Agent{ID: "agt_replay", Name: "Replay agent"}); err != nil {
+		t.Fatalf("register agent: %v", err)
+	}
+	mutation := testMutation("claim-restart-proof")
+	original, err := appStore.ClaimTask(ctx, mutation, task.ID, "agt_replay", time.Minute)
+	if err != nil {
+		t.Fatalf("claim task: %v", err)
+	}
+	if err := appStore.Close(); err != nil {
+		t.Fatalf("close first store: %v", err)
+	}
+
+	appStore, err = Open(ctx, databasePath)
+	if err != nil {
+		t.Fatalf("reopen store: %v", err)
+	}
+	defer appStore.Close()
+	replayed, err := appStore.ClaimTask(ctx, mutation, task.ID, "agt_replay", time.Minute)
+	if err != nil {
+		t.Fatalf("replay claim after restart: %v", err)
+	}
+	if !reflect.DeepEqual(replayed, original) {
+		t.Fatalf("replayed run = %#v, want original %#v", replayed, original)
+	}
+	if _, err := appStore.ClaimTask(ctx, mutation, task.ID, "agt_replay", 2*time.Minute); !errors.Is(err, domain.ErrConflict) {
+		t.Fatalf("changed claim payload error = %v, want conflict", err)
+	}
+	detail, err := appStore.GetTaskDetail(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("get task detail: %v", err)
+	}
+	if len(detail.Runs) != 1 {
+		t.Fatalf("runs after claim replay = %d, want 1", len(detail.Runs))
+	}
+	claimedEvents, err := appStore.CountRunEvents(ctx, original.ID, "run.claimed")
+	if err != nil {
+		t.Fatalf("count claim events: %v", err)
+	}
+	if claimedEvents != 1 {
+		t.Fatalf("claim events after replay = %d, want 1", claimedEvents)
+	}
+}
+
+func TestConcurrentClaimRetriesConvergeOnOneResult(t *testing.T) {
+	ctx := context.Background()
+	appStore, err := Open(ctx, filepath.Join(t.TempDir(), "appdeck-idempotency-concurrent.db"))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer appStore.Close()
+	task, err := appStore.CreateTask(ctx, domain.CreateTaskInput{
+		Title: "Converge concurrent retries", Status: domain.TaskReady, Priority: "high", BudgetMinutes: 10,
+	})
+	if err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+	if _, err := appStore.RegisterAgent(ctx, domain.Agent{ID: "agt_concurrent", Name: "Concurrent agent"}); err != nil {
+		t.Fatalf("register agent: %v", err)
+	}
+
+	type outcome struct {
+		run domain.Run
+		err error
+	}
+	start := make(chan struct{})
+	results := make(chan outcome, 2)
+	var workers sync.WaitGroup
+	for range 2 {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			<-start
+			run, err := appStore.ClaimTask(
+				ctx, testMutation("claim-concurrent"), task.ID, "agt_concurrent", time.Minute,
+			)
+			results <- outcome{run: run, err: err}
+		}()
+	}
+	close(start)
+	workers.Wait()
+	close(results)
+	var runs []domain.Run
+	for result := range results {
+		if result.err != nil {
+			t.Fatalf("concurrent claim: %v", result.err)
+		}
+		runs = append(runs, result.run)
+	}
+	if len(runs) != 2 || !reflect.DeepEqual(runs[0], runs[1]) {
+		t.Fatalf("concurrent results = %#v, want two identical runs", runs)
+	}
+	detail, err := appStore.GetTaskDetail(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("get task detail: %v", err)
+	}
+	if len(detail.Runs) != 1 {
+		t.Fatalf("concurrent claims created %d runs, want 1", len(detail.Runs))
+	}
+}
+
+func TestAllRunMutationsReplayWithoutDuplicateEffects(t *testing.T) {
+	ctx := context.Background()
+	appStore, err := Open(ctx, filepath.Join(t.TempDir(), "appdeck-idempotency-lifecycle.db"))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer appStore.Close()
+	if _, err := appStore.RegisterAgent(ctx, domain.Agent{ID: "agt_idempotent", Name: "Idempotent agent"}); err != nil {
+		t.Fatalf("register agent: %v", err)
+	}
+	task, err := appStore.CreateTask(ctx, domain.CreateTaskInput{
+		Title: "Complete idempotently", Status: domain.TaskReady, Priority: "high", BudgetMinutes: 10,
+	})
+	if err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+	run, err := appStore.ClaimTask(ctx, testMutation("claim-complete"), task.ID, "agt_idempotent", time.Minute)
+	if err != nil {
+		t.Fatalf("claim task: %v", err)
+	}
+
+	heartbeat := testMutation("heartbeat-complete")
+	if err := appStore.HeartbeatRun(ctx, heartbeat, run.ID, run.AgentID, 2*time.Minute); err != nil {
+		t.Fatalf("heartbeat run: %v", err)
+	}
+	afterHeartbeat, err := appStore.GetTaskDetail(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("inspect heartbeat: %v", err)
+	}
+	heartbeatLease := *afterHeartbeat.Runs[0].LeaseExpiresAt
+	time.Sleep(2 * time.Millisecond)
+	if err := appStore.HeartbeatRun(ctx, heartbeat, run.ID, run.AgentID, 2*time.Minute); err != nil {
+		t.Fatalf("replay heartbeat: %v", err)
+	}
+	afterReplay, err := appStore.GetTaskDetail(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("inspect replayed heartbeat: %v", err)
+	}
+	if got := *afterReplay.Runs[0].LeaseExpiresAt; got != heartbeatLease {
+		t.Fatalf("replayed heartbeat changed lease from %d to %d", heartbeatLease, got)
+	}
+	if err := appStore.HeartbeatRun(ctx, heartbeat, run.ID, run.AgentID, 3*time.Minute); !errors.Is(err, domain.ErrConflict) {
+		t.Fatalf("changed heartbeat payload error = %v, want conflict", err)
+	}
+
+	planMutation := testMutation("plan-complete")
+	decision, err := appStore.SubmitPlan(ctx, planMutation, run.ID, "Implement and verify.", true)
+	if err != nil {
+		t.Fatalf("submit plan: %v", err)
+	}
+	replayedDecision, err := appStore.SubmitPlan(ctx, planMutation, run.ID, "Implement and verify.", true)
+	if err != nil {
+		t.Fatalf("replay plan: %v", err)
+	}
+	if !reflect.DeepEqual(replayedDecision, decision) {
+		t.Fatalf("replayed decision = %#v, want %#v", replayedDecision, decision)
+	}
+	if _, err := appStore.SubmitPlan(ctx, planMutation, run.ID, "A different plan.", true); !errors.Is(err, domain.ErrConflict) {
+		t.Fatalf("changed plan payload error = %v, want conflict", err)
+	}
+	if _, err := appStore.AnswerDecision(ctx, decision.ID, "Approve plan"); err != nil {
+		t.Fatalf("answer decision: %v", err)
+	}
+
+	startMutation := testMutation("start-complete")
+	if err := appStore.StartRun(ctx, startMutation, run.ID); err != nil {
+		t.Fatalf("start run: %v", err)
+	}
+	if err := appStore.StartRun(ctx, startMutation, run.ID); err != nil {
+		t.Fatalf("replay start: %v", err)
+	}
+	progressMutation := testMutation("progress-complete")
+	progressPayload := map[string]any{"percent": 75}
+	if err := appStore.ReportProgress(ctx, progressMutation, run.ID, "Work saved", progressPayload); err != nil {
+		t.Fatalf("report progress: %v", err)
+	}
+	if err := appStore.ReportProgress(ctx, progressMutation, run.ID, "Work saved", progressPayload); err != nil {
+		t.Fatalf("replay progress: %v", err)
+	}
+	if err := appStore.ReportProgress(ctx, progressMutation, run.ID, "Different progress", progressPayload); !errors.Is(err, domain.ErrConflict) {
+		t.Fatalf("changed progress payload error = %v, want conflict", err)
+	}
+	progressEvents, err := appStore.CountRunEvents(ctx, run.ID, "run.progress")
+	if err != nil {
+		t.Fatalf("count progress events: %v", err)
+	}
+	if progressEvents != 1 {
+		t.Fatalf("progress events after replay = %d, want 1", progressEvents)
+	}
+
+	verifyMutation := testMutation("verify-complete")
+	if err := appStore.BeginVerification(ctx, verifyMutation, run.ID); err != nil {
+		t.Fatalf("begin verification: %v", err)
+	}
+	if err := appStore.BeginVerification(ctx, verifyMutation, run.ID); err != nil {
+		t.Fatalf("replay verification: %v", err)
+	}
+	completeMutation := testMutation("complete-complete")
+	if err := appStore.CompleteRun(ctx, completeMutation, run.ID, "Passed", "Evidence"); err != nil {
+		t.Fatalf("complete run: %v", err)
+	}
+	if err := appStore.CompleteRun(ctx, completeMutation, run.ID, "Passed", "Evidence"); err != nil {
+		t.Fatalf("replay completion: %v", err)
+	}
+	if err := appStore.CompleteRun(ctx, completeMutation, run.ID, "Passed", "Different evidence"); !errors.Is(err, domain.ErrConflict) {
+		t.Fatalf("changed completion payload error = %v, want conflict", err)
+	}
+	detail, err := appStore.GetTaskDetail(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("get completed task detail: %v", err)
+	}
+	if len(detail.Artifacts) != 1 {
+		t.Fatalf("completion artifacts after replay = %d, want 1", len(detail.Artifacts))
+	}
+
+	blockedTask, err := appStore.CreateTask(ctx, domain.CreateTaskInput{
+		Title: "Block idempotently", Status: domain.TaskReady, Priority: "medium", BudgetMinutes: 10,
+	})
+	if err != nil {
+		t.Fatalf("create block task: %v", err)
+	}
+	blockedRun, err := appStore.ClaimTask(
+		ctx, testMutation("claim-block"), blockedTask.ID, "agt_idempotent", time.Minute,
+	)
+	if err != nil {
+		t.Fatalf("claim block task: %v", err)
+	}
+	if _, err := appStore.SubmitPlan(
+		ctx, testMutation("plan-block"), blockedRun.ID, "Inspect failure.", false,
+	); err != nil {
+		t.Fatalf("submit block plan: %v", err)
+	}
+	blockMutation := testMutation("block-run")
+	if err := appStore.BlockRun(ctx, blockMutation, blockedRun.ID, "External prerequisite missing"); err != nil {
+		t.Fatalf("block run: %v", err)
+	}
+	if err := appStore.BlockRun(ctx, blockMutation, blockedRun.ID, "External prerequisite missing"); err != nil {
+		t.Fatalf("replay block: %v", err)
+	}
+	if err := appStore.BlockRun(ctx, blockMutation, blockedRun.ID, "Different reason"); !errors.Is(err, domain.ErrConflict) {
+		t.Fatalf("changed block payload error = %v, want conflict", err)
+	}
+	blockedEvents, err := appStore.CountRunEvents(ctx, blockedRun.ID, "run.blocked")
+	if err != nil {
+		t.Fatalf("count blocked events: %v", err)
+	}
+	if blockedEvents != 1 {
+		t.Fatalf("blocked events after replay = %d, want 1", blockedEvents)
+	}
+
+	wantOperations := map[string]int{
+		operationClaimTask: 2, operationHeartbeatRun: 1, operationSubmitPlan: 2,
+		operationStartRun: 1, operationReportProgress: 1, operationBeginVerification: 1,
+		operationCompleteRun: 1, operationBlockRun: 1,
+	}
+	rows, err := appStore.db.QueryContext(ctx, `
+		SELECT operation, COUNT(*) FROM idempotency_records GROUP BY operation
+	`)
+	if err != nil {
+		t.Fatalf("list idempotency records: %v", err)
+	}
+	defer rows.Close()
+	gotOperations := make(map[string]int)
+	for rows.Next() {
+		var operation string
+		var count int
+		if err := rows.Scan(&operation, &count); err != nil {
+			t.Fatalf("scan idempotency operation: %v", err)
+		}
+		gotOperations[operation] = count
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate idempotency operations: %v", err)
+	}
+	if !reflect.DeepEqual(gotOperations, wantOperations) {
+		t.Fatalf("idempotency operations = %#v, want %#v", gotOperations, wantOperations)
+	}
+}
+
+func testMutation(key string) Mutation {
+	return Mutation{ActorID: "service:test-marina", IdempotencyKey: key}
 }

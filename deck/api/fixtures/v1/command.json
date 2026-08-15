@@ -6,5 +6,9 @@
   "status": "pending",
   "reason": "Operator reduced authority before another side effect.",
   "requested_by": "human_fixture_001",
-  "created_at": 1784376120000
+  "result": "",
+  "run_version": 2,
+  "fence_token": 2,
+  "created_at": 1784376120000,
+  "updated_at": 1784376120000
 }

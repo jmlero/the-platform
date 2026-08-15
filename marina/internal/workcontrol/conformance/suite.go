@@ -69,15 +69,16 @@ func Verify(
 	}
 
 	agent, err := subject.RegisterAgent(ctx, workcontrol.AgentRegistration{
-		ID:           fixtures.Agent.ID,
-		Name:         fixtures.Agent.Name,
-		Kind:         fixtures.Agent.Kind,
-		Capabilities: append([]string(nil), fixtures.Agent.Capabilities...),
+		ID:             fixtures.Agent.ID,
+		InstallationID: fixtures.Agent.InstallationID,
+		Name:           fixtures.Agent.Name,
+		Kind:           fixtures.Agent.Kind,
+		Capabilities:   append([]string(nil), fixtures.Agent.Capabilities...),
 	})
 	if err != nil {
 		return Result{}, fmt.Errorf("register logical agent: %w", err)
 	}
-	if agent.ID != fixtures.Agent.ID || agent.Name != fixtures.Agent.Name || agent.Kind != fixtures.Agent.Kind {
+	if agent.ID != fixtures.Agent.ID || agent.InstallationID != fixtures.Agent.InstallationID || agent.Name != fixtures.Agent.Name || agent.Kind != fixtures.Agent.Kind {
 		return Result{}, fmt.Errorf("registered agent differs from fixture: %#v", agent)
 	}
 
@@ -94,8 +95,10 @@ func Verify(
 	}
 
 	run, err := subject.ClaimWork(ctx, work.ID, workcontrol.Claim{
-		AgentID: agent.ID,
-		Lease:   2 * time.Minute,
+		IdempotencyKey:      "conformance-claim:" + seededWorkID,
+		AgentID:             agent.ID,
+		ExpectedTaskVersion: work.Version,
+		Lease:               2 * time.Minute,
 	})
 	if err != nil {
 		return Result{}, fmt.Errorf("claim seeded work: %w", err)
@@ -120,8 +123,11 @@ func Verify(
 		return Result{}, errors.New("inspected run has no lease")
 	}
 	if err := subject.RenewRunLease(ctx, run.ID, workcontrol.LeaseRenewal{
-		AgentID: agent.ID,
-		Lease:   5 * time.Minute,
+		IdempotencyKey:  "conformance-renew:" + seededWorkID,
+		AgentID:         agent.ID,
+		ExpectedVersion: observed.Version,
+		FenceToken:      observed.FenceToken,
+		Lease:           5 * time.Minute,
 	}); err != nil {
 		return Result{}, fmt.Errorf("renew exact run lease: %w", err)
 	}
@@ -135,16 +141,28 @@ func Verify(
 	}
 
 	if err := subject.SubmitRunPlan(ctx, run.ID, workcontrol.PlanSubmission{
+		IdempotencyKey: "conformance-plan:" + seededWorkID,
+		AgentID:        agent.ID, ExpectedVersion: observed.Version, FenceToken: observed.FenceToken,
 		Plan:            fixtures.Plan.Summary,
 		RequireApproval: false,
 	}); err != nil {
 		return Result{}, fmt.Errorf("submit conformance plan: %w", err)
+	}
+	detail, err = subject.GetWork(ctx, work.ID)
+	if err != nil {
+		return Result{}, fmt.Errorf("inspect planned run: %w", err)
+	}
+	observed, ok = findRun(detail.Runs, run.ID)
+	if !ok {
+		return Result{}, errors.New("planned run disappeared")
 	}
 	progressMessage := "The exact provider run was observed."
 	if value, ok := fixtures.Event.Payload["message"].(string); ok && strings.TrimSpace(value) != "" {
 		progressMessage = value
 	}
 	if err := subject.ReportRunProgress(ctx, run.ID, workcontrol.Progress{
+		IdempotencyKey: "conformance-progress:" + seededWorkID,
+		AgentID:        agent.ID, ExpectedVersion: observed.Version, FenceToken: observed.FenceToken,
 		Message: progressMessage,
 		Payload: map[string]any{
 			"phase":          "contract_verification",
@@ -153,7 +171,19 @@ func Verify(
 	}); err != nil {
 		return Result{}, fmt.Errorf("publish conformance progress: %w", err)
 	}
-	if err := subject.BlockRun(ctx, run.ID, "conformance lifecycle completed without runtime mutation"); err != nil {
+	detail, err = subject.GetWork(ctx, work.ID)
+	if err != nil {
+		return Result{}, fmt.Errorf("inspect progressed run: %w", err)
+	}
+	observed, ok = findRun(detail.Runs, run.ID)
+	if !ok {
+		return Result{}, errors.New("progressed run disappeared")
+	}
+	if err := subject.BlockRun(ctx, run.ID, workcontrol.RunBlock{
+		IdempotencyKey: "conformance-block:" + seededWorkID,
+		AgentID:        agent.ID, ExpectedVersion: observed.Version, FenceToken: observed.FenceToken,
+		Reason: "conformance lifecycle completed without runtime mutation",
+	}); err != nil {
 		return Result{}, fmt.Errorf("stop conformance run: %w", err)
 	}
 	detail, err = subject.GetWork(ctx, work.ID)

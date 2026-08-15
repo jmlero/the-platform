@@ -12,6 +12,7 @@ type Journal interface {
 	Transition(context.Context, string, Transition) (Execution, error)
 	RenewLease(context.Context, string, int64, time.Time) (Execution, error)
 	ReconcileLease(context.Context, string, int64, time.Time, string) (Execution, error)
+	UpdateProviderAuthority(context.Context, string, int64, int64, int64, time.Time, string) (Execution, error)
 	SaveCheckpoint(context.Context, string, int64, CheckpointInput) (Execution, Checkpoint, bool, error)
 	LatestCheckpoint(context.Context, string) (Checkpoint, error)
 	AddEvidence(context.Context, string, int64, EvidenceInput) (Execution, Evidence, bool, error)

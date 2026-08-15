@@ -4,34 +4,65 @@ const (
 	protocolVersion = "1.0"
 	providerName    = "appdeck"
 
-	errorCodeConflict          = "conflict"
-	errorCodeInternal          = "internal_error"
-	errorCodeInvalidInput      = "invalid_input"
-	errorCodeInvalidTransition = "invalid_transition"
-	errorCodeNotFound          = "not_found"
+	capabilityAgentRegister   = "agent.register"
+	capabilityDecisionAnswer  = "decision.answer"
+	capabilityDecisionInspect = "decision.inspect"
+	capabilityDecisionList    = "decision.list"
+	capabilityCommandAck      = "command.ack"
+	capabilityCommandList     = "command.list"
+	capabilityEventList       = "event.list"
+	capabilityEventStream     = "event.stream"
+	capabilityEventAppend     = "event.append"
+	capabilityProviderInfo    = "provider.info"
+	capabilityRunBlock        = "run.block"
+	capabilityRunComplete     = "run.complete"
+	capabilityLeaseRenew      = "run.lease.renew"
+	capabilityPlanSubmit      = "run.plan.submit"
+	capabilityProgressAppend  = "run.progress.append"
+	capabilityRunStart        = "run.start"
+	capabilityRunVerify       = "run.verify"
+	capabilityWorkClaim       = "work.claim.atomic"
+	capabilityClaimLookup     = "work.claim.lookup"
+	capabilityAssignedRuns    = "run.assigned.list"
+	capabilityWorkInspect     = "work.inspect"
+	capabilityWorkReadyList   = "work.ready.list"
+
+	errorCodeConflict           = "conflict"
+	errorCodeForbidden          = "forbidden"
+	errorCodeInternal           = "internal_error"
+	errorCodeInvalidInput       = "invalid_input"
+	errorCodeInvalidTransition  = "invalid_transition"
+	errorCodeNotFound           = "not_found"
+	errorCodeServiceUnavailable = "service_unavailable"
+	errorCodeUnauthenticated    = "unauthenticated"
 )
 
 // Capability identifiers describe protocol behavior, not implementation
 // packages. Keep this list sorted so provider responses and contract fixtures
 // remain deterministic.
 var protocolCapabilities = []string{
-	"agent.register",
-	"decision.answer",
-	"decision.inspect",
-	"decision.list",
-	"event.list",
-	"event.stream",
-	"provider.info",
-	"run.block",
-	"run.complete",
-	"run.lease.renew",
-	"run.plan.submit",
-	"run.progress.append",
-	"run.start",
-	"run.verify",
-	"work.claim.atomic",
-	"work.inspect",
-	"work.ready.list",
+	capabilityAgentRegister,
+	capabilityCommandAck,
+	capabilityCommandList,
+	capabilityDecisionAnswer,
+	capabilityDecisionInspect,
+	capabilityDecisionList,
+	capabilityEventAppend,
+	capabilityEventList,
+	capabilityEventStream,
+	capabilityProviderInfo,
+	capabilityAssignedRuns,
+	capabilityRunBlock,
+	capabilityRunComplete,
+	capabilityLeaseRenew,
+	capabilityPlanSubmit,
+	capabilityProgressAppend,
+	capabilityRunStart,
+	capabilityRunVerify,
+	capabilityWorkClaim,
+	capabilityClaimLookup,
+	capabilityWorkInspect,
+	capabilityWorkReadyList,
 }
 
 // Error classifications are part of the versioned wire contract. Every code
@@ -39,10 +70,13 @@ var protocolCapabilities = []string{
 // behavior without depending on a particular failure message.
 var protocolErrorCodes = []string{
 	errorCodeConflict,
+	errorCodeForbidden,
 	errorCodeInternal,
 	errorCodeInvalidInput,
 	errorCodeInvalidTransition,
 	errorCodeNotFound,
+	errorCodeServiceUnavailable,
+	errorCodeUnauthenticated,
 }
 
 type providerInfoResponse struct {

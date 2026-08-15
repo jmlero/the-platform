@@ -1,0 +1,7 @@
+{
+  "error": "service operation is not authorized",
+  "code": "forbidden",
+  "message": "service operation is not authorized",
+  "retryable": false,
+  "request_id": "request_fixture_forbidden"
+}

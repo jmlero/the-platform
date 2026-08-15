@@ -89,26 +89,68 @@ type UpdateTaskInput struct {
 }
 
 type Agent struct {
-	ID           string   `json:"id"`
-	Name         string   `json:"name"`
-	Kind         string   `json:"kind"`
-	Status       string   `json:"status"`
-	Capabilities []string `json:"capabilities"`
-	LastSeenAt   int64    `json:"last_seen_at"`
-	CreatedAt    int64    `json:"created_at"`
+	ID             string   `json:"id"`
+	InstallationID string   `json:"installation_id,omitempty"`
+	Name           string   `json:"name"`
+	Kind           string   `json:"kind"`
+	Status         string   `json:"status"`
+	Capabilities   []string `json:"capabilities"`
+	LastSeenAt     int64    `json:"last_seen_at"`
+	CreatedAt      int64    `json:"created_at"`
 }
 
 type Run struct {
-	ID             string `json:"id"`
-	TaskID         string `json:"task_id"`
-	AgentID        string `json:"agent_id"`
-	Status         string `json:"status"`
-	Plan           string `json:"plan"`
-	ResultSummary  string `json:"result_summary"`
-	LeaseExpiresAt *int64 `json:"lease_expires_at,omitempty"`
-	StartedAt      int64  `json:"started_at"`
-	FinishedAt     *int64 `json:"finished_at,omitempty"`
-	UpdatedAt      int64  `json:"updated_at"`
+	ID                       string `json:"id"`
+	TaskID                   string `json:"task_id"`
+	AgentID                  string `json:"agent_id"`
+	Version                  int64  `json:"version"`
+	FenceToken               int64  `json:"fence_token"`
+	TaskVersion              int    `json:"task_version"`
+	AcceptanceCriteriaDigest string `json:"acceptance_criteria_digest"`
+	Status                   string `json:"status"`
+	Plan                     string `json:"plan"`
+	ResultSummary            string `json:"result_summary"`
+	LeaseExpiresAt           *int64 `json:"lease_expires_at,omitempty"`
+	StartedAt                int64  `json:"started_at"`
+	FinishedAt               *int64 `json:"finished_at,omitempty"`
+	UpdatedAt                int64  `json:"updated_at"`
+}
+
+const (
+	CommandPause           = "pause"
+	CommandResume          = "resume"
+	CommandCancel          = "cancel"
+	CommandReplan          = "replan"
+	CommandRetry           = "retry"
+	CommandReduceAuthority = "reduce_authority"
+)
+
+type Command struct {
+	ID          string `json:"id"`
+	RunID       string `json:"run_id"`
+	Sequence    int64  `json:"sequence"`
+	Type        string `json:"type"`
+	Status      string `json:"status"`
+	Reason      string `json:"reason"`
+	RequestedBy string `json:"requested_by"`
+	Result      string `json:"result,omitempty"`
+	RunVersion  int64  `json:"run_version"`
+	FenceToken  int64  `json:"fence_token"`
+	CreatedAt   int64  `json:"created_at"`
+	UpdatedAt   int64  `json:"updated_at"`
+}
+
+type ProjectedEvent struct {
+	ID              string         `json:"id"`
+	Producer        string         `json:"producer"`
+	ProducerEventID string         `json:"producer_event_id"`
+	Sequence        int64          `json:"sequence"`
+	ExecutionID     string         `json:"execution_id"`
+	Type            string         `json:"type"`
+	Message         string         `json:"message"`
+	Payload         map[string]any `json:"payload"`
+	OccurredAt      int64          `json:"occurred_at"`
+	IngestedAt      int64          `json:"ingested_at"`
 }
 
 type Decision struct {

@@ -1,14 +1,14 @@
 # The Marina
 
-The Marina is the baseline for a platform-agnostic, always-on autonomous software engineering factory: durable agents working across the SDLC and DevOps lifecycle while humans steer intent, architecture, policy, and risk.
+The Marina is an installable, Kubernetes-native, and extensible autonomous software-factory layer: durable agents working across the SDLC and DevOps lifecycle while humans steer intent, architecture, policy, and risk.
 
 This project starts from scratch as a new Kubernetes-based concept. Experience from the earlier AWS-native `platform-marina` informs the creator's technical judgment, but Marina inherits neither its architecture nor its code and is not a port or rewrite of it.
 
-It is single-operator first. AppDeck is its default pluggable human-steering component, while agent harnesses and execution platforms remain replaceable behind stable contracts.
+It is single-operator first. AppDeck is its default pluggable human-steering component, while work-control surfaces, agent harnesses, runtimes, context sources, policy and verification systems, delivery integrations, and platform services remain replaceable behind governed contracts.
 
-Read [VISION.md](VISION.md) for the product vision, its relationship with AppDeck, the experience brought from `platform-marina`, the Kubernetes-first platform hypothesis, and the questions still to resolve.
+Read the root [Marina vision](../VISION.md) for the product vision, its relationship with AppDeck, the experience brought from `platform-marina`, the Kubernetes-native platform and extensibility thesis, and the questions still to resolve.
 
-Read [DARK_FACTORY.md](DARK_FACTORY.md) for the precise meaning of a dark software factory in Marina.
+Read [DARK_FACTORY.md](../DARK_FACTORY.md) for the precise meaning of a dark software factory in Marina.
 
 Read [the root architecture](../ARCHITECTURE.md) for the joint AppDeck–Marina component boundaries, source-of-truth rules, lifecycle protocol, failure semantics, and delivery gates.
 
@@ -18,8 +18,8 @@ The first executable foundation is now present:
 
 - A dependency-light Go control-service binary.
 - A narrow, provider-neutral work-control port.
-- An AppDeck adapter for protocol discovery, capability validation, stable error correlation, agent registration, ready-work discovery, atomic claims, existing-run inspection, and heartbeats.
-- A durable SQLite execution journal with version-guarded lifecycle transitions, checkpoints, evidence, leases, budgets, and append-only events.
+- An AppDeck adapter for protocol discovery, capability validation, stable error correlation, scoped service authentication, stable registration, claim recovery, assigned-run discovery, guarded run control, commands, and projected events.
+- A durable SQLite execution journal with stable installation identity, versioned project bindings, acquisition intents, version-guarded lifecycle transitions, checkpoints, evidence, leases, budgets, retry state, command cursors, an ordered provider outbox, and append-only events.
 - Idempotency constraints that prevent one external run, checkpoint key, or evidence key from creating duplicate internal work.
 - An evidence gate that prevents an execution from completing without source-bound verification evidence.
 - A side-effect-free restart planner that reconstructs the next safe recovery action from persisted state.
@@ -28,11 +28,16 @@ The first executable foundation is now present:
 - A cross-package restart proof showing inspect → heartbeat → inspect against the original run, with no replacement claim call.
 - Truthful `/healthz` liveness and `/readyz` readiness for both AppDeck and the journal.
 - A `doctor` command for checking AppDeck connectivity.
-- Deterministic tests that do not require external services or local network listeners.
+- File-referenced AppDeck credentials that reload per request for rotation and are never written to the execution journal.
+- Stable keys for reconciliation-driven lease renewal and budget stopping, plus explicit keys on acquisition, planning, and progress requests.
+- Deterministic product tests plus an authenticated real-process AppDeck conformance path.
+- A bounded work-intake controller that journals intent before claim, resolves ambiguous responses without blind reacquisition, validates the frozen task snapshot, and binds one exact run before any later side effect.
+- Ordered command consumption in which cancellation and authority reduction fence ordinary progress before acknowledgement.
+- Time-bounded external calls, persisted classified backoff and exhaustion, non-overlapping cycles, lease safety windows, and durable normalized progress/failure projection.
 
-On service startup, Marina validates AppDeck's protocol and the capabilities required by its current reconciliation controllers, opens the journal, reconstructs recovery intents for unfinished executions, and reconciles ownership and leases for non-expired budgets. Missing capabilities are reported precisely and prevent dependent lease or budget mutations without hiding read-only provider information. The same bounded reconciliation runs periodically while the service is alive. Failed, blocked, and cancelled provider runs converge into guarded local terminal states; budget exhaustion blocks the exact provider run and is classified durably. Provider completion still cannot bypass Marina's verification and evidence gates.
+On service startup, Marina validates AppDeck's Milestone 1 capabilities, opens the journal, reloads its stable identity and project binding, registers the logical controller, reconciles unresolved acquisitions, and then protects exact run ownership and leases. The same non-overlapping control and lease cycles run periodically. Failed, blocked, and cancelled provider runs converge into guarded local terminal states; budget exhaustion blocks the exact provider run and is classified durably. Provider completion still cannot bypass Marina's verification and evidence gates.
 
-This increment deliberately does **not** resume a runtime or create replacement work. It does not run agents, claim tasks automatically, drive retry loops, publish journal events as AppDeck progress, or create pull requests. Those behaviors remain unchecked in the [root TODO](../TODO.md). Marina will not claim real work until acquisition is idempotent, run authority is fenced, failure handling is bounded, and progress publication is durable.
+Milestone 1 enables automatic control-plane acquisition for the configured AppDeck project, capped at one active execution by the initial binding. Marina now claims ready tasks, but deliberately does **not** start or resume a runtime, check out or modify source, write artifacts, deliver changes, or create pull requests. Runtime and source-control authority remain represented by explicit `disabled://milestone-one` binding values until Milestone 2 supplies the isolated runtime lifecycle.
 
 ## Development
 
@@ -62,12 +67,17 @@ Check an AppDeck instance:
 ./bin/marina doctor --appdeck-url http://localhost:8080
 ```
 
+For an authenticated AppDeck service API, set `MARINA_APPDECK_TOKEN_FILE` to the file containing the raw opaque token. Marina reads the file for every request so a projected or atomically replaced secret rotates without changing the stable installation, logical agent, or run identity. Do not put the token in an environment variable, command argument, URL, or repository file.
+
+Mutating work-control requests carry `Idempotency-Key`. The intake controller persists its claim key before calling AppDeck; lease, budget, command, and projection operations derive repeatable keys from durable journal identity. Direct adapter callers that omit a key receive a one-shot compatibility key, which is unsuitable for ambiguous-response recovery.
+
 This release supports AppDeck work-control protocol `>=1.0,<2.0`. Minor-version additions remain capability-gated; an unsupported major version or a missing reconciliation capability keeps Marina not ready and prevents dependent external actions.
 
 Run Marina's initial HTTP service:
 
 ```bash
 MARINA_APPDECK_URL=http://localhost:8080 \
+MARINA_APPDECK_TOKEN_FILE=/run/secrets/appdeck/token \
 MARINA_JOURNAL_PATH=./data/marina.db \
 ./bin/marina serve
 ```
@@ -88,7 +98,11 @@ make manifests
 | --- | --- | --- |
 | `MARINA_ADDR` | `:8090` | Marina HTTP listen address. |
 | `MARINA_APPDECK_URL` | `http://localhost:8080` | AppDeck server root URL. |
+| `MARINA_APPDECK_TOKEN_FILE` | unset | File reference containing the AppDeck service Bearer token. |
+| `MARINA_APPDECK_PROJECT_ID` | `prj_default` | AppDeck project bound to this initial controller. |
 | `MARINA_JOURNAL_PATH` | `data/marina.db` | Durable SQLite execution journal. |
+| `MARINA_REPOSITORY` | `disabled://milestone-one` | Repository binding; deliberately non-mutating in Milestone 1. |
+| `MARINA_POLICY_VERSION` | `milestone-one` | Version persisted with the project binding and executions. |
 | `MARINA_LEASE_RENEW_BEFORE` | `10s` | Window in which reconciliation renews an external lease. |
 | `MARINA_RUN_LEASE` | `30s` | AppDeck lease duration requested by each heartbeat. |
 | `MARINA_RECONCILE_INTERVAL` | `10s` | Interval between non-overlapping lease reconciliation cycles. |
@@ -108,4 +122,4 @@ deploy/kubernetes/         Single-replica always-on deployment baseline
 docs/decisions/            Reversible architecture decisions
 ```
 
-Read the root [AGENTS.md](../AGENTS.md) and Marina [AGENTS.md](AGENTS.md) before making changes, [ARCHITECTURE.md](../ARCHITECTURE.md) for the target system boundaries, and [TODO.md](../TODO.md) for the prioritized build sequence. The initial language choice and its reversal criteria are recorded in [decision 0001](docs/decisions/0001-initial-go-core.md); the single-replica SQLite decision and its PostgreSQL migration triggers are in [decision 0002](docs/decisions/0002-sqlite-execution-journal.md).
+Read the root [AGENTS.md](../AGENTS.md) and Marina [AGENTS.md](AGENTS.md) before making changes, [ARCHITECTURE.md](../ARCHITECTURE.md) for the target system boundaries, and [TODO.md](../TODO.md) for the prioritized build sequence. The initial language choice and its reversal criteria are recorded in [Marina decision 0001](docs/decisions/0001-initial-go-core.md); the single-replica SQLite decision and its PostgreSQL migration triggers are in [Marina decision 0002](docs/decisions/0002-sqlite-execution-journal.md); the cross-product service identity and rotation model is in [platform decision 0003](../docs/decisions/0003-service-authentication.md); and the lossless handoff, fencing, command, and outbox mechanics are in [platform decision 0004](../docs/decisions/0004-milestone-one-work-control-safety.md).

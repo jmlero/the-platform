@@ -1,0 +1,7 @@
+{
+  "error": "service authorization is unavailable",
+  "code": "service_unavailable",
+  "message": "service authorization is unavailable",
+  "retryable": true,
+  "request_id": "request_fixture_service_unavailable"
+}

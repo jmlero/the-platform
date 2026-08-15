@@ -60,6 +60,7 @@ func TestRestartCycleRenewsExactPersistedRunWithoutClaiming(t *testing.T) {
 	t.Cleanup(func() { _ = store.Close() })
 
 	providerLease := journalTime.Add(-time.Minute)
+	providerVersion := int64(1)
 	heartbeatSeen := false
 	calls := make([]string, 0, 4)
 	client, err := appdeck.New("http://appdeck.test", &http.Client{Transport: integrationRoundTripFunc(func(request *http.Request) (*http.Response, error) {
@@ -70,7 +71,9 @@ func TestRestartCycleRenewsExactPersistedRunWithoutClaiming(t *testing.T) {
 				"provider":         "appdeck",
 				"protocol_version": "1.0",
 				"capabilities": []string{
-					"provider.info", "work.inspect", "run.lease.renew", "run.block",
+					"provider.info", "agent.register", "work.ready.list", "work.inspect",
+					"work.claim.atomic", "work.claim.lookup", "run.assigned.list",
+					"run.lease.renew", "run.block", "command.list", "command.ack", "event.append",
 				},
 				"server_time": journalTime.UnixMilli(),
 				"ready":       true,
@@ -85,11 +88,15 @@ func TestRestartCycleRenewsExactPersistedRunWithoutClaiming(t *testing.T) {
 					"status":     "running",
 				},
 				"runs": []map[string]any{{
-					"id":               "run-1",
-					"task_id":          "task-1",
-					"agent_id":         "marina-1",
-					"status":           "running",
-					"lease_expires_at": providerLease.UnixMilli(),
+					"id":                         "run-1",
+					"task_id":                    "task-1",
+					"agent_id":                   "marina-1",
+					"status":                     "running",
+					"version":                    providerVersion,
+					"fence_token":                1,
+					"task_version":               1,
+					"acceptance_criteria_digest": "legacy:task-1",
+					"lease_expires_at":           providerLease.UnixMilli(),
 				}},
 			}), nil
 		case "POST /api/v1/runs/run-1/heartbeat":
@@ -104,6 +111,7 @@ func TestRestartCycleRenewsExactPersistedRunWithoutClaiming(t *testing.T) {
 				t.Errorf("unexpected heartbeat: %#v", body)
 			}
 			heartbeatSeen = true
+			providerVersion++
 			providerLease = journalTime.Add(30 * time.Second)
 			return integrationJSONResponse(http.StatusNoContent, nil), nil
 		default:

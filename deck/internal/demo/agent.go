@@ -58,14 +58,20 @@ func (a *Agent) step(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		_, err = a.store.ClaimTask(ctx, task.ID, AgentID, 20*time.Second)
+		_, err = a.store.ClaimTask(ctx, demoMutation("claim:"+task.ID), task.ID, AgentID, 20*time.Second)
 		return err
 	}
 	if err != nil {
 		return err
 	}
 
-	if err := a.store.HeartbeatRun(ctx, active.Run.ID, AgentID, 20*time.Second); err != nil {
+	if err := a.store.HeartbeatRun(
+		ctx,
+		demoMutation(fmt.Sprintf("heartbeat:%s:%d", active.Run.ID, active.Run.UpdatedAt)),
+		active.Run.ID,
+		AgentID,
+		20*time.Second,
+	); err != nil {
 		return err
 	}
 
@@ -75,7 +81,7 @@ func (a *Agent) step(ctx context.Context) error {
 			"1. Inspect the task context and acceptance criteria.\n2. Execute the smallest useful change for %q.\n3. Verify the result against every acceptance criterion.\n4. Attach a concise evidence report.",
 			active.Task.Title,
 		)
-		_, err := a.store.SubmitPlan(ctx, active.Run.ID, plan, true)
+		_, err := a.store.SubmitPlan(ctx, demoMutation("plan:"+active.Run.ID), active.Run.ID, plan, true)
 		return err
 
 	case domain.RunWaitingDecision:
@@ -87,9 +93,14 @@ func (a *Agent) step(ctx context.Context) error {
 			return nil
 		}
 		if strings.Contains(strings.ToLower(decision.Answer), "approve") {
-			return a.store.StartRun(ctx, active.Run.ID)
+			return a.store.StartRun(ctx, demoMutation("start:"+active.Run.ID), active.Run.ID)
 		}
-		return a.store.BlockRun(ctx, active.Run.ID, "Plan changes were requested; task needs replanning")
+		return a.store.BlockRun(
+			ctx,
+			demoMutation("block-plan-change:"+active.Run.ID),
+			active.Run.ID,
+			"Plan changes were requested; task needs replanning",
+		)
 
 	case domain.RunRunning:
 		count, err := a.store.CountRunEvents(ctx, active.Run.ID, "run.progress")
@@ -107,20 +118,25 @@ func (a *Agent) step(ctx context.Context) error {
 		}
 		if count < len(updates) {
 			update := updates[count]
-			return a.store.ReportProgress(ctx, active.Run.ID, update.message, map[string]any{
+			return a.store.ReportProgress(ctx, demoMutation(fmt.Sprintf("progress:%s:%d", active.Run.ID, count)), active.Run.ID, update.message, map[string]any{
 				"stage": update.stage, "percent": update.percent,
 			})
 		}
-		return a.store.BeginVerification(ctx, active.Run.ID)
+		return a.store.BeginVerification(ctx, demoMutation("verify:"+active.Run.ID), active.Run.ID)
 
 	case domain.RunVerifying:
 		evidence := "# Verification report\n\n- The agent followed the approved plan.\n- Each simulated execution stage emitted a durable event.\n- The task lifecycle and final artifact are visible in AppDeck.\n- The run completed within its configured time budget."
 		return a.store.CompleteRun(
 			ctx,
+			demoMutation("complete:"+active.Run.ID),
 			active.Run.ID,
 			"Approved plan executed and acceptance criteria verified.",
 			evidence,
 		)
 	}
 	return nil
+}
+
+func demoMutation(key string) store.Mutation {
+	return store.Mutation{ActorID: "internal:demo:" + AgentID, IdempotencyKey: key}
 }

@@ -2,7 +2,9 @@ package store
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"fmt"
 	"strings"
 	"time"
@@ -12,7 +14,8 @@ import (
 
 const runColumns = `
 	id, task_id, agent_id, status, plan, result_summary,
-	lease_expires_at, started_at, finished_at, updated_at
+	lease_expires_at, started_at, finished_at, updated_at,
+	version, fence_token, task_version, acceptance_criteria_digest
 `
 
 func scanRun(scanner interface{ Scan(...any) error }) (domain.Run, error) {
@@ -29,6 +32,10 @@ func scanRun(scanner interface{ Scan(...any) error }) (domain.Run, error) {
 		&run.StartedAt,
 		&finishedAt,
 		&run.UpdatedAt,
+		&run.Version,
+		&run.FenceToken,
+		&run.TaskVersion,
+		&run.AcceptanceCriteriaDigest,
 	); err != nil {
 		return domain.Run{}, err
 	}
@@ -48,6 +55,7 @@ func scanAgent(scanner interface{ Scan(...any) error }) (domain.Agent, error) {
 	var capabilities string
 	if err := scanner.Scan(
 		&agent.ID,
+		&agent.InstallationID,
 		&agent.Name,
 		&agent.Kind,
 		&agent.Status,
@@ -93,6 +101,7 @@ func scanDecision(scanner interface{ Scan(...any) error }) (domain.Decision, err
 
 func (s *Store) RegisterAgent(ctx context.Context, agent domain.Agent) (domain.Agent, error) {
 	agent.ID = strings.TrimSpace(agent.ID)
+	agent.InstallationID = strings.TrimSpace(agent.InstallationID)
 	agent.Name = strings.TrimSpace(agent.Name)
 	if agent.ID == "" {
 		agent.ID = newID("agt")
@@ -107,17 +116,25 @@ func (s *Store) RegisterAgent(ctx context.Context, agent domain.Agent) (domain.A
 		agent.Status = "idle"
 	}
 	now := nowMillis()
-	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO agents (id, name, kind, status, capabilities_json, last_seen_at, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
+	result, err := s.db.ExecContext(ctx, `
+		INSERT INTO agents (id, installation_id, name, kind, status, capabilities_json, last_seen_at, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
+			installation_id = CASE WHEN agents.installation_id = '' THEN excluded.installation_id ELSE agents.installation_id END,
 			name = excluded.name,
 			kind = excluded.kind,
 			capabilities_json = excluded.capabilities_json,
 			last_seen_at = excluded.last_seen_at
-	`, agent.ID, agent.Name, agent.Kind, agent.Status, marshalJSON(agent.Capabilities), now, now)
+		WHERE agents.installation_id = '' OR excluded.installation_id = agents.installation_id
+	`, agent.ID, agent.InstallationID, agent.Name, agent.Kind, agent.Status, marshalJSON(agent.Capabilities), now, now)
 	if err != nil {
+		if strings.Contains(err.Error(), "UNIQUE constraint failed: agents.installation_id") {
+			return domain.Agent{}, fmt.Errorf("installation already owns another logical agent: %w", domain.ErrConflict)
+		}
 		return domain.Agent{}, fmt.Errorf("register agent: %w", err)
+	}
+	if rows, rowsErr := result.RowsAffected(); rowsErr != nil || rows != 1 {
+		return domain.Agent{}, fmt.Errorf("logical agent belongs to another installation: %w", domain.ErrConflict)
 	}
 	registered, err := s.GetAgent(ctx, agent.ID)
 	if err != nil {
@@ -133,7 +150,7 @@ func (s *Store) RegisterAgent(ctx context.Context, agent domain.Agent) (domain.A
 
 func (s *Store) GetAgent(ctx context.Context, id string) (domain.Agent, error) {
 	agent, err := scanAgent(s.db.QueryRowContext(ctx, `
-		SELECT id, name, kind, status, capabilities_json, last_seen_at, created_at
+		SELECT id, installation_id, name, kind, status, capabilities_json, last_seen_at, created_at
 		FROM agents WHERE id = ?
 	`, id))
 	if err != nil {
@@ -144,7 +161,7 @@ func (s *Store) GetAgent(ctx context.Context, id string) (domain.Agent, error) {
 
 func (s *Store) ListAgents(ctx context.Context) ([]domain.Agent, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, name, kind, status, capabilities_json, last_seen_at, created_at
+		SELECT id, installation_id, name, kind, status, capabilities_json, last_seen_at, created_at
 		FROM agents
 		ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'waiting' THEN 1 ELSE 2 END, name
 	`)
@@ -163,30 +180,93 @@ func (s *Store) ListAgents(ctx context.Context) ([]domain.Agent, error) {
 	return agents, rows.Err()
 }
 
-func (s *Store) ClaimTask(ctx context.Context, taskID, agentID string, lease time.Duration) (domain.Run, error) {
-	if lease <= 0 {
-		lease = 30 * time.Second
-	}
-	if _, err := s.GetAgent(ctx, agentID); err != nil {
-		return domain.Run{}, fmt.Errorf("claiming agent: %w", err)
-	}
-	now := nowMillis()
-	leaseExpires := time.Now().UTC().Add(lease).UnixMilli()
-	run := domain.Run{
-		ID: newID("run"), TaskID: taskID, AgentID: agentID, Status: domain.RunPlanning,
-		LeaseExpiresAt: &leaseExpires, StartedAt: now, UpdatedAt: now,
-	}
+func (s *Store) ClaimTask(
+	ctx context.Context,
+	mutation Mutation,
+	taskID string,
+	agentID string,
+	lease time.Duration,
+) (domain.Run, error) {
+	return s.ClaimTaskVersioned(ctx, mutation, taskID, 0, agentID, lease)
+}
 
+func (s *Store) ClaimTaskVersioned(
+	ctx context.Context,
+	mutation Mutation,
+	taskID string,
+	expectedTaskVersion int,
+	agentID string,
+	lease time.Duration,
+) (domain.Run, error) {
+	task, err := s.GetTask(ctx, taskID)
+	if err != nil {
+		return domain.Run{}, err
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return domain.Run{}, fmt.Errorf("begin claim: %w", err)
 	}
 	defer tx.Rollback()
+	attempt, replayResult, replayed, err := beginIdempotentMutation(
+		ctx,
+		tx,
+		mutation,
+		task.ProjectID,
+		operationClaimTask,
+		taskID,
+		struct {
+			TaskID              string `json:"task_id"`
+			ExpectedTaskVersion int    `json:"expected_task_version"`
+			AgentID             string `json:"agent_id"`
+			LeaseNanos          int64  `json:"lease_nanos"`
+		}{TaskID: taskID, ExpectedTaskVersion: expectedTaskVersion, AgentID: agentID, LeaseNanos: int64(lease)},
+	)
+	if err != nil {
+		return domain.Run{}, err
+	}
+	if replayed {
+		var original domain.Run
+		if err := decodeIdempotencyResult(replayResult, &original); err != nil {
+			return domain.Run{}, err
+		}
+		return original, nil
+	}
+	if _, err := getAgentTx(ctx, tx, agentID); err != nil {
+		return domain.Run{}, fmt.Errorf("claiming agent: %w", err)
+	}
+	if lease <= 0 {
+		lease = 30 * time.Second
+	}
+	now := nowMillis()
+	leaseExpires := time.Now().UTC().Add(lease).UnixMilli()
+	currentTask, err := getTaskTx(ctx, tx, taskID)
+	if err != nil {
+		return domain.Run{}, err
+	}
+	if expectedTaskVersion == 0 {
+		expectedTaskVersion = currentTask.Version
+	}
+	if expectedTaskVersion < 1 || currentTask.Version != expectedTaskVersion {
+		return domain.Run{}, fmt.Errorf("task version is stale: %w", domain.ErrConflict)
+	}
+	var fenceToken int64
+	if err := tx.QueryRowContext(ctx, "SELECT next_fence_token FROM tasks WHERE id = ?", taskID).Scan(&fenceToken); err != nil {
+		return domain.Run{}, fmt.Errorf("load task fence: %w", err)
+	}
+	digestValue := sha256.Sum256([]byte(currentTask.AcceptanceCriteria))
+	acceptanceDigest := hex.EncodeToString(digestValue[:])
+	run := domain.Run{
+		ID: newID("run"), TaskID: taskID, AgentID: agentID, Status: domain.RunPlanning,
+		Version: 1, FenceToken: fenceToken, TaskVersion: currentTask.Version,
+		AcceptanceCriteriaDigest: acceptanceDigest,
+		LeaseExpiresAt:           &leaseExpires, StartedAt: now, UpdatedAt: now,
+	}
 	result, err := tx.ExecContext(ctx, `
 		UPDATE tasks
-		SET status = 'planning', assigned_agent_id = ?, version = version + 1, updated_at = ?
-		WHERE id = ? AND status = 'ready'
-	`, agentID, now, taskID)
+		SET status = 'planning', assigned_agent_id = ?, version = version + 1,
+			next_fence_token = next_fence_token + 1, updated_at = ?
+		WHERE id = ? AND status = 'ready' AND version = ?
+	`, agentID, now, taskID, expectedTaskVersion)
 	if err != nil {
 		return domain.Run{}, fmt.Errorf("claim task: %w", err)
 	}
@@ -200,9 +280,10 @@ func (s *Store) ClaimTask(ctx context.Context, taskID, agentID string, lease tim
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO runs (
 			id, task_id, agent_id, status, plan, result_summary,
-			lease_expires_at, started_at, updated_at
-		) VALUES (?, ?, ?, 'planning', '', '', ?, ?, ?)
-	`, run.ID, run.TaskID, run.AgentID, leaseExpires, now, now)
+			lease_expires_at, started_at, updated_at, version, fence_token,
+			task_version, acceptance_criteria_digest
+		) VALUES (?, ?, ?, 'planning', '', '', ?, ?, ?, 1, ?, ?, ?)
+	`, run.ID, run.TaskID, run.AgentID, leaseExpires, now, now, fenceToken, currentTask.Version, acceptanceDigest)
 	if err != nil {
 		return domain.Run{}, fmt.Errorf("create run: %w", err)
 	}
@@ -215,10 +296,13 @@ func (s *Store) ClaimTask(ctx context.Context, taskID, agentID string, lease tim
 	event, err := insertEventTx(
 		ctx, tx, &taskID, &run.ID, &agentID,
 		"run.claimed", "Agent claimed the task and started planning",
-		map[string]any{"lease_expires_at": leaseExpires},
+		map[string]any{"lease_expires_at": leaseExpires, "run_version": 1, "fence_token": fenceToken, "task_version": currentTask.Version, "acceptance_criteria_digest": acceptanceDigest},
 	)
 	if err != nil {
 		return domain.Run{}, fmt.Errorf("create claim event: %w", err)
+	}
+	if err := finishIdempotentMutation(ctx, tx, attempt, run); err != nil {
+		return domain.Run{}, err
 	}
 	if err := tx.Commit(); err != nil {
 		return domain.Run{}, fmt.Errorf("commit claim: %w", err)
@@ -227,22 +311,61 @@ func (s *Store) ClaimTask(ctx context.Context, taskID, agentID string, lease tim
 	return run, nil
 }
 
-func (s *Store) HeartbeatRun(ctx context.Context, runID, agentID string, lease time.Duration) error {
-	if lease <= 0 {
-		lease = 30 * time.Second
+func (s *Store) HeartbeatRun(
+	ctx context.Context,
+	mutation Mutation,
+	runID string,
+	agentID string,
+	lease time.Duration,
+) error {
+	projectID, err := s.ProjectIDForRun(ctx, runID)
+	if err != nil {
+		return err
 	}
-	now := nowMillis()
-	leaseExpires := time.Now().UTC().Add(lease).UnixMilli()
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin heartbeat: %w", err)
 	}
 	defer tx.Rollback()
+	attempt, replayResult, replayed, err := beginIdempotentMutation(
+		ctx,
+		tx,
+		mutation,
+		projectID,
+		operationHeartbeatRun,
+		runID,
+		struct {
+			RunID      string    `json:"run_id"`
+			AgentID    string    `json:"agent_id"`
+			LeaseNanos int64     `json:"lease_nanos"`
+			Guard      *RunGuard `json:"guard,omitempty"`
+		}{RunID: runID, AgentID: agentID, LeaseNanos: int64(lease), Guard: mutation.Guard},
+	)
+	if err != nil {
+		return err
+	}
+	if replayed {
+		var original struct{}
+		return decodeIdempotencyResult(replayResult, &original)
+	}
+	if lease <= 0 {
+		lease = 30 * time.Second
+	}
+	run, err := getRunTx(ctx, tx, runID)
+	if err != nil {
+		return err
+	}
+	if err := validateRunGuard(run, mutation.Guard); err != nil {
+		return err
+	}
+	now := nowMillis()
+	leaseExpires := time.Now().UTC().Add(lease).UnixMilli()
 	result, err := tx.ExecContext(ctx, `
 		UPDATE runs
-		SET lease_expires_at = ?, updated_at = ?
-		WHERE id = ? AND agent_id = ? AND status IN ('planning', 'waiting_decision', 'running', 'verifying')
-	`, leaseExpires, now, runID, agentID)
+		SET lease_expires_at = ?, version = version + 1, updated_at = ?
+		WHERE id = ? AND agent_id = ? AND version = ?
+		  AND status IN ('planning', 'waiting_decision', 'running', 'verifying')
+	`, leaseExpires, now, runID, agentID, run.Version)
 	if err != nil {
 		return fmt.Errorf("heartbeat run: %w", err)
 	}
@@ -251,7 +374,7 @@ func (s *Store) HeartbeatRun(ctx context.Context, runID, agentID string, lease t
 		return fmt.Errorf("read heartbeat result: %w", err)
 	}
 	if rows == 0 {
-		return domain.ErrNotFound
+		return domain.ErrConflict
 	}
 	if _, err := tx.ExecContext(ctx, `
 		UPDATE agents
@@ -265,6 +388,9 @@ func (s *Store) HeartbeatRun(ctx context.Context, runID, agentID string, lease t
 		runID, now, agentID,
 	); err != nil {
 		return fmt.Errorf("heartbeat agent: %w", err)
+	}
+	if err := finishIdempotentMutation(ctx, tx, attempt, struct{}{}); err != nil {
+		return err
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit heartbeat: %w", err)
@@ -281,6 +407,7 @@ func (s *Store) GetActiveRunForAgent(ctx context.Context, agentID string) (domai
 		SELECT
 			r.id, r.task_id, r.agent_id, r.status, r.plan, r.result_summary,
 			r.lease_expires_at, r.started_at, r.finished_at, r.updated_at,
+			r.version, r.fence_token, r.task_version, r.acceptance_criteria_digest,
 			t.id, t.project_id, t.title, t.description, t.acceptance_criteria, t.status,
 			t.priority, t.budget_minutes, t.assigned_agent_id, t.version, t.created_at, t.updated_at
 		FROM runs r
@@ -304,6 +431,10 @@ func (s *Store) GetActiveRunForAgent(ctx context.Context, agentID string) (domai
 		&active.Run.StartedAt,
 		&finishedAt,
 		&active.Run.UpdatedAt,
+		&active.Run.Version,
+		&active.Run.FenceToken,
+		&active.Run.TaskVersion,
+		&active.Run.AcceptanceCriteriaDigest,
 		&active.Task.ID,
 		&active.Task.ProjectID,
 		&active.Task.Title,
@@ -333,18 +464,60 @@ func (s *Store) GetActiveRunForAgent(ctx context.Context, agentID string) (domai
 	return active, nil
 }
 
-func (s *Store) SubmitPlan(ctx context.Context, runID, plan string, requireApproval bool) (*domain.Decision, error) {
+func (s *Store) SubmitPlan(
+	ctx context.Context,
+	mutation Mutation,
+	runID string,
+	plan string,
+	requireApproval bool,
+) (*domain.Decision, error) {
+	projectID, err := s.ProjectIDForRun(ctx, runID)
+	if err != nil {
+		return nil, err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("begin submit plan: %w", err)
+	}
+	defer tx.Rollback()
+	attempt, replayResult, replayed, err := beginIdempotentMutation(
+		ctx,
+		tx,
+		mutation,
+		projectID,
+		operationSubmitPlan,
+		runID,
+		struct {
+			RunID           string    `json:"run_id"`
+			Plan            string    `json:"plan"`
+			RequireApproval bool      `json:"require_approval"`
+			Guard           *RunGuard `json:"guard,omitempty"`
+		}{RunID: runID, Plan: plan, RequireApproval: requireApproval, Guard: mutation.Guard},
+	)
+	if err != nil {
+		return nil, err
+	}
+	if replayed {
+		var original *domain.Decision
+		if err := decodeIdempotencyResult(replayResult, &original); err != nil {
+			return nil, err
+		}
+		return original, nil
+	}
+	run, err := getRunTx(ctx, tx, runID)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateRunGuard(run, mutation.Guard); err != nil {
+		return nil, err
+	}
+	task, err := getTaskTx(ctx, tx, run.TaskID)
+	if err != nil {
+		return nil, err
+	}
 	plan = strings.TrimSpace(plan)
 	if plan == "" {
 		return nil, fmt.Errorf("plan is required: %w", domain.ErrInvalidInput)
-	}
-	run, err := s.getRun(ctx, runID)
-	if err != nil {
-		return nil, err
-	}
-	task, err := s.GetTask(ctx, run.TaskID)
-	if err != nil {
-		return nil, err
 	}
 	now := nowMillis()
 	nextRunStatus := domain.RunRunning
@@ -353,16 +526,10 @@ func (s *Store) SubmitPlan(ctx context.Context, runID, plan string, requireAppro
 		nextRunStatus = domain.RunWaitingDecision
 		nextTaskStatus = domain.TaskWaitingDecision
 	}
-
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, fmt.Errorf("begin submit plan: %w", err)
-	}
-	defer tx.Rollback()
 	result, err := tx.ExecContext(ctx, `
-		UPDATE runs SET plan = ?, status = ?, updated_at = ?
-		WHERE id = ? AND status = 'planning'
-	`, plan, nextRunStatus, now, runID)
+		UPDATE runs SET plan = ?, status = ?, version = version + 1, updated_at = ?
+		WHERE id = ? AND status = 'planning' AND version = ?
+	`, plan, nextRunStatus, now, runID, run.Version)
 	if err != nil {
 		return nil, fmt.Errorf("save plan: %w", err)
 	}
@@ -430,6 +597,9 @@ func (s *Store) SubmitPlan(ctx context.Context, runID, plan string, requireAppro
 		}
 		decision = &created
 	}
+	if err := finishIdempotentMutation(ctx, tx, attempt, decision); err != nil {
+		return nil, err
+	}
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("commit plan: %w", err)
 	}
@@ -440,15 +610,46 @@ func (s *Store) SubmitPlan(ctx context.Context, runID, plan string, requireAppro
 	return decision, nil
 }
 
-func (s *Store) StartRun(ctx context.Context, runID string) error {
-	run, err := s.getRun(ctx, runID)
+func (s *Store) StartRun(ctx context.Context, mutation Mutation, runID string) error {
+	projectID, err := s.ProjectIDForRun(ctx, runID)
 	if err != nil {
+		return err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin start run: %w", err)
+	}
+	defer tx.Rollback()
+	attempt, replayResult, replayed, err := beginIdempotentMutation(
+		ctx,
+		tx,
+		mutation,
+		projectID,
+		operationStartRun,
+		runID,
+		struct {
+			RunID string    `json:"run_id"`
+			Guard *RunGuard `json:"guard,omitempty"`
+		}{RunID: runID, Guard: mutation.Guard},
+	)
+	if err != nil {
+		return err
+	}
+	if replayed {
+		var original struct{}
+		return decodeIdempotencyResult(replayResult, &original)
+	}
+	run, err := getRunTx(ctx, tx, runID)
+	if err != nil {
+		return err
+	}
+	if err := validateRunGuard(run, mutation.Guard); err != nil {
 		return err
 	}
 	if run.Status != domain.RunWaitingDecision {
 		return fmt.Errorf("run is not waiting for approval: %w", domain.ErrInvalidTransition)
 	}
-	decision, err := s.LatestDecisionForRun(ctx, runID)
+	decision, err := latestDecisionForRunTx(ctx, tx, runID)
 	if err != nil {
 		return fmt.Errorf("load plan decision: %w", err)
 	}
@@ -459,15 +660,10 @@ func (s *Store) StartRun(ctx context.Context, runID string) error {
 		return fmt.Errorf("plan was not approved: %w", domain.ErrInvalidTransition)
 	}
 	now := nowMillis()
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin start run: %w", err)
-	}
-	defer tx.Rollback()
 	result, err := tx.ExecContext(ctx, `
-		UPDATE runs SET status = 'running', updated_at = ?
-		WHERE id = ? AND status = 'waiting_decision'
-	`, now, runID)
+		UPDATE runs SET status = 'running', version = version + 1, updated_at = ?
+		WHERE id = ? AND status = 'waiting_decision' AND version = ?
+	`, now, runID, run.Version)
 	if err != nil {
 		return fmt.Errorf("start run: %w", err)
 	}
@@ -494,6 +690,9 @@ func (s *Store) StartRun(ctx context.Context, runID string) error {
 	if err != nil {
 		return fmt.Errorf("create run start event: %w", err)
 	}
+	if err := finishIdempotentMutation(ctx, tx, attempt, struct{}{}); err != nil {
+		return err
+	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit run start: %w", err)
 	}
@@ -501,28 +700,73 @@ func (s *Store) StartRun(ctx context.Context, runID string) error {
 	return nil
 }
 
-func (s *Store) ReportProgress(ctx context.Context, runID, message string, payload map[string]any) error {
-	run, err := s.getRun(ctx, runID)
+func (s *Store) ReportProgress(
+	ctx context.Context,
+	mutation Mutation,
+	runID string,
+	message string,
+	payload map[string]any,
+) error {
+	projectID, err := s.ProjectIDForRun(ctx, runID)
 	if err != nil {
 		return err
-	}
-	if run.Status != domain.RunRunning {
-		return fmt.Errorf("run is not executing: %w", domain.ErrInvalidTransition)
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin progress event: %w", err)
 	}
 	defer tx.Rollback()
+	attempt, replayResult, replayed, err := beginIdempotentMutation(
+		ctx,
+		tx,
+		mutation,
+		projectID,
+		operationReportProgress,
+		runID,
+		struct {
+			RunID   string         `json:"run_id"`
+			Message string         `json:"message"`
+			Payload map[string]any `json:"payload"`
+			Guard   *RunGuard      `json:"guard,omitempty"`
+		}{RunID: runID, Message: message, Payload: payload, Guard: mutation.Guard},
+	)
+	if err != nil {
+		return err
+	}
+	if replayed {
+		var original struct{}
+		return decodeIdempotencyResult(replayResult, &original)
+	}
+	run, err := getRunTx(ctx, tx, runID)
+	if err != nil {
+		return err
+	}
+	if err := validateRunGuard(run, mutation.Guard); err != nil {
+		return err
+	}
+	message = strings.TrimSpace(message)
+	if message == "" {
+		return fmt.Errorf("progress message is required: %w", domain.ErrInvalidInput)
+	}
+	if run.Status != domain.RunRunning {
+		return fmt.Errorf("run is not executing: %w", domain.ErrInvalidTransition)
+	}
 	event, err := insertEventTx(
 		ctx, tx, &run.TaskID, &run.ID, &run.AgentID,
-		"run.progress", strings.TrimSpace(message), payload,
+		"run.progress", message, payload,
 	)
 	if err != nil {
 		return fmt.Errorf("insert progress event: %w", err)
 	}
-	if _, err := tx.ExecContext(ctx, "UPDATE runs SET updated_at = ? WHERE id = ?", nowMillis(), runID); err != nil {
+	result, err := tx.ExecContext(ctx, "UPDATE runs SET version = version + 1, updated_at = ? WHERE id = ? AND version = ?", nowMillis(), runID, run.Version)
+	if err != nil {
 		return fmt.Errorf("touch run: %w", err)
+	}
+	if rows, _ := result.RowsAffected(); rows != 1 {
+		return domain.ErrConflict
+	}
+	if err := finishIdempotentMutation(ctx, tx, attempt, struct{}{}); err != nil {
+		return err
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit progress event: %w", err)
@@ -531,20 +775,46 @@ func (s *Store) ReportProgress(ctx context.Context, runID, message string, paylo
 	return nil
 }
 
-func (s *Store) BeginVerification(ctx context.Context, runID string) error {
-	run, err := s.getRun(ctx, runID)
+func (s *Store) BeginVerification(ctx context.Context, mutation Mutation, runID string) error {
+	projectID, err := s.ProjectIDForRun(ctx, runID)
 	if err != nil {
 		return err
 	}
-	now := nowMillis()
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin verification: %w", err)
 	}
 	defer tx.Rollback()
+	attempt, replayResult, replayed, err := beginIdempotentMutation(
+		ctx,
+		tx,
+		mutation,
+		projectID,
+		operationBeginVerification,
+		runID,
+		struct {
+			RunID string    `json:"run_id"`
+			Guard *RunGuard `json:"guard,omitempty"`
+		}{RunID: runID, Guard: mutation.Guard},
+	)
+	if err != nil {
+		return err
+	}
+	if replayed {
+		var original struct{}
+		return decodeIdempotencyResult(replayResult, &original)
+	}
+	run, err := getRunTx(ctx, tx, runID)
+	if err != nil {
+		return err
+	}
+	if err := validateRunGuard(run, mutation.Guard); err != nil {
+		return err
+	}
+	now := nowMillis()
 	result, err := tx.ExecContext(ctx,
-		"UPDATE runs SET status = 'verifying', updated_at = ? WHERE id = ? AND status = 'running'",
-		now, runID,
+		"UPDATE runs SET status = 'verifying', version = version + 1, updated_at = ? WHERE id = ? AND status = 'running' AND version = ?",
+		now, runID, run.Version,
 	)
 	if err != nil {
 		return fmt.Errorf("verify run: %w", err)
@@ -566,6 +836,9 @@ func (s *Store) BeginVerification(ctx context.Context, runID string) error {
 	if err != nil {
 		return fmt.Errorf("create verification event: %w", err)
 	}
+	if err := finishIdempotentMutation(ctx, tx, attempt, struct{}{}); err != nil {
+		return err
+	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit verification: %w", err)
 	}
@@ -573,9 +846,48 @@ func (s *Store) BeginVerification(ctx context.Context, runID string) error {
 	return nil
 }
 
-func (s *Store) CompleteRun(ctx context.Context, runID, summary, evidence string) error {
-	run, err := s.getRun(ctx, runID)
+func (s *Store) CompleteRun(
+	ctx context.Context,
+	mutation Mutation,
+	runID string,
+	summary string,
+	evidence string,
+) error {
+	projectID, err := s.ProjectIDForRun(ctx, runID)
 	if err != nil {
+		return err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin complete run: %w", err)
+	}
+	defer tx.Rollback()
+	attempt, replayResult, replayed, err := beginIdempotentMutation(
+		ctx,
+		tx,
+		mutation,
+		projectID,
+		operationCompleteRun,
+		runID,
+		struct {
+			RunID    string    `json:"run_id"`
+			Summary  string    `json:"summary"`
+			Evidence string    `json:"evidence"`
+			Guard    *RunGuard `json:"guard,omitempty"`
+		}{RunID: runID, Summary: summary, Evidence: evidence, Guard: mutation.Guard},
+	)
+	if err != nil {
+		return err
+	}
+	if replayed {
+		var original struct{}
+		return decodeIdempotencyResult(replayResult, &original)
+	}
+	run, err := getRunTx(ctx, tx, runID)
+	if err != nil {
+		return err
+	}
+	if err := validateRunGuard(run, mutation.Guard); err != nil {
 		return err
 	}
 	now := nowMillis()
@@ -584,17 +896,12 @@ func (s *Store) CompleteRun(ctx context.Context, runID, summary, evidence string
 		Name: "verification-report.md", Kind: "verification", Content: evidence, CreatedAt: now,
 	}
 	artifact.URI = "appdeck://artifacts/" + artifact.ID
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin complete run: %w", err)
-	}
-	defer tx.Rollback()
 	result, err := tx.ExecContext(ctx, `
 		UPDATE runs
 		SET status = 'completed', result_summary = ?, lease_expires_at = NULL,
-			finished_at = ?, updated_at = ?
-		WHERE id = ? AND status = 'verifying'
-	`, strings.TrimSpace(summary), now, now, runID)
+			finished_at = ?, version = version + 1, updated_at = ?
+		WHERE id = ? AND status = 'verifying' AND version = ?
+	`, strings.TrimSpace(summary), now, now, runID, run.Version)
 	if err != nil {
 		return fmt.Errorf("complete run: %w", err)
 	}
@@ -637,6 +944,9 @@ func (s *Store) CompleteRun(ctx context.Context, runID, summary, evidence string
 	if err != nil {
 		return fmt.Errorf("create completion event: %w", err)
 	}
+	if err := finishIdempotentMutation(ctx, tx, attempt, struct{}{}); err != nil {
+		return err
+	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit completion: %w", err)
 	}
@@ -644,21 +954,52 @@ func (s *Store) CompleteRun(ctx context.Context, runID, summary, evidence string
 	return nil
 }
 
-func (s *Store) BlockRun(ctx context.Context, runID, reason string) error {
-	run, err := s.getRun(ctx, runID)
+func (s *Store) BlockRun(ctx context.Context, mutation Mutation, runID, reason string) error {
+	projectID, err := s.ProjectIDForRun(ctx, runID)
 	if err != nil {
 		return err
 	}
-	now := nowMillis()
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin block run: %w", err)
 	}
 	defer tx.Rollback()
+	attempt, replayResult, replayed, err := beginIdempotentMutation(
+		ctx,
+		tx,
+		mutation,
+		projectID,
+		operationBlockRun,
+		runID,
+		struct {
+			RunID  string    `json:"run_id"`
+			Reason string    `json:"reason"`
+			Guard  *RunGuard `json:"guard,omitempty"`
+		}{RunID: runID, Reason: reason, Guard: mutation.Guard},
+	)
+	if err != nil {
+		return err
+	}
+	if replayed {
+		var original struct{}
+		return decodeIdempotencyResult(replayResult, &original)
+	}
+	run, err := getRunTx(ctx, tx, runID)
+	if err != nil {
+		return err
+	}
+	if err := validateRunGuard(run, mutation.Guard); err != nil {
+		return err
+	}
+	if strings.TrimSpace(reason) == "" {
+		return fmt.Errorf("block reason is required: %w", domain.ErrInvalidInput)
+	}
+	now := nowMillis()
 	if _, err := tx.ExecContext(ctx, `
 		UPDATE runs SET status = 'blocked', result_summary = ?, lease_expires_at = NULL,
-			finished_at = ?, updated_at = ? WHERE id = ?
-	`, reason, now, now, runID); err != nil {
+			finished_at = ?, version = version + 1, updated_at = ?
+		WHERE id = ? AND version = ? AND status IN ('planning', 'waiting_decision', 'running', 'verifying')
+	`, reason, now, now, runID, run.Version); err != nil {
 		return fmt.Errorf("block run: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, `
@@ -679,6 +1020,9 @@ func (s *Store) BlockRun(ctx context.Context, runID, reason string) error {
 	)
 	if err != nil {
 		return fmt.Errorf("create blocked event: %w", err)
+	}
+	if err := finishIdempotentMutation(ctx, tx, attempt, struct{}{}); err != nil {
+		return err
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit blocked run: %w", err)
@@ -705,6 +1049,65 @@ func (s *Store) getRun(ctx context.Context, id string) (domain.Run, error) {
 		return domain.Run{}, normalizeStoreError(err)
 	}
 	return run, nil
+}
+
+func (s *Store) GetRun(ctx context.Context, id string) (domain.Run, error) {
+	return s.getRun(ctx, id)
+}
+
+func getRunTx(ctx context.Context, tx *sql.Tx, id string) (domain.Run, error) {
+	run, err := scanRun(tx.QueryRowContext(ctx,
+		"SELECT "+runColumns+" FROM runs WHERE id = ?", id,
+	))
+	if err != nil {
+		return domain.Run{}, normalizeStoreError(err)
+	}
+	return run, nil
+}
+
+func getTaskTx(ctx context.Context, tx *sql.Tx, id string) (domain.Task, error) {
+	task, err := scanTask(tx.QueryRowContext(ctx,
+		"SELECT "+taskColumns+" FROM tasks WHERE id = ?", id,
+	))
+	if err != nil {
+		return domain.Task{}, normalizeStoreError(err)
+	}
+	return task, nil
+}
+
+func getAgentTx(ctx context.Context, tx *sql.Tx, id string) (domain.Agent, error) {
+	agent, err := scanAgent(tx.QueryRowContext(ctx, `
+		SELECT id, installation_id, name, kind, status, capabilities_json, last_seen_at, created_at
+		FROM agents WHERE id = ?
+	`, id))
+	if err != nil {
+		return domain.Agent{}, normalizeStoreError(err)
+	}
+	return agent, nil
+}
+
+func latestDecisionForRunTx(ctx context.Context, tx *sql.Tx, runID string) (domain.Decision, error) {
+	decision, err := scanDecision(tx.QueryRowContext(ctx, `
+		SELECT `+decisionColumns+` FROM decisions
+		WHERE run_id = ? ORDER BY created_at DESC LIMIT 1
+	`, runID))
+	if err != nil {
+		return domain.Decision{}, normalizeStoreError(err)
+	}
+	return decision, nil
+}
+
+func (s *Store) ProjectIDForRun(ctx context.Context, id string) (string, error) {
+	var projectID string
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT t.project_id
+		FROM runs r
+		JOIN tasks t ON t.id = r.task_id
+		WHERE r.id = ?
+	`, id).Scan(&projectID); err != nil {
+		return "", normalizeStoreError(err)
+	}
+	return projectID, nil
 }
 
 func (s *Store) listRunsForTask(ctx context.Context, taskID string) ([]domain.Run, error) {
@@ -747,58 +1150,69 @@ func (s *Store) ExpireLeases(ctx context.Context) (int, error) {
 		ids = append(ids, id)
 	}
 	rows.Close()
+	expired := 0
 	for _, id := range ids {
-		if err := s.failExpiredRun(ctx, id); err != nil {
-			return 0, err
+		applied, err := s.failExpiredRun(ctx, id)
+		if err != nil {
+			return expired, err
+		}
+		if applied {
+			expired++
 		}
 	}
-	return len(ids), nil
+	return expired, nil
 }
 
-func (s *Store) failExpiredRun(ctx context.Context, runID string) error {
+func (s *Store) failExpiredRun(ctx context.Context, runID string) (bool, error) {
 	run, err := s.getRun(ctx, runID)
 	if err != nil {
-		return err
+		return false, err
 	}
 	now := nowMillis()
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("begin lease expiry: %w", err)
+		return false, fmt.Errorf("begin lease expiry: %w", err)
 	}
 	defer tx.Rollback()
+	// Keep the expiry predicate on the UPDATE so a heartbeat that wins the
+	// list-then-update window is left intact.
 	result, err := tx.ExecContext(ctx, `
 		UPDATE runs SET status = 'failed', result_summary = 'Lease expired',
-			lease_expires_at = NULL, finished_at = ?, updated_at = ?
-		WHERE id = ? AND status IN ('planning', 'waiting_decision', 'running', 'verifying')
-	`, now, now, runID)
+			lease_expires_at = NULL, finished_at = ?, version = version + 1,
+			fence_token = fence_token + 1, updated_at = ?
+		WHERE id = ? AND version = ?
+		  AND status IN ('planning', 'waiting_decision', 'running', 'verifying')
+		  AND lease_expires_at IS NOT NULL
+		  AND lease_expires_at < ?
+	`, now, now, runID, run.Version, now)
 	if err != nil {
-		return fmt.Errorf("expire run lease: %w", err)
+		return false, fmt.Errorf("expire run lease: %w", err)
 	}
 	count, _ := result.RowsAffected()
 	if count == 0 {
-		return nil
+		return false, nil
 	}
 	if _, err := tx.ExecContext(ctx, `
 		UPDATE tasks SET status = 'ready', assigned_agent_id = NULL,
 			version = version + 1, updated_at = ? WHERE id = ?
 	`, now, run.TaskID); err != nil {
-		return fmt.Errorf("requeue expired task: %w", err)
+		return false, fmt.Errorf("requeue expired task: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx,
 		"UPDATE agents SET status = 'idle' WHERE id = ?", run.AgentID,
 	); err != nil {
-		return fmt.Errorf("idle expired agent: %w", err)
+		return false, fmt.Errorf("idle expired agent: %w", err)
 	}
 	event, err := insertEventTx(
 		ctx, tx, &run.TaskID, &run.ID, &run.AgentID,
 		"run.lease_expired", "Agent lease expired; task returned to ready", nil,
 	)
 	if err != nil {
-		return fmt.Errorf("create lease expiry event: %w", err)
+		return false, fmt.Errorf("create lease expiry event: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit lease expiry: %w", err)
+		return false, fmt.Errorf("commit lease expiry: %w", err)
 	}
 	s.publish(event)
-	return nil
+	return true, nil
 }

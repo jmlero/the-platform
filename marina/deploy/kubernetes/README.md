@@ -22,6 +22,8 @@ kustomize build deploy/kubernetes/base
 
 The rendered image defaults to `ghcr.io/jmlero/the-platform-marina:dev`. Set an immutable image tag or digest in an environment overlay before deployment. The base also assumes AppDeck is reachable as `http://appdeck:8080`; patch `MARINA_APPDECK_URL` when its Service has another name or lives outside the namespace.
 
+The base deliberately does not name or create a credential Secret. An environment overlay must mount the selected Secret as a read-only file, set `MARINA_APPDECK_TOKEN_FILE` to that path, and configure TLS or an authenticated encrypted service mesh for non-loopback traffic. AppDeck receives only the matching SHA-256 fingerprint through its separate authorization policy. Keep the stable identity and its explicit project/capability grants unchanged when rotating the Secret. See [service-authentication decision 0003](../../../docs/decisions/0003-service-authentication.md).
+
 ## Deploy
 
 After publishing the image and selecting a cluster, storage class, namespace, and AppDeck endpoint:
@@ -39,4 +41,4 @@ The journal and SQLite WAL files live under `/data`. The cluster's persistent-vo
 
 ## Current boundary
 
-This base keeps Marina alive when the operator's laptop is off, but it does not create Kubernetes Jobs for agents yet. The next runtime increment must define the provider-neutral start, inspect, resume, cancel, artifact, and termination contract before mapping it to a Kubernetes Job.
+This base keeps Marina alive when the operator's laptop is off, but it is not a complete paired deployment: the credential Secret, encrypted AppDeck transport, AppDeck workload, network policies, and human ingress remain overlay work. It does not create Kubernetes Jobs for agents yet. The next runtime increment must define the provider-neutral start, inspect, resume, cancel, artifact, and termination contract before mapping it to a Kubernetes Job.

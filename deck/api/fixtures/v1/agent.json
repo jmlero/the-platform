@@ -1,5 +1,6 @@
 {
   "id": "agent_marina_fixture",
+  "installation_id": "installation_marina_fixture",
   "name": "Marina conformance agent",
   "kind": "marina",
   "status": "idle",

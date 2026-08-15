@@ -9,8 +9,8 @@ This file applies to the `marina/` product directory. Root [AGENTS.md](../AGENTS
 Before planning or changing Marina, read these files completely:
 
 1. [README.md](README.md) — concise project orientation.
-2. [VISION.md](VISION.md) — product intent, boundaries, principles, and open decisions.
-3. [DARK_FACTORY.md](DARK_FACTORY.md) — the operational definition of a dark software factory.
+2. [../VISION.md](../VISION.md) — product intent, boundaries, principles, and open decisions.
+3. [../DARK_FACTORY.md](../DARK_FACTORY.md) — the operational definition of a dark software factory.
 4. [../ARCHITECTURE.md](../ARCHITECTURE.md) — joint AppDeck–Marina ownership, protocols, lifecycle, and failure semantics.
 
 Treat these documents as the current product source of truth. A new explicit user decision takes precedence; update the relevant document when that decision changes the product direction.
@@ -19,7 +19,7 @@ Treat these documents as the current product source of truth. A new explicit use
 
 ## Mission
 
-Marina is an always-on, Kubernetes-first autonomous software factory. It should turn bounded human intent or operational signals into verified software outcomes across the SDLC and DevOps lifecycle while humans retain control of intent, architecture, policy, and exceptional decisions.
+Marina is an installable, Kubernetes-native, and extensible autonomous software-factory layer. It should turn bounded human intent or operational signals into verified software outcomes across the SDLC and DevOps lifecycle while humans retain control of intent, architecture, policy, and exceptional decisions.
 
 The goal is not faster typing or more pull requests. The goal is safe, useful, evidence-backed work that continues when the operator's laptop is off.
 
@@ -28,9 +28,9 @@ The goal is not faster typing or more pull requests. The goal is safe, useful, e
 - Start from scratch. Marina is a new concept, not a port, rewrite, migration, successor, or cloud-neutral version of `platform-marina`.
 - Carry forward the creator's experience from `platform-marina`, not its architecture, code, backlog, layer model, providers, or assumptions.
 - Design for one operator and personal repositories first. Do not add multi-tenancy, organization administration, team RBAC, or billing without an explicit requirement.
-- Use Kubernetes as the first durable substrate, but do not expose Kubernetes-specific concepts as Marina's public product model.
+- Use Kubernetes as Marina's native installation and first execution substrate, but do not expose Kubernetes-specific concepts as Marina's public product model.
 - Treat AppDeck as the default pluggable human-steering component, not as a mandatory dependency of the factory core.
-- Keep agent harnesses, models, workflow engines, and execution providers replaceable behind explicit contracts.
+- Keep work-control surfaces, agent harnesses, models, workflow engines, runtimes, context sources, policy and verification systems, delivery integrations, and platform services replaceable behind explicit governed contracts.
 - Use a merge-ready pull request as the conservative initial autonomy boundary unless the user explicitly authorizes more.
 
 ## Vocabulary and boundaries
@@ -57,7 +57,7 @@ Marina owns internal execution and reconciliation state. The configured work-con
 - Separate durable agent identity and state from ephemeral execution environments.
 - Design every long-running operation for restart, retry, cancellation, timeout, and lease expiry.
 
-### Kubernetes-first, not Kubernetes-shaped
+### Kubernetes-native, not Kubernetes-shaped
 
 - Prefer ordinary services and ephemeral Jobs for the first implementation.
 - Add custom resources or operators only after a proven reconciliation need.

@@ -11,15 +11,17 @@ Before planning or changing cross-product behavior, read:
 1. [README.md](README.md)
 2. [ARCHITECTURE.md](ARCHITECTURE.md)
 3. [TODO.md](TODO.md)
-4. The affected product's README and vision
+4. The affected product's README and root vision: [VISION_DECK.md](VISION_DECK.md) for AppDeck or [VISION.md](VISION.md) for Marina
 5. [marina/AGENTS.md](marina/AGENTS.md) for any Marina change
 
 ## Product boundaries
 
+- `cli/` owns `platformctl`: a stateless operator client that uses AppDeck's public HTTP/JSON API and owns no authoritative platform state.
 - `deck/` owns AppDeck: human steering and the authoritative work-control ledger.
 - `marina/` owns Marina: durable autonomous execution and reconciliation.
-- Keep separate Go modules, binaries, databases, images, identities, deployments, migrations, and release versions.
+- Keep separate Go modules, binaries, databases where applicable, images, identities, deployments, migrations, and release versions.
 - Neither product may import the other's internal packages. Integration goes through the versioned HTTP/JSON contract.
+- Terminal clients must not import product internals or read product databases; they interact through supported public APIs.
 - AppDeck owns its provider-specific OpenAPI and canonical wire fixtures under `deck/api/`.
 - Marina owns provider-neutral ports and the reusable consumer conformance suite under `marina/internal/workcontrol/`.
 - A joint contract item is complete only when both product checks and the real-process conformance test pass.
@@ -36,3 +38,30 @@ Before planning or changing cross-product behavior, read:
 ## External effects
 
 Do not push, create a remote, deploy, merge, modify production, or send external messages unless the user explicitly requests it. Never commit credentials, local databases, generated dependency trees, runtime data, or `.codex/` artifacts.
+
+<!-- harness-workshop:start block/ponytail -->
+<!-- harness-workshop:source block/ponytail@1.0.0 integrity sha256-8ozvvuvXP6Df83cMrc2DMjIzolw40npIkxiog5OXA9w= -->
+## Minimal implementation
+
+- Choose the smallest safe change that fully meets current requirements.
+- Reuse project code, standard libraries, native features, and installed
+  dependencies before adding code or dependencies.
+- Avoid speculative abstractions, configuration, extension points, and wrappers.
+- Fix shared root causes; preserve validation, error handling, security,
+  accessibility, and data safety.
+- Verify non-trivial behavior with the smallest relevant check.
+<!-- harness-workshop:end block/ponytail -->
+
+<!-- harness-workshop:start block/tdd -->
+<!-- harness-workshop:source block/tdd@1.0.0 integrity sha256-54BMZaEMWeVKGxmv91DjPLn5qEtdyCv6L6WtnNQTPHY= -->
+## Test-driven development
+
+For features and bug fixes:
+
+1. Write a failing test that describes one expected behavior.
+2. Make the smallest change that passes it.
+3. Refactor while keeping the tests green.
+
+Keep tests independent, name them by behavior, mock external boundaries when
+appropriate, and run the relevant checks after each change.
+<!-- harness-workshop:end block/tdd -->

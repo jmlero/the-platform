@@ -46,7 +46,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   bootstrap: () => request<Bootstrap>('/api/v1/bootstrap'),
-  task: (id: string) => request<TaskDetail>(`/api/v1/tasks/${id}`),
+  task: (id: string) => request<TaskDetail>(`/api/v1/operator/tasks/${id}`),
   createTask: (input: CreateTaskInput) =>
     request<Task>('/api/v1/tasks', { method: 'POST', body: JSON.stringify(input) }),
   updateTask: (id: string, input: UpdateTaskInput) =>
@@ -58,7 +58,7 @@ export const api = {
     }),
   agents: () => request<Agent[]>('/api/v1/agents'),
   answerDecision: (id: string, answer: string) =>
-    request<Decision>(`/api/v1/decisions/${id}/answer`, {
+    request<Decision>(`/api/v1/operator/decisions/${id}/answer`, {
       method: 'POST',
       body: JSON.stringify({ answer })
     })
@@ -68,7 +68,7 @@ export function subscribeToEvents(
   onEvent: (event: AppEvent) => void,
   onConnection: (connected: boolean) => void
 ): () => void {
-  const source = new EventSource('/api/v1/events/stream');
+  const source = new EventSource('/api/v1/operator/events/stream');
   source.onopen = () => onConnection(true);
   source.onerror = () => onConnection(false);
   source.onmessage = (message) => {

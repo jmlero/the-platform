@@ -48,6 +48,10 @@ type LeaseJournal interface {
 	Transition(context.Context, string, execution.Transition) (execution.Execution, error)
 }
 
+type providerAuthorityJournal interface {
+	UpdateProviderAuthority(context.Context, string, int64, int64, int64, time.Time, string) (execution.Execution, error)
+}
+
 const budgetBlockReason = "[marina:budget_exhausted] execution budget exhausted"
 
 // LeaseReconciler confirms that Marina still owns the exact external run
@@ -144,8 +148,11 @@ func (reconciler *LeaseReconciler) Reconcile(
 	renewed := false
 	if !run.LeaseExpiresAt.After(now.Add(renewBefore)) {
 		if err := reconciler.provider.RenewRunLease(ctx, run.ID, workcontrol.LeaseRenewal{
-			AgentID: record.AgentID,
-			Lease:   reconciler.leaseDuration,
+			IdempotencyKey:  fmt.Sprintf("lease-renew:%s:%d", record.ID, record.Version),
+			AgentID:         record.AgentID,
+			ExpectedVersion: run.Version,
+			FenceToken:      run.FenceToken,
+			Lease:           reconciler.leaseDuration,
 		}); err != nil {
 			return LeaseReconciliation{}, fmt.Errorf("renew provider run lease: %w", err)
 		}
@@ -173,7 +180,7 @@ func (reconciler *LeaseReconciler) Reconcile(
 		renewed = true
 	}
 
-	updated, err := reconciler.persistProviderLease(ctx, record, *run.LeaseExpiresAt)
+	updated, err := reconciler.persistProviderLease(ctx, record, run)
 	if err != nil {
 		return LeaseReconciliation{}, err
 	}
@@ -215,7 +222,11 @@ func (reconciler *LeaseReconciler) StopBudget(
 		return execution.Execution{}, fmt.Errorf("provider run %s has state %q: %w", run.ID, run.Status, ErrExternalRunState)
 	}
 
-	blockErr := reconciler.provider.BlockRun(ctx, run.ID, budgetBlockReason)
+	blockErr := reconciler.provider.BlockRun(ctx, run.ID, workcontrol.RunBlock{
+		IdempotencyKey: "budget-stop:" + record.ID,
+		AgentID:        record.AgentID, ExpectedVersion: run.Version, FenceToken: run.FenceToken,
+		Reason: budgetBlockReason,
+	})
 	confirmed, confirmErr := reconciler.getOwnedRun(ctx, record)
 	if confirmErr != nil {
 		if blockErr != nil {
@@ -237,6 +248,15 @@ func (reconciler *LeaseReconciler) reconcileProviderTerminal(
 	record execution.Execution,
 	run workcontrol.Run,
 ) (execution.Execution, error) {
+	if authorityJournal, ok := reconciler.journal.(providerAuthorityJournal); ok &&
+		(record.ExternalRunVersion != run.Version || record.FenceToken != run.FenceToken) {
+		updated, updateErr := authorityJournal.UpdateProviderAuthority(ctx, record.ID, record.Version,
+			run.Version, run.FenceToken, record.LeaseExpiresAt, "terminal provider authority observed")
+		if updateErr != nil {
+			return execution.Execution{}, fmt.Errorf("persist terminal provider authority: %w", updateErr)
+		}
+		record = updated
+	}
 	target, failureClass, failureMessage, err := terminalTransition(run)
 	if err != nil {
 		return execution.Execution{}, err
@@ -327,10 +347,28 @@ func (reconciler *LeaseReconciler) getOwnedRun(
 func (reconciler *LeaseReconciler) persistProviderLease(
 	ctx context.Context,
 	record execution.Execution,
-	leaseExpiresAt time.Time,
+	run workcontrol.Run,
 ) (execution.Execution, error) {
-	if record.LeaseExpiresAt.UnixMilli() == leaseExpiresAt.UnixMilli() {
+	leaseExpiresAt := *run.LeaseExpiresAt
+	if record.LeaseExpiresAt.UnixMilli() == leaseExpiresAt.UnixMilli() &&
+		record.ExternalRunVersion == run.Version && record.FenceToken == run.FenceToken {
 		return record, nil
+	}
+	if authorityJournal, ok := reconciler.journal.(providerAuthorityJournal); ok {
+		updated, err := authorityJournal.UpdateProviderAuthority(ctx, record.ID, record.Version,
+			run.Version, run.FenceToken, leaseExpiresAt, "external provider authority reconciled before runtime recovery")
+		if err == nil {
+			return updated, nil
+		}
+		if !errors.Is(err, execution.ErrConflict) {
+			return execution.Execution{}, fmt.Errorf("persist provider authority: %w", err)
+		}
+		current, getErr := reconciler.journal.GetExecution(ctx, record.ID)
+		if getErr != nil {
+			return execution.Execution{}, getErr
+		}
+		return authorityJournal.UpdateProviderAuthority(ctx, current.ID, current.Version,
+			run.Version, run.FenceToken, leaseExpiresAt, "external provider authority reconciled after concurrent journal update")
 	}
 	updated, err := reconciler.journal.ReconcileLease(
 		ctx,

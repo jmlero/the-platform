@@ -33,13 +33,14 @@ type ProviderFixture struct {
 }
 
 type AgentFixture struct {
-	ID           string   `json:"id"`
-	Name         string   `json:"name"`
-	Kind         string   `json:"kind"`
-	Status       string   `json:"status"`
-	Capabilities []string `json:"capabilities"`
-	LastSeenAt   int64    `json:"last_seen_at"`
-	CreatedAt    int64    `json:"created_at"`
+	ID             string   `json:"id"`
+	InstallationID string   `json:"installation_id"`
+	Name           string   `json:"name"`
+	Kind           string   `json:"kind"`
+	Status         string   `json:"status"`
+	Capabilities   []string `json:"capabilities"`
+	LastSeenAt     int64    `json:"last_seen_at"`
+	CreatedAt      int64    `json:"created_at"`
 }
 
 type TaskFixture struct {
@@ -57,15 +58,19 @@ type TaskFixture struct {
 }
 
 type RunFixture struct {
-	ID             string `json:"id"`
-	TaskID         string `json:"task_id"`
-	AgentID        string `json:"agent_id"`
-	Status         string `json:"status"`
-	Plan           string `json:"plan"`
-	ResultSummary  string `json:"result_summary"`
-	LeaseExpiresAt int64  `json:"lease_expires_at"`
-	StartedAt      int64  `json:"started_at"`
-	UpdatedAt      int64  `json:"updated_at"`
+	ID                       string `json:"id"`
+	TaskID                   string `json:"task_id"`
+	AgentID                  string `json:"agent_id"`
+	Version                  int64  `json:"version"`
+	FenceToken               int64  `json:"fence_token"`
+	TaskVersion              int    `json:"task_version"`
+	AcceptanceCriteriaDigest string `json:"acceptance_criteria_digest"`
+	Status                   string `json:"status"`
+	Plan                     string `json:"plan"`
+	ResultSummary            string `json:"result_summary"`
+	LeaseExpiresAt           int64  `json:"lease_expires_at"`
+	StartedAt                int64  `json:"started_at"`
+	UpdatedAt                int64  `json:"updated_at"`
 }
 
 type PlanFixture struct {
@@ -148,10 +153,13 @@ var requiredFixtureKinds = []string{
 
 var expectedErrorCodes = []string{
 	"conflict",
+	"forbidden",
 	"internal_error",
 	"invalid_input",
 	"invalid_transition",
 	"not_found",
+	"service_unavailable",
+	"unauthenticated",
 }
 
 func LoadFixtures(root string) (Fixtures, error) {

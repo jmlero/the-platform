@@ -46,10 +46,22 @@ func main() {
 	}
 	go reapExpiredLeases(ctx, appStore, logger)
 
-	api := httpapi.New(appStore, logger).Handler()
+	httpOptions := make([]httpapi.Option, 0, 1)
+	serviceAuthFile := strings.TrimSpace(os.Getenv("APPDECK_SERVICE_AUTH_FILE"))
+	if serviceAuthFile != "" {
+		authorizer, err := httpapi.NewFileServiceAuthorizer(serviceAuthFile)
+		if err != nil {
+			logger.Error("load service authorization policy", "error", err)
+			os.Exit(1)
+		}
+		httpOptions = append(httpOptions, httpapi.WithServiceAuthorizer(authorizer))
+	}
+
+	api := httpapi.New(appStore, logger, httpOptions...).Handler()
 	mux := http.NewServeMux()
 	mux.Handle("/api/", api)
 	mux.Handle("/healthz", api)
+	mux.Handle("/readyz", api)
 	mux.Handle("/", webui.Handler())
 
 	server := &http.Server{
@@ -62,7 +74,13 @@ func main() {
 	}
 
 	go func() {
-		logger.Info("AppDeck is ready", "address", server.Addr, "database", databasePath, "demo_agent", demoEnabled)
+		logger.Info(
+			"AppDeck is ready",
+			"address", server.Addr,
+			"database", databasePath,
+			"demo_agent", demoEnabled,
+			"service_auth", serviceAuthFile != "",
+		)
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Error("serve AppDeck", "error", err)
 			stop()

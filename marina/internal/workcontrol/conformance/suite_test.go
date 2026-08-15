@@ -36,13 +36,14 @@ func (subject *subjectStub) RegisterAgent(
 	registration workcontrol.AgentRegistration,
 ) (workcontrol.Agent, error) {
 	subject.agent = workcontrol.Agent{
-		ID:           registration.ID,
-		Name:         registration.Name,
-		Kind:         registration.Kind,
-		Status:       "idle",
-		Capabilities: append([]string(nil), registration.Capabilities...),
-		LastSeenAt:   time.Now().UTC(),
-		CreatedAt:    time.Now().UTC(),
+		ID:             registration.ID,
+		InstallationID: registration.InstallationID,
+		Name:           registration.Name,
+		Kind:           registration.Kind,
+		Status:         "idle",
+		Capabilities:   append([]string(nil), registration.Capabilities...),
+		LastSeenAt:     time.Now().UTC(),
+		CreatedAt:      time.Now().UTC(),
 	}
 	return subject.agent, nil
 }
@@ -73,9 +74,10 @@ func (subject *subjectStub) ClaimWork(
 	now := time.Now().UTC()
 	expires := now.Add(claim.Lease)
 	subject.run = workcontrol.Run{
-		ID:             "run-real-1",
-		WorkItemID:     workID,
-		AgentID:        claim.AgentID,
+		ID:         "run-real-1",
+		WorkItemID: workID,
+		AgentID:    claim.AgentID,
+		Version:    1, FenceToken: 1, TaskVersion: subject.work.Version, AcceptanceCriteriaDigest: "digest",
 		Status:         workcontrol.RunPlanning,
 		LeaseExpiresAt: &expires,
 		StartedAt:      now,
@@ -95,6 +97,7 @@ func (subject *subjectStub) RenewRunLease(
 	}
 	expires := time.Now().UTC().Add(renewal.Lease)
 	subject.run.LeaseExpiresAt = &expires
+	subject.run.Version++
 	return nil
 }
 
@@ -109,6 +112,7 @@ func (subject *subjectStub) SubmitRunPlan(
 	subject.plan = submission.Plan
 	subject.run.Plan = submission.Plan
 	subject.run.Status = workcontrol.RunRunning
+	subject.run.Version++
 	subject.work.Status = workcontrol.WorkStatus(workcontrol.RunRunning)
 	return nil
 }
@@ -122,15 +126,17 @@ func (subject *subjectStub) ReportRunProgress(
 		return errors.New("run is not running")
 	}
 	subject.progressMessages = append(subject.progressMessages, progress.Message)
+	subject.run.Version++
 	return nil
 }
 
-func (subject *subjectStub) BlockRun(_ context.Context, runID string, reason string) error {
-	if runID != subject.run.ID || strings.TrimSpace(reason) == "" {
+func (subject *subjectStub) BlockRun(_ context.Context, runID string, block workcontrol.RunBlock) error {
+	if runID != subject.run.ID || strings.TrimSpace(block.Reason) == "" {
 		return errors.New("cannot block run")
 	}
 	subject.run.Status = workcontrol.RunBlocked
-	subject.run.ResultSummary = reason
+	subject.run.ResultSummary = block.Reason
+	subject.run.Version++
 	subject.work.Status = workcontrol.WorkStatus(workcontrol.RunBlocked)
 	return nil
 }
@@ -141,7 +147,8 @@ func TestVerifyExercisesOneExactLifecycle(t *testing.T) {
 		Provider: ProviderFixture{Provider: "appdeck", ProtocolVersion: workcontrol.ProtocolVersion},
 		Agent: AgentFixture{
 			ID: "agent-fixture", Name: "Marina conformance agent", Kind: "marina",
-			Capabilities: []string{"work-control.conformance"},
+			InstallationID: "installation-conformance",
+			Capabilities:   []string{"work-control.conformance"},
 		},
 		Task: TaskFixture{
 			ProjectID: "prj_default", Title: "Contract task", Description: "Exercise provider",

@@ -1,8 +1,8 @@
 # AppDeck and Marina Architecture
 
 - Status: Target architecture for the first laptop-off proof
-- Scope: `deck/` and `marina/` in the `the-platform` monorepo
-- Last reviewed: 2026-07-18
+- Scope: `cli/`, `deck/`, and `marina/` in the `the-platform` monorepo
+- Last reviewed: 2026-08-12
 
 ## Purpose
 
@@ -12,6 +12,8 @@ AppDeck and Marina are separate products that should evolve together through an 
 - **Marina is the always-on factory engine.** It claims authorized work, persists execution state, assembles context, applies policy, drives runtimes, verifies outcomes, reconciles failures, and publishes normalized state and evidence.
 
 Neither product should absorb the other. AppDeck must remain useful with different agent systems, and Marina must remain operable with another work-control provider or a headless adapter. Their default combination should nevertheless feel like one dependable system rather than two databases that happen to exchange HTTP requests.
+
+`platformctl` is a separate, stateless operator client. It sends human intent to AppDeck and renders AppDeck's authoritative state through supported HTTP/JSON endpoints; it does not call Marina directly or own a third ledger.
 
 This document translates the product visions into component boundaries, data ownership, protocols, lifecycle rules, failure behavior, and delivery stages. It distinguishes the current implementation from the target architecture; it is not a claim that every component described here already exists.
 
@@ -31,15 +33,15 @@ The existing code is a useful foundation, but not yet the full architecture.
 
 | Area | Implemented now | Gap before real unattended work |
 | --- | --- | --- |
-| AppDeck work model | Projects, tasks, runs, agents, leases, decisions, events, and artifacts in SQLite | Versioned plan revisions, structured commands, richer budgets, and project/repository bindings |
-| AppDeck API | Protocol/capability discovery, request correlation, stable errors, ready-work discovery, atomic claim, heartbeat, plan approval, progress, verification, completion, blocking, and SSE | Authentication, idempotency keys, fencing tokens, guarded versions on every mutation, recovery lookup, cancellation, retry, and structured evidence |
-| Marina work-control adapter | Provider-neutral port plus an AppDeck HTTP adapter with protocol and capability validation | The remaining lifecycle, decision, command, evidence, and capability operations |
-| Marina durability | Guarded execution transitions, budgets, checkpoints, evidence, events, and restart planning in SQLite | Durable acquisition intents, provider outbox/inbox, runtime-attempt records, and full state convergence |
-| Marina reconciliation | Exact-run ownership checks, lease renewal, terminal provider convergence, and budget stopping | Work acquisition, bounded retries, commands, runtime recovery, completion publication, and stale-lease fencing |
-| Always-on deployment | Single-replica Marina Kubernetes base | Always-on AppDeck deployment, service authentication, network policy, artifact storage, backups, and the agent Job runtime |
-| End-to-end outcome | Cross-package proof that an existing AppDeck run is renewed after Marina restarts | A bounded task becoming a merge-ready pull request while the operator is offline |
+| AppDeck work model | Projects, tasks, versioned/fenced runs, stable controller agents, leases, decisions, durable commands, projected events, and artifacts in SQLite | Versioned plan revisions, richer budgets, structured evidence, and operator authentication |
+| AppDeck API | Authenticated capability-scoped protocol discovery, ready work, atomic/versioned claim, claim recovery, assigned-run pagination, guarded lifecycle mutation, durable commands, deduplicated projections, stable errors, and SSE | Human sessions, numbered plan revisions, structured evidence, and richer operator APIs |
+| Marina work-control adapter | Provider-neutral ports plus an AppDeck HTTP adapter covering discovery, stable registration, acquisition recovery, guarded run control, commands, projections, protocol validation, and rotatable file credentials | Decision and structured-evidence operations required by later runtime stages |
+| Marina durability | Stable installation identity, versioned project bindings, acquisition intents, guarded executions, budgets, retry state, checkpoints, evidence, ordered provider outbox, command cursors, events, and restart planning in SQLite | Runtime-attempt, artifact, context-package, and delivery records |
+| Marina reconciliation | Bounded work intake, exact claim binding, lease renewal, terminal convergence, budget stopping, ordered commands, cancellation fencing, classified retries, and outbox publication | Runtime, context, verification, and delivery controllers |
+| Always-on deployment | Separate single-replica Kubernetes bases for AppDeck and Marina with `Recreate` updates and `ReadWriteOnce` SQLite storage | Paired overlay, secret distribution, human authentication, encrypted service transport, network policy, artifact storage, backups, and the agent Job runtime |
+| End-to-end outcome | Real-process proof of lossless handoff, restart recovery, fencing, budget stop, projection deduplication, and cancellation convergence | A bounded task becoming a merge-ready pull request while the operator is offline |
 
-Until the coordination gaps are closed, Marina must not automatically claim real work or start a mutating runtime.
+The lossless-handoff gate is complete, so Marina may automatically claim work only into its durable control ledger. Runtime, source-control, artifact, and delivery mutation remain disabled until their later gates are implemented.
 
 ## Non-negotiable invariants
 
@@ -62,7 +64,9 @@ Until the coordination gaps are closed, Marina must not automatically claim real
 
 ```mermaid
 flowchart LR
-    H[Human operator] -->|intent, decisions, commands| A[AppDeck]
+    H[Human operator] -->|web intent, decisions, commands| A[AppDeck]
+    H -->|terminal commands| P[platformctl]
+    P -->|operator HTTP/JSON API| A
     A -->|versioned work-control protocol| M[Marina]
     M -->|state, evidence, costs, escalations| A
 
@@ -257,6 +261,8 @@ Pause is cooperative and bounded: if a runtime cannot safely pause, Marina check
 
 The first transport is versioned HTTP/JSON. AppDeck publishes the provider-specific OpenAPI contract; Marina keeps provider-neutral ports and an AppDeck adapter. Neither product module imports the other's internal Go packages.
 
+Service calls use the initial mechanism recorded in [decision 0003](docs/decisions/0003-service-authentication.md): Marina resolves an opaque Bearer credential from a file for every request, while AppDeck maps only its SHA-256 fingerprint to a stable service identity with explicit project and capability grants. Overlapping fingerprints permit rotation without changing logical-agent or run identity. Missing credentials fail authentication, insufficient grants fail authorization, and an unreadable policy fails closed. TLS or another authenticated encrypted transport is required outside single-host loopback. Human sessions remain a separate open decision.
+
 The logical contract is split by capability rather than growing one unbounded interface:
 
 | Capability | Required behavior |
@@ -289,6 +295,8 @@ Every mutating request carries:
 
 AppDeck stores enough request identity and result metadata to replay a successful response. Reuse of a key with a different payload is a conflict. A stale version or fence is a conflict, not a retryable success. Marina classifies conflict, authorization, policy, rate-limit, transient dependency, and permanent validation failures separately.
 
+The current version-1 implementation persists each successful claim and run mutation atomically with its request digest and serialized result. Keys are scoped to the canonical project, authenticated service identity, and operation; the resource identifier and normalized wire payload are covered by the digest. Exact retries return the original result across process restarts, concurrent retries converge on one transaction, and changed payloads return `409 conflict`. Service mutations require a caller-supplied `Idempotency-Key`; active-run mutations additionally require the logical agent, exact resource version, and current fence token.
+
 A new ownership epoch—initial claim, authorized reacquisition, or explicit fencing after revocation—issues a higher fence token. An ordinary renewal advances the run version and lease expiry while returning the current fence. An old runtime or delayed request from an earlier ownership epoch cannot append progress, submit evidence, or mutate lifecycle state.
 
 ### Event envelope
@@ -303,7 +311,7 @@ Normalized cross-product events contain:
 - severity and redacted payload;
 - task version, source revision, and policy version where relevant.
 
-The publisher outbox and AppDeck's event-ID uniqueness make delivery idempotent. Ordering is guaranteed only within one execution stream; consumers use sequence numbers and tolerate gaps while reconciliation catches up.
+The publisher outbox and AppDeck's event-ID uniqueness make delivery idempotent. Marina never lets a later projection overtake an unpublished or exhausted earlier projection in the same execution stream; command acknowledgements are the explicit priority exception so cancellation can pre-empt ordinary progress. Consumers still use sequence numbers and tolerate gaps while reconciliation catches up.
 
 ## Marina internal architecture
 
@@ -410,7 +418,8 @@ An evidence record can be superseded but not overwritten. Any source change inva
 The single-operator boundary reduces product complexity, not security requirements.
 
 - The human authenticates to AppDeck; AppDeck distinguishes human actions from service actions.
-- Marina uses a stable installation identity and scoped service credential to call AppDeck.
+- Marina uses a stable installation identity and scoped opaque service credential to call AppDeck; the token is resolved from a file per request and never persisted in its journal.
+- AppDeck keeps only high-entropy token fingerprints in a reloadable policy and authorizes each service operation by explicit project and capability grants.
 - Each logical agent identity is durable; each runtime attempt has a separate workload identity.
 - AppDeck authorizes operations by project, run ownership, resource version, and fence—not only by possession of a generic token.
 - Marina resolves secret references at the last responsible moment and never persists secret values.
@@ -451,6 +460,8 @@ Move a service to PostgreSQL when that service independently needs active-active
 | Failure | Required behavior |
 | --- | --- |
 | AppDeck unavailable before claim | Marina claims nothing and reports degraded readiness |
+| AppDeck credential or authorization policy is missing | Marina performs no authorized mutation; AppDeck returns a correlated authentication, authorization, or retryable service-unavailable error without exposing credential material |
+| Credential rotates during reconciliation | The stable service and logical-agent identities remain unchanged; overlapping fingerprints avoid interruption, and any transient denial is handled as a bounded external failure |
 | Claim response lost | Replay the same claim key or recover it by key; never create a blind second claim |
 | Marina crashes after AppDeck commits a claim | Startup resolves the durable acquisition intent or assigned active run before doing work |
 | Marina journal unavailable | Marina is not ready and performs no external mutations |
@@ -506,6 +517,8 @@ Mocks prove local logic; they are not sufficient evidence for the cross-product 
 
 AppDeck and Marina negotiate capabilities, authenticate, acquire a task idempotently, fence every mutation, recover a lost claim response, publish events once, and converge cancellation without duplicate runs.
 
+Status: complete. The accepted mechanics and verification evidence are recorded in [decision 0004](docs/decisions/0004-milestone-one-work-control-safety.md).
+
 ### Gate B: always-on paired control plane
 
 Both services run with separate durable stores, backups, probes, identities, and network policy. Restarting either service preserves exact run ownership and a truthful AppDeck view.
@@ -529,12 +542,14 @@ The ordered implementation work for these gates is maintained in [TODO.md](TODO.
 The following defaults are now explicit for the first proof:
 
 - Keep AppDeck and Marina in one product-boundary monorepo while retaining separate modules and deployable services.
+- Keep terminal clients stateless and independently releasable; route their reads and mutations through AppDeck's public operator API.
 - Use AppDeck's HTTP/JSON API as the first work-control transport.
 - Use polling and reconciliation for correctness; treat streaming notifications as latency optimizations.
 - Bind one AppDeck run to one Marina execution and allow bounded runtime attempts underneath it.
 - Use separate SQLite databases and single replicas until measured triggers justify independent PostgreSQL migrations.
 - Store artifact bytes outside both databases and exchange immutable references and digests.
 - Use a merge-ready pull request as the default authority boundary.
+- Use scoped opaque credentials as the first Marina-to-AppDeck service-authentication mechanism while preserving authorization semantics for a later OIDC replacement.
 - Add controllers inside the Marina process before considering extra services or a Kubernetes operator.
 
 ## Open decisions requiring dedicated records
@@ -542,7 +557,7 @@ The following defaults are now explicit for the first proof:
 Before the relevant implementation becomes irreversible, record decisions for:
 
 - the first always-on cluster, storage class, backup mechanism, and namespace topology;
-- human and service authentication between AppDeck and Marina;
+- human authentication for AppDeck;
 - the first artifact-store implementation and retention policy;
 - the first real harness and its source-control credential mechanism;
 - the initial policy representation and evaluator;

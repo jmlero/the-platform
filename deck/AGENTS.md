@@ -9,7 +9,7 @@ This file applies to `deck/`. Root [AGENTS.md](../AGENTS.md) also applies.
 Before changing AppDeck, read:
 
 1. [README.md](README.md)
-2. [VISION.md](VISION.md)
+2. [../VISION_DECK.md](../VISION_DECK.md)
 3. [../ARCHITECTURE.md](../ARCHITECTURE.md)
 4. [api/openapi.yaml](api/openapi.yaml) for agent-facing protocol work
 

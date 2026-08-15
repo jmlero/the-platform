@@ -29,7 +29,7 @@
       "kind": "lease",
       "schema": "Lease",
       "path": "lease.json",
-      "implementation_status": "planned"
+      "implementation_status": "implemented"
     },
     {
       "kind": "plan",
@@ -41,7 +41,7 @@
       "kind": "command",
       "schema": "Command",
       "path": "command.json",
-      "implementation_status": "planned"
+      "implementation_status": "implemented"
     },
     {
       "kind": "event",
@@ -67,6 +67,13 @@
       "path": "errors/conflict.json",
       "implementation_status": "implemented",
       "http_status": 409
+    },
+    {
+      "kind": "error.forbidden",
+      "schema": "Error",
+      "path": "errors/forbidden.json",
+      "implementation_status": "implemented",
+      "http_status": 403
     },
     {
       "kind": "error.internal_error",
@@ -95,6 +102,20 @@
       "path": "errors/not-found.json",
       "implementation_status": "implemented",
       "http_status": 404
+    },
+    {
+      "kind": "error.service_unavailable",
+      "schema": "Error",
+      "path": "errors/service-unavailable.json",
+      "implementation_status": "implemented",
+      "http_status": 503
+    },
+    {
+      "kind": "error.unauthenticated",
+      "schema": "Error",
+      "path": "errors/unauthenticated.json",
+      "implementation_status": "implemented",
+      "http_status": 401
     }
   ]
 }

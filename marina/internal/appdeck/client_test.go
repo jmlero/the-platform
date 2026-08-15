@@ -35,13 +35,14 @@ func TestClientInitialLifecycleContract(t *testing.T) {
 				t.Errorf("unexpected registration: %#v", input)
 			}
 			return jsonResponse(http.StatusCreated, agentDTO{
-				ID:           input.ID,
-				Name:         input.Name,
-				Kind:         input.Kind,
-				Status:       "idle",
-				Capabilities: input.Capabilities,
-				LastSeenAt:   createdAt.UnixMilli(),
-				CreatedAt:    createdAt.UnixMilli(),
+				ID:             input.ID,
+				InstallationID: input.InstallationID,
+				Name:           input.Name,
+				Kind:           input.Kind,
+				Status:         "idle",
+				Capabilities:   input.Capabilities,
+				LastSeenAt:     createdAt.UnixMilli(),
+				CreatedAt:      createdAt.UnixMilli(),
 			}), nil
 		case "GET /api/v1/tasks":
 			if request.URL.Query().Get("status") != "ready" {
@@ -64,6 +65,9 @@ func TestClientInitialLifecycleContract(t *testing.T) {
 				},
 			}), nil
 		case "POST /api/v1/tasks/task-ready/claim":
+			if key := request.Header.Get("Idempotency-Key"); key != "claim-task-ready" {
+				t.Errorf("claim Idempotency-Key = %q", key)
+			}
 			var input claimRequest
 			if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
 				return nil, err
@@ -96,15 +100,16 @@ func TestClientInitialLifecycleContract(t *testing.T) {
 		t.Fatalf("health: %v", err)
 	}
 	agent, err := client.RegisterAgent(ctx, workcontrol.AgentRegistration{
-		ID:           "agent-marina",
-		Name:         "Marina",
-		Kind:         "factory",
-		Capabilities: []string{"work.claim"},
+		ID:             "agent-marina",
+		InstallationID: "installation-test",
+		Name:           "Marina",
+		Kind:           "factory",
+		Capabilities:   []string{"work.claim"},
 	})
 	if err != nil {
 		t.Fatalf("register: %v", err)
 	}
-	if agent.ID != "agent-marina" || agent.CreatedAt != createdAt {
+	if agent.ID != "agent-marina" || agent.InstallationID != "installation-test" || agent.CreatedAt != createdAt {
 		t.Fatalf("unexpected agent: %#v", agent)
 	}
 
@@ -120,8 +125,10 @@ func TestClientInitialLifecycleContract(t *testing.T) {
 	}
 
 	run, err := client.ClaimWork(ctx, work[0].ID, workcontrol.Claim{
-		AgentID: agent.ID,
-		Lease:   1500 * time.Millisecond,
+		IdempotencyKey:      "claim-task-ready",
+		AgentID:             agent.ID,
+		ExpectedTaskVersion: work[0].Version,
+		Lease:               1500 * time.Millisecond,
 	})
 	if err != nil {
 		t.Fatalf("claim work: %v", err)
@@ -261,6 +268,9 @@ func TestClientReadsWorkDetailAndRenewsExistingRun(t *testing.T) {
 				}},
 			}), nil
 		case "POST /api/v1/runs/run-1/heartbeat":
+			if key := request.Header.Get("Idempotency-Key"); key != "renew-run-1" {
+				t.Errorf("heartbeat Idempotency-Key = %q", key)
+			}
 			var input claimRequest
 			if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
 				return nil, err
@@ -286,8 +296,9 @@ func TestClientReadsWorkDetailAndRenewsExistingRun(t *testing.T) {
 		t.Fatalf("unexpected work detail: %#v", detail)
 	}
 	if err := client.RenewRunLease(context.Background(), "run-1", workcontrol.LeaseRenewal{
-		AgentID: "marina-1",
-		Lease:   1500 * time.Millisecond,
+		IdempotencyKey: "renew-run-1",
+		AgentID:        "marina-1",
+		Lease:          1500 * time.Millisecond,
 	}); err != nil {
 		t.Fatalf("renew run lease: %v", err)
 	}
@@ -306,6 +317,9 @@ func TestClientPublishesProgressAndBlocksRun(t *testing.T) {
 		calls = append(calls, request.Method+" "+request.URL.Path)
 		switch request.URL.Path {
 		case "/api/v1/runs/run-1/progress":
+			if key := request.Header.Get("Idempotency-Key"); key != "progress-run-1" {
+				t.Errorf("progress Idempotency-Key = %q", key)
+			}
 			var input progressRequest
 			if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
 				return nil, err
@@ -314,6 +328,9 @@ func TestClientPublishesProgressAndBlocksRun(t *testing.T) {
 				t.Errorf("unexpected progress: %#v", input)
 			}
 		case "/api/v1/runs/run-1/block":
+			if key := request.Header.Get("Idempotency-Key"); key != "block-run-1" {
+				t.Errorf("block Idempotency-Key = %q", key)
+			}
 			var input blockRequest
 			if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
 				return nil, err
@@ -331,12 +348,16 @@ func TestClientPublishesProgressAndBlocksRun(t *testing.T) {
 		t.Fatalf("create client: %v", err)
 	}
 	if err := client.ReportRunProgress(context.Background(), "run-1", workcontrol.Progress{
-		Message: " checkpoint saved ",
-		Payload: map[string]any{"phase": "implementation"},
+		IdempotencyKey: "progress-run-1",
+		Message:        " checkpoint saved ",
+		Payload:        map[string]any{"phase": "implementation"},
 	}); err != nil {
 		t.Fatalf("report progress: %v", err)
 	}
-	if err := client.BlockRun(context.Background(), "run-1", " execution budget exhausted "); err != nil {
+	if err := client.BlockRun(context.Background(), "run-1", workcontrol.RunBlock{
+		IdempotencyKey: "block-run-1",
+		Reason:         " execution budget exhausted ",
+	}); err != nil {
 		t.Fatalf("block run: %v", err)
 	}
 	wantCalls := []string{
@@ -374,6 +395,8 @@ func compatibleProviderInfo(now time.Time) providerInfoDTO {
 			workcontrol.CapabilityWorkReadyList,
 			workcontrol.CapabilityWorkInspect,
 			workcontrol.CapabilityWorkClaim,
+			workcontrol.CapabilityClaimLookup,
+			workcontrol.CapabilityAssignedRuns,
 			workcontrol.CapabilityLeaseRenew,
 			workcontrol.CapabilityPlanSubmit,
 			workcontrol.CapabilityRunStart,
@@ -381,6 +404,9 @@ func compatibleProviderInfo(now time.Time) providerInfoDTO {
 			workcontrol.CapabilityRunVerify,
 			workcontrol.CapabilityRunComplete,
 			workcontrol.CapabilityRunBlock,
+			workcontrol.CapabilityCommandList,
+			workcontrol.CapabilityCommandAck,
+			workcontrol.CapabilityEventAppend,
 		},
 		ServerTime: now.UnixMilli(),
 		Ready:      true,
@@ -428,6 +454,13 @@ func TestClaimValidatesBeforeCallingAppDeck(t *testing.T) {
 			}
 		})
 	}
+	if _, err := client.ClaimWork(context.Background(), "task-one", workcontrol.Claim{
+		IdempotencyKey: "invalid key",
+		AgentID:        "agent",
+		Lease:          time.Second,
+	}); err == nil {
+		t.Fatal("invalid idempotency key was accepted")
+	}
 }
 
 func TestExistingRunOperationsValidateBeforeCallingAppDeck(t *testing.T) {
@@ -458,7 +491,7 @@ func TestExistingRunOperationsValidateBeforeCallingAppDeck(t *testing.T) {
 	if err := client.ReportRunProgress(context.Background(), "run-one", workcontrol.Progress{}); err == nil {
 		t.Fatal("empty progress was accepted")
 	}
-	if err := client.BlockRun(context.Background(), "run-one", " "); err == nil {
+	if err := client.BlockRun(context.Background(), "run-one", workcontrol.RunBlock{Reason: " "}); err == nil {
 		t.Fatal("empty block reason was accepted")
 	}
 }

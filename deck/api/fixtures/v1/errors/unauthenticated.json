@@ -1,0 +1,7 @@
+{
+  "error": "service authentication required",
+  "code": "unauthenticated",
+  "message": "service authentication required",
+  "retryable": false,
+  "request_id": "request_fixture_unauthenticated"
+}

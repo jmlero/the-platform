@@ -22,6 +22,11 @@ const (
 	CapabilityRunVerify     = "run.verify"
 	CapabilityRunComplete   = "run.complete"
 	CapabilityRunBlock      = "run.block"
+	CapabilityClaimLookup   = "work.claim.lookup"
+	CapabilityAssignedRuns  = "run.assigned.list"
+	CapabilityCommandList   = "command.list"
+	CapabilityCommandAck    = "command.ack"
+	CapabilityEventAppend   = "event.append"
 )
 
 type ProviderInfo struct {
@@ -42,6 +47,15 @@ func ReconciliationCapabilities() []string {
 		CapabilityWorkInspect,
 		CapabilityLeaseRenew,
 		CapabilityRunBlock,
+	}
+}
+
+func MilestoneOneCapabilities() []string {
+	return []string{
+		CapabilityProviderInfo, CapabilityAgentRegister, CapabilityWorkReadyList,
+		CapabilityWorkInspect, CapabilityWorkClaim, CapabilityClaimLookup,
+		CapabilityAssignedRuns, CapabilityLeaseRenew, CapabilityRunBlock,
+		CapabilityCommandList, CapabilityCommandAck, CapabilityEventAppend,
 	}
 }
 
@@ -97,53 +111,132 @@ func (status RunStatus) Terminal() bool {
 }
 
 type AgentRegistration struct {
-	ID           string
-	Name         string
-	Kind         string
-	Capabilities []string
+	ID             string
+	InstallationID string
+	Name           string
+	Kind           string
+	Capabilities   []string
 }
 
 type Agent struct {
-	ID           string
-	Name         string
-	Kind         string
-	Status       string
-	Capabilities []string
-	LastSeenAt   time.Time
-	CreatedAt    time.Time
+	ID             string
+	InstallationID string
+	Name           string
+	Kind           string
+	Status         string
+	Capabilities   []string
+	LastSeenAt     time.Time
+	CreatedAt      time.Time
 }
 
+// Mutation request values carry a caller-owned key that must remain stable
+// across retries of the same logical operation. Adapters may create a one-shot
+// key for legacy callers, but that cannot recover an ambiguous response.
 type Claim struct {
-	AgentID string
-	Lease   time.Duration
+	IdempotencyKey      string
+	AgentID             string
+	ExpectedTaskVersion int
+	Lease               time.Duration
 }
 
 type LeaseRenewal struct {
-	AgentID string
-	Lease   time.Duration
+	IdempotencyKey  string
+	AgentID         string
+	ExpectedVersion int64
+	FenceToken      int64
+	Lease           time.Duration
 }
 
 type Progress struct {
-	Message string
-	Payload map[string]any
+	IdempotencyKey  string
+	AgentID         string
+	ExpectedVersion int64
+	FenceToken      int64
+	Message         string
+	Payload         map[string]any
 }
 
 type PlanSubmission struct {
+	IdempotencyKey  string
+	AgentID         string
+	ExpectedVersion int64
+	FenceToken      int64
 	Plan            string
 	RequireApproval bool
 }
 
+type RunBlock struct {
+	IdempotencyKey  string
+	AgentID         string
+	ExpectedVersion int64
+	FenceToken      int64
+	Reason          string
+}
+
 type Run struct {
-	ID             string
-	WorkItemID     string
-	AgentID        string
-	Status         RunStatus
-	Plan           string
-	ResultSummary  string
-	LeaseExpiresAt *time.Time
-	StartedAt      time.Time
-	FinishedAt     *time.Time
-	UpdatedAt      time.Time
+	ID                       string
+	WorkItemID               string
+	AgentID                  string
+	Version                  int64
+	FenceToken               int64
+	TaskVersion              int
+	AcceptanceCriteriaDigest string
+	Status                   RunStatus
+	Plan                     string
+	ResultSummary            string
+	LeaseExpiresAt           *time.Time
+	StartedAt                time.Time
+	FinishedAt               *time.Time
+	UpdatedAt                time.Time
+}
+
+type ActiveRun struct {
+	Run  Run
+	Work WorkItem
+}
+
+type ActiveRunPage struct {
+	Items      []ActiveRun
+	NextCursor string
+}
+
+type Command struct {
+	ID          string
+	RunID       string
+	Sequence    int64
+	Type        string
+	Status      string
+	Reason      string
+	RequestedBy string
+	Result      string
+	RunVersion  int64
+	FenceToken  int64
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+type CommandAcknowledgement struct {
+	IdempotencyKey  string
+	AgentID         string
+	ExpectedVersion int64
+	FenceToken      int64
+	Status          string
+	Result          string
+}
+
+type ProjectedEvent struct {
+	IdempotencyKey  string
+	AgentID         string
+	ExpectedVersion int64
+	FenceToken      int64
+	Producer        string
+	ProducerEventID string
+	ExecutionID     string
+	Sequence        int64
+	Type            string
+	Message         string
+	Payload         map[string]any
+	OccurredAt      time.Time
 }
 
 type WorkDetail struct {
@@ -184,6 +277,12 @@ type Acquisition interface {
 	ClaimWork(context.Context, string, Claim) (Run, error)
 }
 
+type RecoverableAcquisition interface {
+	Acquisition
+	LookupClaim(context.Context, string, string) (Run, error)
+	ListAssignedRuns(context.Context, string, string, string, int) (ActiveRunPage, error)
+}
+
 // Planning submits the provider-facing plan representation for an exact run.
 // Immutable structured revisions will replace the prototype Markdown payload
 // when the planning vertical slice reaches that safety gate.
@@ -194,7 +293,7 @@ type Planning interface {
 // RunControl protects and stops authority already bound to an exact run.
 type RunControl interface {
 	RenewRunLease(context.Context, string, LeaseRenewal) error
-	BlockRun(context.Context, string, string) error
+	BlockRun(context.Context, string, RunBlock) error
 }
 
 // EventPublisher appends human-facing progress for an already-bound run. A
@@ -202,4 +301,13 @@ type RunControl interface {
 // directly before that safety gate exists.
 type EventPublisher interface {
 	ReportRunProgress(context.Context, string, Progress) error
+}
+
+type ProjectionPublisher interface {
+	AppendRunEvent(context.Context, string, ProjectedEvent) error
+}
+
+type CommandControl interface {
+	ListRunCommands(context.Context, string, int64, int) ([]Command, error)
+	AcknowledgeRunCommand(context.Context, string, string, CommandAcknowledgement) error
 }

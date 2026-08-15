@@ -3,6 +3,7 @@ package reconcile
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -17,7 +18,7 @@ type leaseProviderStub struct {
 	getCalls  int
 	renewals  []workcontrol.LeaseRenewal
 	renewErr  error
-	blocks    []string
+	blocks    []workcontrol.RunBlock
 	blockErr  error
 }
 
@@ -42,8 +43,8 @@ func (provider *leaseProviderStub) RenewRunLease(_ context.Context, _ string, re
 	return provider.renewErr
 }
 
-func (provider *leaseProviderStub) BlockRun(_ context.Context, _ string, reason string) error {
-	provider.blocks = append(provider.blocks, reason)
+func (provider *leaseProviderStub) BlockRun(_ context.Context, _ string, block workcontrol.RunBlock) error {
+	provider.blocks = append(provider.blocks, block)
 	return provider.blockErr
 }
 
@@ -169,7 +170,9 @@ func TestLeaseReconcilerRenewsExpiredLeaseAndConfirmsResponse(t *testing.T) {
 	if result.Status != LeaseRenewed || result.LeaseExpiresAt == nil || !result.LeaseExpiresAt.Equal(renewed) {
 		t.Fatalf("result = %#v", result)
 	}
-	if len(provider.renewals) != 1 || provider.renewals[0].AgentID != record.AgentID || provider.renewals[0].Lease != 45*time.Second {
+	if len(provider.renewals) != 1 || provider.renewals[0].AgentID != record.AgentID ||
+		provider.renewals[0].Lease != 45*time.Second ||
+		provider.renewals[0].IdempotencyKey != fmt.Sprintf("lease-renew:%s:%d", record.ID, record.Version) {
 		t.Fatalf("renewals = %#v", provider.renewals)
 	}
 	if provider.getCalls != 2 || journal.reconcileCalls != 2 {
@@ -246,7 +249,8 @@ func TestLeaseReconcilerStopsExhaustedBudgetOnProviderAndJournal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stop budget: %v", err)
 	}
-	if len(provider.blocks) != 1 || provider.blocks[0] != budgetBlockReason {
+	if len(provider.blocks) != 1 || provider.blocks[0].Reason != budgetBlockReason ||
+		provider.blocks[0].IdempotencyKey != "budget-stop:"+record.ID {
 		t.Fatalf("provider blocks = %#v", provider.blocks)
 	}
 	if updated.State != execution.StateFailed || updated.FailureClass != execution.FailureBudget {

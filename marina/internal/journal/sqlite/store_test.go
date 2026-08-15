@@ -273,6 +273,89 @@ func TestRestartPlannerUsesPersistedActiveStateWithoutClaiming(t *testing.T) {
 	}
 }
 
+func TestProviderOutboxPreservesPerExecutionOrderAndPrioritizesCommandAcks(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, time.August, 12, 10, 0, 0, 0, time.UTC)
+	store := openStore(t, ctx, ":memory:", &now)
+	t.Cleanup(func() { _ = store.Close() })
+	record, _, err := store.EnsureExecution(ctx, validExecution(now, "run-outbox-order"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, _, err := store.EnqueueOutbox(ctx, record.ID, execution.OutboxInput{Kind: "event", IdempotencyKey: "event-1", Payload: map[string]any{"type": "progress"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, _, err := store.EnqueueOutbox(ctx, record.ID, execution.OutboxInput{Kind: "event", IdempotencyKey: "event-2", Payload: map[string]any{"type": "failure"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ready, err := store.ListReadyOutbox(ctx, 10)
+	if err != nil || len(ready) != 1 || ready[0].ID != first.ID {
+		t.Fatalf("initial ready outbox = %#v, %v", ready, err)
+	}
+	if err := store.RecordOutboxFailure(ctx, first.ID, execution.FailurePermanent, "provider rejected projection", 5); err != nil {
+		t.Fatal(err)
+	}
+	ready, err = store.ListReadyOutbox(ctx, 10)
+	if err != nil || len(ready) != 0 {
+		t.Fatalf("later event crossed exhausted predecessor %s: %#v, %v", second.ID, ready, err)
+	}
+	ack, _, err := store.EnqueueOutbox(ctx, record.ID, execution.OutboxInput{Kind: "command_ack", IdempotencyKey: "ack-1", Payload: map[string]any{"command_id": "command-1"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ready, err = store.ListReadyOutbox(ctx, 10)
+	if err != nil || len(ready) != 1 || ready[0].ID != ack.ID {
+		t.Fatalf("pre-emptive command acknowledgement = %#v, %v", ready, err)
+	}
+}
+
+func TestCompleteOutboxPublicationCommitsAuthorityWithPublishedMark(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, time.August, 15, 10, 0, 0, 0, time.UTC)
+	store := openStore(t, ctx, ":memory:", &now)
+	t.Cleanup(func() { _ = store.Close() })
+	record, _, err := store.EnsureExecution(ctx, validExecution(now, "run-outbox-atomic"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	item, _, err := store.EnqueueOutbox(ctx, record.ID, execution.OutboxInput{Kind: "event", IdempotencyKey: "event-atomic", Payload: map[string]any{"type": "progress"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	lease := now.Add(20 * time.Minute)
+	updated, err := store.CompleteOutboxPublication(ctx, item.ID, record.ID, record.Version, record.ExternalRunVersion+1,
+		record.FenceToken, lease, "provider projection acknowledged")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.ExternalRunVersion != record.ExternalRunVersion+1 || !updated.LeaseExpiresAt.Equal(lease) {
+		t.Fatalf("authority after publication = %#v", updated)
+	}
+	ready, err := store.ListReadyOutbox(ctx, 10)
+	if err != nil || len(ready) != 0 {
+		t.Fatalf("published item still ready: %#v, %v", ready, err)
+	}
+
+	second, _, err := store.EnqueueOutbox(ctx, record.ID, execution.OutboxInput{Kind: "event", IdempotencyKey: "event-rewind", Payload: map[string]any{"type": "later"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.CompleteOutboxPublication(ctx, second.ID, updated.ID, updated.Version, record.ExternalRunVersion,
+		updated.FenceToken, lease, "rewind must not publish"); !errors.Is(err, execution.ErrConflict) {
+		t.Fatalf("rewind publication = %v", err)
+	}
+	ready, err = store.ListReadyOutbox(ctx, 10)
+	if err != nil || len(ready) != 1 || ready[0].ID != second.ID || ready[0].Status != "pending" {
+		t.Fatalf("rewind left predecessor unpublished: %#v, %v", ready, err)
+	}
+	reloaded, err := store.GetExecution(ctx, updated.ID)
+	if err != nil || reloaded.ExternalRunVersion != updated.ExternalRunVersion || reloaded.Version != updated.Version {
+		t.Fatalf("rewind mutated authority: %#v, %v", reloaded, err)
+	}
+}
+
 func openStore(t *testing.T, ctx context.Context, path string, now *time.Time) *sqlite.Store {
 	t.Helper()
 	store, err := sqlite.Open(ctx, path, sqlite.WithClock(func() time.Time { return *now }))

@@ -12,10 +12,12 @@ import (
 )
 
 const executionColumns = `
-	id, work_provider, external_work_id, external_run_id, agent_id, state,
+	id, work_provider, project_id, external_work_id, external_run_id, agent_id,
+	external_run_version, fence_token, task_version, task_digest, binding_version, state,
 	attempt, lease_expires_at, deadline_at, max_attempts, max_tokens,
 	max_cost_micros, used_tokens, used_cost_micros, runtime_handle,
-	failure_class, failure_message, version, created_at, updated_at, finished_at
+	failure_class, failure_message, command_cursor, retry_attempt, next_eligible_at,
+	last_error_class, exhaustion_reason, version, created_at, updated_at, finished_at
 `
 
 type scanner interface {
@@ -31,12 +33,19 @@ func scanExecution(source scanner) (execution.Execution, error) {
 	var createdAt int64
 	var updatedAt int64
 	var finishedAt sql.NullInt64
+	var nextEligibleAt sql.NullInt64
 	err := source.Scan(
 		&record.ID,
 		&record.WorkProvider,
+		&record.ProjectID,
 		&record.ExternalWorkID,
 		&record.ExternalRunID,
 		&record.AgentID,
+		&record.ExternalRunVersion,
+		&record.FenceToken,
+		&record.TaskVersion,
+		&record.TaskDigest,
+		&record.BindingVersion,
 		&state,
 		&record.Attempt,
 		&leaseExpiresAt,
@@ -49,6 +58,11 @@ func scanExecution(source scanner) (execution.Execution, error) {
 		&record.RuntimeHandle,
 		&failureClass,
 		&record.FailureMessage,
+		&record.CommandCursor,
+		&record.RetryAttempt,
+		&nextEligibleAt,
+		&record.LastErrorClass,
+		&record.ExhaustionReason,
 		&record.Version,
 		&createdAt,
 		&updatedAt,
@@ -67,6 +81,10 @@ func scanExecution(source scanner) (execution.Execution, error) {
 		value := time.UnixMilli(finishedAt.Int64).UTC()
 		record.FinishedAt = &value
 	}
+	if nextEligibleAt.Valid {
+		value := time.UnixMilli(nextEligibleAt.Int64).UTC()
+		record.NextEligibleAt = &value
+	}
 	return record, nil
 }
 
@@ -81,11 +99,34 @@ func executionByID(ctx context.Context, queryer interface {
 
 func validateNewExecution(input execution.NewExecution, now time.Time) (execution.NewExecution, error) {
 	input.WorkProvider = strings.TrimSpace(input.WorkProvider)
+	input.ProjectID = strings.TrimSpace(input.ProjectID)
 	input.ExternalWorkID = strings.TrimSpace(input.ExternalWorkID)
 	input.ExternalRunID = strings.TrimSpace(input.ExternalRunID)
 	input.AgentID = strings.TrimSpace(input.AgentID)
-	if input.WorkProvider == "" || input.ExternalWorkID == "" || input.ExternalRunID == "" || input.AgentID == "" {
+	input.TaskDigest = strings.TrimSpace(input.TaskDigest)
+	if input.ProjectID == "" {
+		input.ProjectID = "prj_default"
+	}
+	if input.ExternalRunVersion == 0 {
+		input.ExternalRunVersion = 1
+	}
+	if input.FenceToken == 0 {
+		input.FenceToken = 1
+	}
+	if input.TaskVersion == 0 {
+		input.TaskVersion = 1
+	}
+	if input.TaskDigest == "" && input.ExternalWorkID != "" {
+		input.TaskDigest = "legacy:" + input.ExternalWorkID
+	}
+	if input.WorkProvider == "" || input.ProjectID == "" || input.ExternalWorkID == "" || input.ExternalRunID == "" || input.AgentID == "" || input.TaskDigest == "" {
 		return execution.NewExecution{}, fmt.Errorf("provider, work ID, run ID, and agent ID are required: %w", execution.ErrInvalidInput)
+	}
+	if input.ExternalRunVersion < 1 || input.FenceToken < 1 || input.TaskVersion < 1 {
+		return execution.NewExecution{}, fmt.Errorf("provider authority and task version must be positive: %w", execution.ErrInvalidInput)
+	}
+	if input.BindingVersion == 0 {
+		input.BindingVersion = 1
 	}
 	if input.LeaseExpiresAt.IsZero() || !input.LeaseExpiresAt.After(now) {
 		return execution.NewExecution{}, fmt.Errorf("lease expiry must be in the future: %w", execution.ErrInvalidInput)
@@ -126,16 +167,23 @@ func (store *Store) EnsureExecution(
 
 	result, err := transaction.ExecContext(ctx, `
 		INSERT OR IGNORE INTO executions (
-			id, work_provider, external_work_id, external_run_id, agent_id, state,
+			id, work_provider, project_id, external_work_id, external_run_id, agent_id,
+			external_run_version, fence_token, task_version, task_digest, binding_version, state,
 			attempt, lease_expires_at, deadline_at, max_attempts, max_tokens,
 			max_cost_micros, version, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, 1, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, 1, ?, ?)
 	`,
 		executionID,
 		validated.WorkProvider,
+		validated.ProjectID,
 		validated.ExternalWorkID,
 		validated.ExternalRunID,
 		validated.AgentID,
+		validated.ExternalRunVersion,
+		validated.FenceToken,
+		validated.TaskVersion,
+		validated.TaskDigest,
+		validated.BindingVersion,
 		execution.StatePlanning,
 		validated.LeaseExpiresAt.UnixMilli(),
 		validated.Budget.DeadlineAt.UnixMilli(),
@@ -162,7 +210,7 @@ func (store *Store) EnsureExecution(
 		if queryErr != nil {
 			return execution.Execution{}, false, fmt.Errorf("load existing execution: %w", queryErr)
 		}
-		if existing.ExternalWorkID != validated.ExternalWorkID || existing.AgentID != validated.AgentID {
+		if existing.ProjectID != validated.ProjectID || existing.ExternalWorkID != validated.ExternalWorkID || existing.AgentID != validated.AgentID || existing.TaskVersion != validated.TaskVersion || existing.TaskDigest != validated.TaskDigest || existing.BindingVersion != validated.BindingVersion {
 			return execution.Execution{}, false, fmt.Errorf("external run is already owned by another work item or agent: %w", execution.ErrConflict)
 		}
 		if err := transaction.Commit(); err != nil {
@@ -225,6 +273,27 @@ func (store *Store) ListActiveExecutions(ctx context.Context, limit int) ([]exec
 		return nil, fmt.Errorf("iterate active executions: %w", err)
 	}
 	return records, nil
+}
+
+func (store *Store) ListCommandExecutions(ctx context.Context, limit int) ([]execution.Execution, error) {
+	limit = normalizedLimit(limit)
+	rows, err := store.db.QueryContext(ctx,
+		"SELECT "+executionColumns+" FROM executions ORDER BY updated_at, id LIMIT ?",
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list command executions: %w", err)
+	}
+	defer rows.Close()
+	records := make([]execution.Execution, 0)
+	for rows.Next() {
+		record, scanErr := scanExecution(rows)
+		if scanErr != nil {
+			return nil, fmt.Errorf("scan command execution: %w", scanErr)
+		}
+		records = append(records, record)
+	}
+	return records, rows.Err()
 }
 
 func validateTransition(record execution.Execution, input execution.Transition, now time.Time) error {
@@ -316,6 +385,26 @@ func (store *Store) Transition(
 		"version":       record.Version + 1,
 	}, now); err != nil {
 		return execution.Execution{}, err
+	}
+	var outboxSequence int64
+	if err := transaction.QueryRowContext(ctx, "SELECT COALESCE(MAX(sequence), 0) + 1 FROM provider_outbox WHERE execution_id = ?", executionID).Scan(&outboxSequence); err != nil {
+		return execution.Execution{}, fmt.Errorf("allocate transition projection: %w", err)
+	}
+	outboxID, err := newID("out")
+	if err != nil {
+		return execution.Execution{}, err
+	}
+	payload, err := marshalPayload(map[string]any{"type": "execution.transitioned", "message": strings.TrimSpace(input.Message),
+		"from": record.State, "to": input.Target, "failure_class": input.FailureClass,
+		"failure_message": strings.TrimSpace(input.FailureMessage), "occurred_at": now.UnixMilli()})
+	if err != nil {
+		return execution.Execution{}, err
+	}
+	if _, err := transaction.ExecContext(ctx, `INSERT INTO provider_outbox
+		(id, execution_id, sequence, kind, idempotency_key, payload_json, status, created_at)
+		VALUES (?, ?, ?, 'event', ?, ?, 'pending', ?)`, outboxID, executionID, outboxSequence,
+		fmt.Sprintf("projection:transition:%s:%d", executionID, record.Version+1), payload, now.UnixMilli()); err != nil {
+		return execution.Execution{}, fmt.Errorf("persist transition projection: %w", err)
 	}
 	updated, err := executionByID(ctx, transaction, executionID)
 	if err != nil {
@@ -447,6 +536,74 @@ func (store *Store) ReconcileLease(
 		return execution.Execution{}, fmt.Errorf("commit lease reconciliation: %w", err)
 	}
 	return updated, nil
+}
+
+func (store *Store) UpdateProviderAuthority(
+	ctx context.Context,
+	executionID string,
+	expectedVersion int64,
+	externalRunVersion int64,
+	fenceToken int64,
+	leaseExpiresAt time.Time,
+	reason string,
+) (execution.Execution, error) {
+	tx, err := store.db.BeginTx(ctx, nil)
+	if err != nil {
+		return execution.Execution{}, fmt.Errorf("begin authority update: %w", err)
+	}
+	defer tx.Rollback()
+	updated, err := store.applyProviderAuthorityTx(ctx, tx, executionID, expectedVersion, externalRunVersion, fenceToken, leaseExpiresAt, reason)
+	if err != nil {
+		return execution.Execution{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return execution.Execution{}, fmt.Errorf("commit authority update: %w", err)
+	}
+	return updated, nil
+}
+
+func (store *Store) applyProviderAuthorityTx(
+	ctx context.Context,
+	tx *sql.Tx,
+	executionID string,
+	expectedVersion int64,
+	externalRunVersion int64,
+	fenceToken int64,
+	leaseExpiresAt time.Time,
+	reason string,
+) (execution.Execution, error) {
+	reason = strings.TrimSpace(reason)
+	leaseExpiresAt = leaseExpiresAt.UTC()
+	if externalRunVersion < 1 || fenceToken < 1 || leaseExpiresAt.IsZero() || reason == "" {
+		return execution.Execution{}, fmt.Errorf("provider version, fence, lease, and reason are required: %w", execution.ErrInvalidInput)
+	}
+	record, err := executionByID(ctx, tx, executionID)
+	if err != nil {
+		return execution.Execution{}, err
+	}
+	if record.ExternalRunVersion == externalRunVersion && record.FenceToken == fenceToken && record.LeaseExpiresAt.Equal(leaseExpiresAt) {
+		return record, nil
+	}
+	if record.Version != expectedVersion || externalRunVersion < record.ExternalRunVersion || fenceToken < record.FenceToken {
+		return execution.Execution{}, execution.ErrConflict
+	}
+	now := store.now()
+	result, err := tx.ExecContext(ctx, `
+		UPDATE executions SET external_run_version = ?, fence_token = ?, lease_expires_at = ?,
+			version = version + 1, updated_at = ? WHERE id = ? AND version = ?
+	`, externalRunVersion, fenceToken, leaseExpiresAt.UnixMilli(), now.UnixMilli(), executionID, expectedVersion)
+	if err != nil {
+		return execution.Execution{}, fmt.Errorf("update provider authority: %w", err)
+	}
+	if err := requireOneMutation(result); err != nil {
+		return execution.Execution{}, err
+	}
+	if err := insertEvent(ctx, tx, executionID, "execution.authority_reconciled", reason,
+		map[string]any{"external_run_version": externalRunVersion, "fence_token": fenceToken,
+			"lease_expires_at": leaseExpiresAt.Format(time.RFC3339Nano)}, now); err != nil {
+		return execution.Execution{}, err
+	}
+	return executionByID(ctx, tx, executionID)
 }
 
 func normalizedLimit(limit int) int {

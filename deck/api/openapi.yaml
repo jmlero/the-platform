@@ -14,6 +14,11 @@ info:
       milliseconds. Durations explicitly named `*_seconds` are integer seconds.
     - Clients may send `X-Request-ID`. AppDeck echoes an accepted value or creates
       one, returns it in every response, and includes it in structured API errors.
+    - Claim and run-mutation operations accept `Idempotency-Key`. A supplied key
+      is required and scoped to project, caller identity, and operation; an exact replay returns
+      the original successful result, while reuse with different input is a conflict.
+      AppDeck generates a one-shot key when legacy clients omit the header, but only
+      a caller-supplied stable key makes a lost response safely replayable.
     - API errors have stable `code`, `message`, `retryable`, and `request_id` fields.
       The `error` string remains a compatibility alias for `message` in version 1.
     - Operations that advertise pagination use a bounded `limit`, an opaque
@@ -22,6 +27,10 @@ info:
       unpaginated unless their operation advertises a paginated capability.
     - Capability identifiers are additive. Clients must require only capabilities
       needed for the behavior they are about to enable.
+    - Operations with `x-capability` use an opaque Bearer credential when AppDeck
+      service authentication is configured. The credential resolves to one stable
+      service identity with explicit project and capability grants. Bearer tokens
+      must travel only over a protected transport and are never accepted in URLs.
 servers:
   - url: http://localhost:8080/api/v1
     description: Local AppDeck
@@ -40,6 +49,8 @@ paths:
       tags: [Provider]
       operationId: getProviderInfo
       x-capability: provider.info
+      security:
+        - serviceBearer: []
       summary: Discover protocol compatibility and readiness
       description: >-
         This read-only operation remains available when the canonical store is
@@ -56,6 +67,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ProviderInfo"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /bootstrap:
     get:
@@ -75,6 +92,8 @@ paths:
       tags: [Tasks]
       operationId: listTasks
       x-capability: work.ready.list
+      security:
+        - serviceBearer: []
       summary: List all tasks in priority order
       parameters:
         - name: status
@@ -91,6 +110,12 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Task"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
     post:
       tags: [Tasks]
       operationId: createTask
@@ -118,6 +143,8 @@ paths:
       tags: [Tasks]
       operationId: getTask
       x-capability: work.inspect
+      security:
+        - serviceBearer: []
       summary: Get a task with its runs, events, decisions, and artifacts
       responses:
         "200":
@@ -128,6 +155,12 @@ paths:
                 $ref: "#/components/schemas/TaskDetail"
         "404":
           $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
     patch:
       tags: [Tasks]
       operationId: updateTask
@@ -183,10 +216,13 @@ paths:
   /tasks/{taskId}/claim:
     parameters:
       - $ref: "#/components/parameters/TaskId"
+      - $ref: "#/components/parameters/IdempotencyKey"
     post:
       tags: [Runs]
       operationId: claimTask
       x-capability: work.claim.atomic
+      security:
+        - serviceBearer: []
       summary: Atomically claim a ready task
       requestBody:
         required: true
@@ -194,10 +230,13 @@ paths:
           application/json:
             schema:
               type: object
-              required: [agent_id]
+              required: [agent_id, expected_task_version]
               properties:
                 agent_id:
                   type: string
+                expected_task_version:
+                  type: integer
+                  minimum: 1
                 lease_seconds:
                   type: integer
                   minimum: 1
@@ -211,6 +250,75 @@ paths:
                 $ref: "#/components/schemas/Run"
         "409":
           $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /claims/{idempotencyKey}:
+    get:
+      tags: [Runs]
+      operationId: lookupClaim
+      x-capability: work.claim.lookup
+      security:
+        - serviceBearer: []
+      summary: Recover the exact committed claim result by its stable key
+      parameters:
+        - name: idempotencyKey
+          in: path
+          required: true
+          schema: { type: string }
+        - name: project_id
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Original claimed run
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Run" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "401": { $ref: "#/components/responses/AuthenticationRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /runs:
+    get:
+      tags: [Runs]
+      operationId: listAssignedRuns
+      x-capability: run.assigned.list
+      security:
+        - serviceBearer: []
+      summary: Discover active runs assigned to one stable logical agent
+      parameters:
+        - { name: project_id, in: query, required: true, schema: { type: string } }
+        - { name: agent_id, in: query, required: true, schema: { type: string } }
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 100 } }
+      responses:
+        "200":
+          description: Assigned active runs
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [run, task]
+                      properties:
+                        run: { $ref: "#/components/schemas/Run" }
+                        task: { $ref: "#/components/schemas/Task" }
+                  next_cursor: { type: string }
+        "401": { $ref: "#/components/responses/AuthenticationRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
 
   /agents:
     get:
@@ -230,6 +338,8 @@ paths:
       tags: [Agents]
       operationId: registerAgent
       x-capability: agent.register
+      security:
+        - serviceBearer: []
       summary: Register or reconnect an agent
       requestBody:
         required: true
@@ -244,14 +354,23 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Agent"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /runs/{runId}/heartbeat:
     parameters:
       - $ref: "#/components/parameters/RunId"
+      - $ref: "#/components/parameters/IdempotencyKey"
     post:
       tags: [Runs]
       operationId: heartbeatRun
       x-capability: run.lease.renew
+      security:
+        - serviceBearer: []
       summary: Renew an active run lease
       requestBody:
         required: true
@@ -259,10 +378,12 @@ paths:
           application/json:
             schema:
               type: object
-              required: [agent_id]
+              required: [agent_id, expected_version, fence_token]
               properties:
                 agent_id:
                   type: string
+                expected_version: { type: integer, format: int64, minimum: 1 }
+                fence_token: { type: integer, format: int64, minimum: 1 }
                 lease_seconds:
                   type: integer
                   minimum: 1
@@ -272,14 +393,27 @@ paths:
           description: Lease renewed
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /runs/{runId}/plan:
     parameters:
       - $ref: "#/components/parameters/RunId"
+      - $ref: "#/components/parameters/IdempotencyKey"
     post:
       tags: [Runs]
       operationId: submitPlan
       x-capability: run.plan.submit
+      security:
+        - serviceBearer: []
       summary: Submit the plan for an active planning run
       requestBody:
         required: true
@@ -287,8 +421,11 @@ paths:
           application/json:
             schema:
               type: object
-              required: [plan]
+              required: [agent_id, expected_version, fence_token, plan]
               properties:
+                agent_id: { type: string }
+                expected_version: { type: integer, format: int64, minimum: 1 }
+                fence_token: { type: integer, format: int64, minimum: 1 }
                 plan:
                   type: string
                 require_approval:
@@ -308,14 +445,25 @@ paths:
                       - type: "null"
         "409":
           $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /runs/{runId}/progress:
     parameters:
       - $ref: "#/components/parameters/RunId"
+      - $ref: "#/components/parameters/IdempotencyKey"
     post:
       tags: [Runs]
       operationId: reportProgress
       x-capability: run.progress.append
+      security:
+        - serviceBearer: []
       summary: Append a durable progress event
       requestBody:
         required: true
@@ -323,8 +471,11 @@ paths:
           application/json:
             schema:
               type: object
-              required: [message]
+              required: [agent_id, expected_version, fence_token, message]
               properties:
+                agent_id: { type: string }
+                expected_version: { type: integer, format: int64, minimum: 1 }
+                fence_token: { type: integer, format: int64, minimum: 1 }
                 message:
                   type: string
                 payload:
@@ -333,18 +484,36 @@ paths:
       responses:
         "204":
           description: Progress recorded
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /runs/{runId}/start:
     parameters:
       - $ref: "#/components/parameters/RunId"
+      - $ref: "#/components/parameters/IdempotencyKey"
     post:
       tags: [Runs]
       operationId: startRun
       x-capability: run.start
+      security:
+        - serviceBearer: []
       summary: Resume a run after its plan is approved
       description: >-
         The control plane verifies that the latest plan decision is answered and
         matches the recommended approval option before starting execution.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RunGuard" }
       responses:
         "204":
           description: Approved run started
@@ -352,28 +521,53 @@ paths:
           $ref: "#/components/responses/Conflict"
         "422":
           $ref: "#/components/responses/InvalidInput"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /runs/{runId}/verify:
     parameters:
       - $ref: "#/components/parameters/RunId"
+      - $ref: "#/components/parameters/IdempotencyKey"
     post:
       tags: [Runs]
       operationId: beginVerification
       x-capability: run.verify
+      security:
+        - serviceBearer: []
       summary: Move a running attempt into verification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RunGuard" }
       responses:
         "204":
           description: Run is verifying
+        "409":
+          $ref: "#/components/responses/Conflict"
         "422":
           $ref: "#/components/responses/InvalidInput"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /runs/{runId}/complete:
     parameters:
       - $ref: "#/components/parameters/RunId"
+      - $ref: "#/components/parameters/IdempotencyKey"
     post:
       tags: [Runs]
       operationId: completeRun
       x-capability: run.complete
+      security:
+        - serviceBearer: []
       summary: Complete a verified run with evidence
       requestBody:
         required: true
@@ -381,8 +575,11 @@ paths:
           application/json:
             schema:
               type: object
-              required: [summary, evidence]
+              required: [agent_id, expected_version, fence_token, summary, evidence]
               properties:
+                agent_id: { type: string }
+                expected_version: { type: integer, format: int64, minimum: 1 }
+                fence_token: { type: integer, format: int64, minimum: 1 }
                 summary:
                   type: string
                 evidence:
@@ -391,16 +588,27 @@ paths:
       responses:
         "204":
           description: Run completed and evidence artifact created
+        "409":
+          $ref: "#/components/responses/Conflict"
         "422":
           $ref: "#/components/responses/InvalidInput"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /runs/{runId}/block:
     parameters:
       - $ref: "#/components/parameters/RunId"
+      - $ref: "#/components/parameters/IdempotencyKey"
     post:
       tags: [Runs]
       operationId: blockRun
       x-capability: run.block
+      security:
+        - serviceBearer: []
       summary: Stop an active attempt and mark its task blocked
       requestBody:
         required: true
@@ -408,21 +616,125 @@ paths:
           application/json:
             schema:
               type: object
-              required: [reason]
+              required: [agent_id, expected_version, fence_token, reason]
               properties:
+                agent_id: { type: string }
+                expected_version: { type: integer, format: int64, minimum: 1 }
+                fence_token: { type: integer, format: int64, minimum: 1 }
                 reason:
                   type: string
       responses:
         "204":
           description: Run and task marked blocked
+        "409":
+          $ref: "#/components/responses/Conflict"
         "422":
           $ref: "#/components/responses/InvalidInput"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /runs/{runId}/commands:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+    get:
+      tags: [Runs]
+      operationId: listRunCommands
+      x-capability: command.list
+      security:
+        - serviceBearer: []
+      summary: List durable commands after a per-run sequence cursor
+      parameters:
+        - { name: after_sequence, in: query, schema: { type: integer, format: int64, minimum: 0 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 100 } }
+      responses:
+        "200":
+          description: Ordered command page
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/Command" } }
+        "401": { $ref: "#/components/responses/AuthenticationRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /runs/{runId}/commands/{commandId}/ack:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+      - $ref: "#/components/parameters/IdempotencyKey"
+      - { name: commandId, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [Runs]
+      operationId: acknowledgeRunCommand
+      x-capability: command.ack
+      security:
+        - serviceBearer: []
+      summary: Idempotently acknowledge, reject, or complete a durable command
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: "#/components/schemas/RunGuard"
+                - type: object
+                  required: [status, result]
+                  properties:
+                    status: { type: string, enum: [acknowledged, rejected, completed] }
+                    result: { type: string }
+      responses:
+        "204": { description: Command acknowledgement recorded }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "401": { $ref: "#/components/responses/AuthenticationRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /runs/{runId}/events:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+      - $ref: "#/components/parameters/IdempotencyKey"
+    post:
+      tags: [Events]
+      operationId: appendRunEvent
+      x-capability: event.append
+      security:
+        - serviceBearer: []
+      summary: Append one ordered producer event with durable deduplication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: "#/components/schemas/RunGuard"
+                - type: object
+                  required: [producer, producer_event_id, execution_id, sequence, type, message, occurred_at]
+                  properties:
+                    producer: { type: string }
+                    producer_event_id: { type: string }
+                    execution_id: { type: string }
+                    sequence: { type: integer, format: int64, minimum: 1 }
+                    type: { type: string }
+                    message: { type: string }
+                    payload: { type: object, additionalProperties: true }
+                    occurred_at: { type: integer, format: int64 }
+      responses:
+        "204": { description: Event appended or exact replay accepted }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "401": { $ref: "#/components/responses/AuthenticationRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
 
   /decisions:
     get:
       tags: [Decisions]
       operationId: listDecisions
       x-capability: decision.list
+      security:
+        - serviceBearer: []
       summary: List human decision requests
       parameters:
         - name: status
@@ -439,6 +751,12 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Decision"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /decisions/{decisionId}/answer:
     parameters:
@@ -451,6 +769,8 @@ paths:
       tags: [Decisions]
       operationId: answerDecision
       x-capability: decision.answer
+      security:
+        - serviceBearer: []
       summary: Record the human answer to a pending decision
       requestBody:
         required: true
@@ -471,6 +791,12 @@ paths:
                 $ref: "#/components/schemas/Decision"
         "409":
           $ref: "#/components/responses/Conflict"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /decisions/{decisionId}:
     parameters:
@@ -483,6 +809,8 @@ paths:
       tags: [Decisions]
       operationId: getDecision
       x-capability: decision.inspect
+      security:
+        - serviceBearer: []
       summary: Get one decision so an agent can wait for its answer
       responses:
         "200":
@@ -493,12 +821,20 @@ paths:
                 $ref: "#/components/schemas/Decision"
         "404":
           $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /events:
     get:
       tags: [Events]
       operationId: listEvents
       x-capability: event.list
+      security:
+        - serviceBearer: []
       summary: List durable workspace events
       parameters:
         - name: limit
@@ -523,12 +859,20 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Event"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /events/stream:
     get:
       tags: [Events]
       operationId: streamEvents
       x-capability: event.stream
+      security:
+        - serviceBearer: []
       summary: Subscribe to live durable events and agent heartbeats
       parameters:
         - name: Last-Event-ID
@@ -543,14 +887,34 @@ paths:
             text/event-stream:
               schema:
                 type: string
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
 components:
+  securitySchemes:
+    serviceBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
+      description: >-
+        High-entropy service credential resolved to a stable identity with
+        explicit project and capability grants. AppDeck stores only SHA-256
+        fingerprints; Marina loads the token value from a file reference.
+
   headers:
     RequestId:
       description: Correlates this response with service logs and structured errors.
       schema:
         type: string
         maxLength: 128
+    WWWAuthenticate:
+      description: Bearer authentication challenge for the AppDeck service API.
+      schema:
+        type: string
 
   parameters:
     RequestId:
@@ -561,6 +925,18 @@ components:
       schema:
         type: string
         maxLength: 128
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: >-
+        Stable caller-generated key for replaying one claim or run mutation.
+        Keys are scoped to the canonical project, caller identity, and operation.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+        pattern: '^[!-~]+$'
     TaskId:
       name: taskId
       in: path
@@ -575,6 +951,35 @@ components:
         type: string
 
   responses:
+    AuthenticationRequired:
+      description: A valid AppDeck service credential is required
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+        WWW-Authenticate:
+          $ref: "#/components/headers/WWWAuthenticate"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Forbidden:
+      description: The service identity lacks the required project or capability grant
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    ServiceUnavailable:
+      description: The service authorization policy cannot be loaded safely
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
     NotFound:
       description: The requested resource does not exist
       headers:
@@ -585,7 +990,9 @@ components:
           schema:
             $ref: "#/components/schemas/Error"
     Conflict:
-      description: The resource changed or is no longer available for the operation
+      description: >-
+        The resource changed, is no longer available, or the Idempotency-Key was
+        already used with a different request payload
       headers:
         X-Request-ID:
           $ref: "#/components/headers/RequestId"
@@ -604,6 +1011,14 @@ components:
             $ref: "#/components/schemas/Error"
 
   schemas:
+    RunGuard:
+      type: object
+      required: [agent_id, expected_version, fence_token]
+      properties:
+        agent_id: { type: string }
+        expected_version: { type: integer, format: int64, minimum: 1 }
+        fence_token: { type: integer, format: int64, minimum: 1 }
+
     ProviderInfo:
       type: object
       x-fixture: ./fixtures/v1/provider-info.json
@@ -747,9 +1162,11 @@ components:
     Agent:
       type: object
       x-fixture: ./fixtures/v1/agent.json
-      required: [id, name, kind, status, capabilities, last_seen_at, created_at]
+      required: [id, installation_id, name, kind, status, capabilities, last_seen_at, created_at]
       properties:
         id:
+          type: string
+        installation_id:
           type: string
         name:
           type: string
@@ -771,11 +1188,14 @@ components:
 
     RegisterAgent:
       type: object
-      required: [name]
+      required: [id, installation_id, name]
       properties:
         id:
           type: string
           description: Stable agent ID; generated when omitted
+        installation_id:
+          type: string
+          description: Stable Marina installation identity distinct from runtime attempts
         name:
           type: string
         kind:
@@ -792,7 +1212,7 @@ components:
     Run:
       type: object
       x-fixture: ./fixtures/v1/run.json
-      required: [id, task_id, agent_id, status, plan, result_summary, started_at, updated_at]
+      required: [id, task_id, agent_id, version, fence_token, task_version, acceptance_criteria_digest, status, plan, result_summary, started_at, updated_at]
       properties:
         id:
           type: string
@@ -800,6 +1220,20 @@ components:
           type: string
         agent_id:
           type: string
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        fence_token:
+          type: integer
+          format: int64
+          minimum: 1
+        task_version:
+          type: integer
+          minimum: 1
+        acceptance_criteria_digest:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
         status:
           type: string
           enum: [planning, waiting_decision, running, verifying, completed, blocked, failed, cancelled]
@@ -885,11 +1319,8 @@ components:
 
     Lease:
       type: object
-      x-implementation-status: planned
       x-fixture: ./fixtures/v1/lease.json
-      description: >-
-        Target version-1 lease authority record. No operation advertises this
-        shape until guarded versions and fencing are implemented.
+      description: Version-1 run lease authority record used by every guarded mutation.
       required: [run_id, agent_id, version, fence_token, expires_at, renewed_at]
       properties:
         run_id:
@@ -975,10 +1406,9 @@ components:
 
     Command:
       type: object
-      x-implementation-status: planned
       x-fixture: ./fixtures/v1/command.json
-      description: Target durable operator command; command endpoints are not implemented yet.
-      required: [id, run_id, sequence, type, status, reason, requested_by, created_at]
+      description: Durable, ordered operator command with acknowledgement state and authority epoch.
+      required: [id, run_id, sequence, type, status, reason, requested_by, result, run_version, fence_token, created_at, updated_at]
       properties:
         id:
           type: string
@@ -998,7 +1428,20 @@ components:
           type: string
         requested_by:
           type: string
+        result:
+          type: string
+        run_version:
+          type: integer
+          format: int64
+          minimum: 1
+        fence_token:
+          type: integer
+          format: int64
+          minimum: 1
         created_at:
+          type: integer
+          format: int64
+        updated_at:
           type: integer
           format: int64
 
@@ -1239,10 +1682,13 @@ components:
       type: object
       x-fixtures:
         - ./fixtures/v1/errors/conflict.json
+        - ./fixtures/v1/errors/forbidden.json
         - ./fixtures/v1/errors/internal-error.json
         - ./fixtures/v1/errors/invalid-input.json
         - ./fixtures/v1/errors/invalid-transition.json
         - ./fixtures/v1/errors/not-found.json
+        - ./fixtures/v1/errors/service-unavailable.json
+        - ./fixtures/v1/errors/unauthenticated.json
       required: [error, code, message, retryable, request_id]
       properties:
         error:
@@ -1255,9 +1701,12 @@ components:
           enum:
             - not_found
             - conflict
+            - forbidden
             - invalid_input
             - invalid_transition
             - internal_error
+            - service_unavailable
+            - unauthenticated
         message:
           type: string
           description: Redacted human-readable explanation.

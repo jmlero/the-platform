@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"sort"
@@ -39,9 +40,25 @@ func (e *APIError) Error() string {
 	return fmt.Sprintf("AppDeck returned HTTP %d: %s", e.StatusCode, e.Message)
 }
 
+func (e *APIError) RetryableFailure() bool { return e.Retryable }
+
 type Client struct {
-	baseURL    *url.URL
-	httpClient *http.Client
+	baseURL           *url.URL
+	httpClient        *http.Client
+	bearerTokenSource bearerTokenSource
+}
+
+type Option func(*Client) error
+
+func WithBearerTokenFile(path string) Option {
+	return func(client *Client) error {
+		source, err := newFileBearerTokenSource(path)
+		if err != nil {
+			return err
+		}
+		client.bearerTokenSource = source
+		return nil
+	}
 }
 
 var (
@@ -56,7 +73,7 @@ var (
 	_ workcontrol.EventPublisher      = (*Client)(nil)
 )
 
-func New(serverURL string, httpClient *http.Client) (*Client, error) {
+func New(serverURL string, httpClient *http.Client, options ...Option) (*Client, error) {
 	parsed, err := url.Parse(strings.TrimSpace(serverURL))
 	if err != nil {
 		return nil, fmt.Errorf("parse AppDeck URL: %w", err)
@@ -74,11 +91,38 @@ func New(serverURL string, httpClient *http.Client) (*Client, error) {
 		httpClient = &http.Client{Timeout: 10 * time.Second}
 	}
 
-	return &Client{baseURL: parsed, httpClient: httpClient}, nil
+	client := &Client{baseURL: parsed, httpClient: httpClient}
+	for _, option := range options {
+		if err := option(client); err != nil {
+			return nil, fmt.Errorf("configure AppDeck client: %w", err)
+		}
+	}
+	if client.bearerTokenSource != nil {
+		if parsed.Scheme != "https" && !loopbackHost(parsed.Hostname()) {
+			return nil, fmt.Errorf("AppDeck Bearer credentials require HTTPS outside loopback: %w", ErrInvalidConfiguration)
+		}
+		// API endpoints are canonical and never require redirects. Refusing them
+		// prevents net/http from forwarding Authorization on a same-host HTTPS
+		// to HTTP redirect while preserving the caller's transport and timeout.
+		credentialClient := *client.httpClient
+		credentialClient.CheckRedirect = func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		}
+		client.httpClient = &credentialClient
+	}
+	return client, nil
+}
+
+func loopbackHost(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	address := net.ParseIP(host)
+	return address != nil && address.IsLoopback()
 }
 
 func (c *Client) Health(ctx context.Context) error {
-	_, err := c.CheckCompatibility(ctx, workcontrol.ReconciliationCapabilities())
+	_, err := c.CheckCompatibility(ctx, workcontrol.MilestoneOneCapabilities())
 	return err
 }
 
@@ -112,22 +156,26 @@ func (c *Client) RegisterAgent(
 	ctx context.Context,
 	registration workcontrol.AgentRegistration,
 ) (workcontrol.Agent, error) {
-	if strings.TrimSpace(registration.Name) == "" {
-		return workcontrol.Agent{}, errors.New("agent name is required")
+	if strings.TrimSpace(registration.ID) == "" || strings.TrimSpace(registration.InstallationID) == "" || strings.TrimSpace(registration.Name) == "" {
+		return workcontrol.Agent{}, errors.New("stable agent ID, installation ID, and agent name are required")
 	}
 	if registration.Kind == "" {
 		registration.Kind = "marina"
 	}
 
 	request := registerAgentRequest{
-		ID:           registration.ID,
-		Name:         registration.Name,
-		Kind:         registration.Kind,
-		Capabilities: append([]string(nil), registration.Capabilities...),
+		ID:             registration.ID,
+		InstallationID: registration.InstallationID,
+		Name:           registration.Name,
+		Kind:           registration.Kind,
+		Capabilities:   append([]string(nil), registration.Capabilities...),
 	}
 	var response agentDTO
 	if err := c.do(ctx, http.MethodPost, "/api/v1/agents", request, &response); err != nil {
 		return workcontrol.Agent{}, err
+	}
+	if response.ID != registration.ID || response.InstallationID != registration.InstallationID {
+		return workcontrol.Agent{}, errors.New("AppDeck registration response changed the stable agent or installation identity")
 	}
 
 	return response.toDomain(), nil
@@ -176,14 +224,48 @@ func (c *Client) ClaimWork(
 	}
 
 	leaseSeconds := roundedLeaseSeconds(claim.Lease)
-	request := claimRequest{AgentID: claim.AgentID, LeaseSeconds: leaseSeconds}
+	if claim.ExpectedTaskVersion < 1 {
+		return workcontrol.Run{}, errors.New("expected task version is required")
+	}
+	request := claimRequest{AgentID: claim.AgentID, ExpectedTaskVersion: claim.ExpectedTaskVersion, LeaseSeconds: leaseSeconds}
 	var response runDTO
 	endpoint := "/api/v1/tasks/" + workItemID + "/claim"
-	if err := c.do(ctx, http.MethodPost, endpoint, request, &response); err != nil {
+	if err := c.doIdempotent(ctx, http.MethodPost, endpoint, claim.IdempotencyKey, request, &response); err != nil {
 		return workcontrol.Run{}, err
 	}
 
 	return response.toDomain(), nil
+}
+
+func (c *Client) LookupClaim(ctx context.Context, projectID, idempotencyKey string) (workcontrol.Run, error) {
+	if err := validatePathSegment("project ID", projectID); err != nil {
+		return workcontrol.Run{}, err
+	}
+	if err := validatePathSegment("claim key", idempotencyKey); err != nil {
+		return workcontrol.Run{}, err
+	}
+	var response runDTO
+	endpoint := "/api/v1/claims/" + url.PathEscape(idempotencyKey) + "?project_id=" + url.QueryEscape(projectID)
+	if err := c.do(ctx, http.MethodGet, endpoint, nil, &response); err != nil {
+		return workcontrol.Run{}, err
+	}
+	return response.toDomain(), nil
+}
+
+func (c *Client) ListAssignedRuns(ctx context.Context, projectID, agentID, cursor string, limit int) (workcontrol.ActiveRunPage, error) {
+	query := url.Values{"project_id": {projectID}, "agent_id": {agentID}, "limit": {strconv.Itoa(limit)}}
+	if cursor != "" {
+		query.Set("cursor", cursor)
+	}
+	var response activeRunPageDTO
+	if err := c.do(ctx, http.MethodGet, "/api/v1/runs?"+query.Encode(), nil, &response); err != nil {
+		return workcontrol.ActiveRunPage{}, err
+	}
+	items := make([]workcontrol.ActiveRun, 0, len(response.Items))
+	for _, item := range response.Items {
+		items = append(items, workcontrol.ActiveRun{Run: item.Run.toDomain(), Work: item.Task.toDomain()})
+	}
+	return workcontrol.ActiveRunPage{Items: items, NextCursor: response.NextCursor}, nil
 }
 
 func (c *Client) RenewRunLease(
@@ -201,10 +283,12 @@ func (c *Client) RenewRunLease(
 		return errors.New("lease must be at least one second")
 	}
 	request := claimRequest{
-		AgentID:      renewal.AgentID,
-		LeaseSeconds: roundedLeaseSeconds(renewal.Lease),
+		AgentID: renewal.AgentID, ExpectedVersion: renewal.ExpectedVersion,
+		FenceToken: renewal.FenceToken, LeaseSeconds: roundedLeaseSeconds(renewal.Lease),
 	}
-	return c.do(ctx, http.MethodPost, "/api/v1/runs/"+runID+"/heartbeat", request, nil)
+	return c.doIdempotent(
+		ctx, http.MethodPost, "/api/v1/runs/"+runID+"/heartbeat", renewal.IdempotencyKey, request, nil,
+	)
 }
 
 func (c *Client) SubmitRunPlan(
@@ -220,10 +304,13 @@ func (c *Client) SubmitRunPlan(
 		return errors.New("plan is required")
 	}
 	request := planRequest{
+		runGuardRequest: runGuardRequest{AgentID: submission.AgentID, ExpectedVersion: submission.ExpectedVersion, FenceToken: submission.FenceToken},
 		Plan:            submission.Plan,
 		RequireApproval: submission.RequireApproval,
 	}
-	return c.do(ctx, http.MethodPost, "/api/v1/runs/"+runID+"/plan", request, nil)
+	return c.doIdempotent(
+		ctx, http.MethodPost, "/api/v1/runs/"+runID+"/plan", submission.IdempotencyKey, request, nil,
+	)
 }
 
 func (c *Client) ReportRunProgress(
@@ -238,19 +325,57 @@ func (c *Client) ReportRunProgress(
 	if progress.Message == "" {
 		return errors.New("progress message is required")
 	}
-	request := progressRequest{Message: progress.Message, Payload: progress.Payload}
-	return c.do(ctx, http.MethodPost, "/api/v1/runs/"+runID+"/progress", request, nil)
+	request := progressRequest{runGuardRequest: runGuardRequest{AgentID: progress.AgentID, ExpectedVersion: progress.ExpectedVersion, FenceToken: progress.FenceToken}, Message: progress.Message, Payload: progress.Payload}
+	return c.doIdempotent(
+		ctx, http.MethodPost, "/api/v1/runs/"+runID+"/progress", progress.IdempotencyKey, request, nil,
+	)
 }
 
-func (c *Client) BlockRun(ctx context.Context, runID string, reason string) error {
+func (c *Client) BlockRun(ctx context.Context, runID string, block workcontrol.RunBlock) error {
 	if err := validatePathSegment("run ID", runID); err != nil {
 		return err
 	}
-	reason = strings.TrimSpace(reason)
+	reason := strings.TrimSpace(block.Reason)
 	if reason == "" {
 		return errors.New("block reason is required")
 	}
-	return c.do(ctx, http.MethodPost, "/api/v1/runs/"+runID+"/block", blockRequest{Reason: reason}, nil)
+	return c.doIdempotent(
+		ctx,
+		http.MethodPost,
+		"/api/v1/runs/"+runID+"/block",
+		block.IdempotencyKey,
+		blockRequest{runGuardRequest: runGuardRequest{AgentID: block.AgentID, ExpectedVersion: block.ExpectedVersion, FenceToken: block.FenceToken}, Reason: reason},
+		nil,
+	)
+}
+
+func (c *Client) ListRunCommands(ctx context.Context, runID string, afterSequence int64, limit int) ([]workcontrol.Command, error) {
+	query := url.Values{"after_sequence": {strconv.FormatInt(afterSequence, 10)}, "limit": {strconv.Itoa(limit)}}
+	var response commandPageDTO
+	if err := c.do(ctx, http.MethodGet, "/api/v1/runs/"+runID+"/commands?"+query.Encode(), nil, &response); err != nil {
+		return nil, err
+	}
+	commands := make([]workcontrol.Command, 0, len(response.Items))
+	for _, command := range response.Items {
+		commands = append(commands, command.toDomain())
+	}
+	return commands, nil
+}
+
+func (c *Client) AcknowledgeRunCommand(ctx context.Context, runID, commandID string, acknowledgement workcontrol.CommandAcknowledgement) error {
+	request := commandAckRequest{runGuardRequest: runGuardRequest{AgentID: acknowledgement.AgentID,
+		ExpectedVersion: acknowledgement.ExpectedVersion, FenceToken: acknowledgement.FenceToken},
+		Status: acknowledgement.Status, Result: acknowledgement.Result}
+	return c.doIdempotent(ctx, http.MethodPost, "/api/v1/runs/"+runID+"/commands/"+commandID+"/ack",
+		acknowledgement.IdempotencyKey, request, nil)
+}
+
+func (c *Client) AppendRunEvent(ctx context.Context, runID string, event workcontrol.ProjectedEvent) error {
+	request := projectedEventRequest{runGuardRequest: runGuardRequest{AgentID: event.AgentID,
+		ExpectedVersion: event.ExpectedVersion, FenceToken: event.FenceToken}, Producer: event.Producer,
+		ProducerEventID: event.ProducerEventID, ExecutionID: event.ExecutionID, Sequence: event.Sequence,
+		Type: event.Type, Message: event.Message, Payload: event.Payload, OccurredAt: event.OccurredAt.UnixMilli()}
+	return c.doIdempotent(ctx, http.MethodPost, "/api/v1/runs/"+runID+"/events", event.IdempotencyKey, request, nil)
 }
 
 func roundedLeaseSeconds(lease time.Duration) int {
@@ -261,6 +386,32 @@ func (c *Client) do(
 	ctx context.Context,
 	method string,
 	endpoint string,
+	body any,
+	result any,
+) error {
+	return c.doRequest(ctx, method, endpoint, "", body, result)
+}
+
+func (c *Client) doIdempotent(
+	ctx context.Context,
+	method string,
+	endpoint string,
+	idempotencyKey string,
+	body any,
+	result any,
+) error {
+	key, err := clientIdempotencyKey(idempotencyKey)
+	if err != nil {
+		return err
+	}
+	return c.doRequest(ctx, method, endpoint, key, body, result)
+}
+
+func (c *Client) doRequest(
+	ctx context.Context,
+	method string,
+	endpoint string,
+	idempotencyKey string,
 	body any,
 	result any,
 ) error {
@@ -279,6 +430,16 @@ func (c *Client) do(
 	}
 	request.Header.Set("Accept", "application/json")
 	request.Header.Set("X-Request-ID", newRequestID())
+	if idempotencyKey != "" {
+		request.Header.Set("Idempotency-Key", idempotencyKey)
+	}
+	if c.bearerTokenSource != nil {
+		token, err := c.bearerTokenSource.Token()
+		if err != nil {
+			return err
+		}
+		request.Header.Set("Authorization", "Bearer "+token)
+	}
 	if body != nil {
 		request.Header.Set("Content-Type", "application/json")
 	}
@@ -336,6 +497,21 @@ func (c *Client) do(
 		return fmt.Errorf("decode AppDeck response: %w", err)
 	}
 	return nil
+}
+
+func clientIdempotencyKey(value string) (string, error) {
+	if value == "" {
+		return "idem_" + strings.TrimPrefix(newRequestID(), "req_"), nil
+	}
+	if value != strings.TrimSpace(value) || len(value) > 128 {
+		return "", errors.New("idempotency key must contain 1 to 128 visible ASCII characters")
+	}
+	for _, character := range value {
+		if character < 0x21 || character > 0x7e {
+			return "", errors.New("idempotency key must contain only visible ASCII characters")
+		}
+	}
+	return value, nil
 }
 
 func (c *Client) endpoint(suffix string) string {
@@ -447,10 +623,11 @@ func optionalUnixMilli(value *int64) *time.Time {
 }
 
 type registerAgentRequest struct {
-	ID           string   `json:"id,omitempty"`
-	Name         string   `json:"name"`
-	Kind         string   `json:"kind"`
-	Capabilities []string `json:"capabilities"`
+	ID             string   `json:"id,omitempty"`
+	InstallationID string   `json:"installation_id"`
+	Name           string   `json:"name"`
+	Kind           string   `json:"kind"`
+	Capabilities   []string `json:"capabilities"`
 }
 
 type providerInfoDTO struct {
@@ -478,43 +655,57 @@ func (info providerInfoDTO) toDomain() workcontrol.ProviderInfo {
 }
 
 type claimRequest struct {
-	AgentID      string `json:"agent_id"`
-	LeaseSeconds int    `json:"lease_seconds"`
+	AgentID             string `json:"agent_id"`
+	ExpectedTaskVersion int    `json:"expected_task_version,omitempty"`
+	ExpectedVersion     int64  `json:"expected_version,omitempty"`
+	FenceToken          int64  `json:"fence_token,omitempty"`
+	LeaseSeconds        int    `json:"lease_seconds"`
+}
+
+type runGuardRequest struct {
+	AgentID         string `json:"agent_id"`
+	ExpectedVersion int64  `json:"expected_version"`
+	FenceToken      int64  `json:"fence_token"`
 }
 
 type progressRequest struct {
+	runGuardRequest
 	Message string         `json:"message"`
 	Payload map[string]any `json:"payload,omitempty"`
 }
 
 type planRequest struct {
+	runGuardRequest
 	Plan            string `json:"plan"`
 	RequireApproval bool   `json:"require_approval"`
 }
 
 type blockRequest struct {
+	runGuardRequest
 	Reason string `json:"reason"`
 }
 
 type agentDTO struct {
-	ID           string   `json:"id"`
-	Name         string   `json:"name"`
-	Kind         string   `json:"kind"`
-	Status       string   `json:"status"`
-	Capabilities []string `json:"capabilities"`
-	LastSeenAt   int64    `json:"last_seen_at"`
-	CreatedAt    int64    `json:"created_at"`
+	ID             string   `json:"id"`
+	InstallationID string   `json:"installation_id"`
+	Name           string   `json:"name"`
+	Kind           string   `json:"kind"`
+	Status         string   `json:"status"`
+	Capabilities   []string `json:"capabilities"`
+	LastSeenAt     int64    `json:"last_seen_at"`
+	CreatedAt      int64    `json:"created_at"`
 }
 
 func (agent agentDTO) toDomain() workcontrol.Agent {
 	return workcontrol.Agent{
-		ID:           agent.ID,
-		Name:         agent.Name,
-		Kind:         agent.Kind,
-		Status:       agent.Status,
-		Capabilities: append([]string(nil), agent.Capabilities...),
-		LastSeenAt:   fromUnixMilli(agent.LastSeenAt),
-		CreatedAt:    fromUnixMilli(agent.CreatedAt),
+		ID:             agent.ID,
+		InstallationID: agent.InstallationID,
+		Name:           agent.Name,
+		Kind:           agent.Kind,
+		Status:         agent.Status,
+		Capabilities:   append([]string(nil), agent.Capabilities...),
+		LastSeenAt:     fromUnixMilli(agent.LastSeenAt),
+		CreatedAt:      fromUnixMilli(agent.CreatedAt),
 	}
 }
 
@@ -565,29 +756,86 @@ func (task taskDTO) toDomain() workcontrol.WorkItem {
 }
 
 type runDTO struct {
-	ID             string `json:"id"`
-	TaskID         string `json:"task_id"`
-	AgentID        string `json:"agent_id"`
-	Status         string `json:"status"`
-	Plan           string `json:"plan"`
-	ResultSummary  string `json:"result_summary"`
-	LeaseExpiresAt *int64 `json:"lease_expires_at"`
-	StartedAt      int64  `json:"started_at"`
-	FinishedAt     *int64 `json:"finished_at"`
-	UpdatedAt      int64  `json:"updated_at"`
+	ID                       string `json:"id"`
+	TaskID                   string `json:"task_id"`
+	AgentID                  string `json:"agent_id"`
+	Version                  int64  `json:"version"`
+	FenceToken               int64  `json:"fence_token"`
+	TaskVersion              int    `json:"task_version"`
+	AcceptanceCriteriaDigest string `json:"acceptance_criteria_digest"`
+	Status                   string `json:"status"`
+	Plan                     string `json:"plan"`
+	ResultSummary            string `json:"result_summary"`
+	LeaseExpiresAt           *int64 `json:"lease_expires_at"`
+	StartedAt                int64  `json:"started_at"`
+	FinishedAt               *int64 `json:"finished_at"`
+	UpdatedAt                int64  `json:"updated_at"`
 }
 
 func (run runDTO) toDomain() workcontrol.Run {
 	return workcontrol.Run{
-		ID:             run.ID,
-		WorkItemID:     run.TaskID,
-		AgentID:        run.AgentID,
-		Status:         workcontrol.RunStatus(run.Status),
-		Plan:           run.Plan,
-		ResultSummary:  run.ResultSummary,
-		LeaseExpiresAt: optionalUnixMilli(run.LeaseExpiresAt),
-		StartedAt:      fromUnixMilli(run.StartedAt),
-		FinishedAt:     optionalUnixMilli(run.FinishedAt),
-		UpdatedAt:      fromUnixMilli(run.UpdatedAt),
+		ID:         run.ID,
+		WorkItemID: run.TaskID,
+		AgentID:    run.AgentID,
+		Version:    run.Version, FenceToken: run.FenceToken, TaskVersion: run.TaskVersion,
+		AcceptanceCriteriaDigest: run.AcceptanceCriteriaDigest,
+		Status:                   workcontrol.RunStatus(run.Status),
+		Plan:                     run.Plan,
+		ResultSummary:            run.ResultSummary,
+		LeaseExpiresAt:           optionalUnixMilli(run.LeaseExpiresAt),
+		StartedAt:                fromUnixMilli(run.StartedAt),
+		FinishedAt:               optionalUnixMilli(run.FinishedAt),
+		UpdatedAt:                fromUnixMilli(run.UpdatedAt),
 	}
+}
+
+type activeRunDTO struct {
+	Run  runDTO  `json:"run"`
+	Task taskDTO `json:"task"`
+}
+type activeRunPageDTO struct {
+	Items      []activeRunDTO `json:"items"`
+	NextCursor string         `json:"next_cursor"`
+}
+
+type commandDTO struct {
+	ID          string `json:"id"`
+	RunID       string `json:"run_id"`
+	Sequence    int64  `json:"sequence"`
+	Type        string `json:"type"`
+	Status      string `json:"status"`
+	Reason      string `json:"reason"`
+	RequestedBy string `json:"requested_by"`
+	Result      string `json:"result"`
+	RunVersion  int64  `json:"run_version"`
+	FenceToken  int64  `json:"fence_token"`
+	CreatedAt   int64  `json:"created_at"`
+	UpdatedAt   int64  `json:"updated_at"`
+}
+
+func (command commandDTO) toDomain() workcontrol.Command {
+	return workcontrol.Command{ID: command.ID, RunID: command.RunID,
+		Sequence: command.Sequence, Type: command.Type, Status: command.Status, Reason: command.Reason,
+		RequestedBy: command.RequestedBy, Result: command.Result, RunVersion: command.RunVersion,
+		FenceToken: command.FenceToken, CreatedAt: fromUnixMilli(command.CreatedAt), UpdatedAt: fromUnixMilli(command.UpdatedAt)}
+}
+
+type commandPageDTO struct {
+	Items []commandDTO `json:"items"`
+}
+type commandAckRequest struct {
+	runGuardRequest
+	Status string `json:"status"`
+	Result string `json:"result"`
+}
+type projectedEventRequest struct {
+	runGuardRequest
+	Producer        string         `json:"producer"`
+	ProducerEventID string         `json:"producer_event_id"`
+	ExecutionID     string         `json:"execution_id"`
+	Sequence        int64          `json:"sequence"`
+	Type            string         `json:"type"`
+	Message         string         `json:"message"`
+	Payload         map[string]any `json:"payload"`
+	OccurredAt      int64          `json:"occurred_at"`
 }

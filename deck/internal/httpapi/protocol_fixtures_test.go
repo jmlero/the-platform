@@ -43,7 +43,7 @@ var fixtureShapes = map[string]fixtureShape{
 		},
 	},
 	"command": {
-		required: []string{"id", "run_id", "sequence", "type", "status", "reason", "requested_by", "created_at"},
+		required: []string{"id", "run_id", "sequence", "type", "status", "reason", "requested_by", "result", "run_version", "fence_token", "created_at", "updated_at"},
 	},
 	"event": {
 		required: []string{

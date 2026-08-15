@@ -44,6 +44,14 @@ func PlanRecovery(record Execution, now time.Time, renewBefore time.Duration) Re
 		intent.Reason = "external lease is approaching expiry"
 		return intent
 	}
+	if record.ExhaustionReason != "" {
+		intent.Reason = "external reconciliation retry budget is exhausted"
+		return intent
+	}
+	if record.NextEligibleAt != nil && record.NextEligibleAt.After(now) {
+		intent.Reason = "external reconciliation is waiting for durable retry eligibility"
+		return intent
+	}
 
 	switch record.State {
 	case StatePlanning:
