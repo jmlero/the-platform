@@ -1,0 +1,103 @@
+name: Release platformctl
+
+on:
+  push:
+    tags:
+      - "platformctl/v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to package (for example v1.2.3)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out monorepo
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: cli/go.mod
+          cache-dependency-path: cli/go.mod
+
+      - name: Check platformctl
+        run: make -C cli check
+
+  package:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        goos: [darwin, linux, windows]
+        goarch: [amd64, arm64]
+    steps:
+      - name: Check out monorepo
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: cli/go.mod
+          cache-dependency-path: cli/go.mod
+
+      - name: Build release archive
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          version="${GITHUB_REF_NAME#platformctl/}"
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            version="${INPUT_VERSION}"
+          fi
+          make -C cli package \
+            VERSION="${version}" \
+            GOOS="${{ matrix.goos }}" \
+            GOARCH="${{ matrix.goarch }}"
+
+      - name: Upload release archive
+        uses: actions/upload-artifact@v7
+        with:
+          name: platformctl-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: cli/dist/platformctl_*
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    if: github.event_name == 'push'
+    needs: package
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Check out monorepo
+        uses: actions/checkout@v7
+
+      - name: Download release archives
+        uses: actions/download-artifact@v8
+        with:
+          pattern: platformctl-*
+          path: cli/dist
+          merge-multiple: true
+
+      - name: Create checksums
+        working-directory: cli/dist
+        run: sha256sum platformctl_* > checksums.txt
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" cli/dist/* \
+            --verify-tag \
+            --title "platformctl ${GITHUB_REF_NAME#platformctl/}" \
+            --generate-notes

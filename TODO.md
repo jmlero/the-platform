@@ -122,9 +122,9 @@ The Milestone 1 safety gate is complete. Marina may automatically claim control-
 ### Operator clients
 
 - [x] [CLI] Create a separate top-level `cli/` project with its own module, binary, tests, and configuration; communicate with AppDeck only through supported public HTTP/JSON APIs.
-- [ ] [CLI] Add independent packaging and release automation.
+- [x] [CLI] Add independent packaging and release automation.
 - [x] [CLI] Ship a small first workflow: configure the AppDeck endpoint and credentials, verify connectivity, create and list work, and inspect task and run state.
-- [ ] [CLI] Add pause, resume, cancel, replan, and retry workflows using AppDeck's durable command API.
+- [x] [CLI] Add pause, resume, cancel, replan, and retry workflows using AppDeck's durable command API.
 - [ ] [TUI] Create a separate top-level `tui/` project after the CLI workflows and client boundary stabilize; use the public API or a reusable public client library, never AppDeck internals.
 
 ### Provider-neutral runtime lifecycle

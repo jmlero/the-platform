@@ -1,0 +1,14 @@
+{
+  "manifestVersion": 2,
+  "adapters": [],
+  "components": [
+    {
+      "id": "block/ponytail",
+      "scope": "project"
+    },
+    {
+      "id": "block/tdd",
+      "scope": "project"
+    }
+  ]
+}

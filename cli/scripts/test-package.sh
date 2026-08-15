@@ -2,7 +2,7 @@
 
 set -eu
 
-cli_dir=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+cli_dir=$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)
 test_dir=$(mktemp -d)
 trap 'rm -rf "$test_dir"' EXIT HUP INT TERM
 
@@ -34,3 +34,12 @@ fi
 
 test -x "$binary"
 test "$("$binary" --version)" = "platformctl v0.0.0-test"
+
+if make -C "$cli_dir" package \
+  VERSION=dev \
+  GOOS="$target_os" \
+  GOARCH="$target_arch" \
+  DIST_DIR="$test_dir/invalid" >/dev/null 2>&1; then
+  echo "package unexpectedly accepted a development version" >&2
+  exit 1
+fi
