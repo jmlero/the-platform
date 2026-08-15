@@ -49,22 +49,26 @@ Adjacent products validate important parts of this direction.
 
 [Ona](https://ona.com/docs/ona/understanding/core-components) combines reproducible development environments, agents, runners, guardrails, and event-driven automations. Its [two-plane architecture](https://ona.com/docs/ona/understanding/architecture) demonstrates the value of separating coordination from the infrastructure that handles source code, secrets, builds, and agent execution. Marina shares the conviction that background agents need isolated, fully equipped environments rather than a shell attached to a chat session.
 
+[Amp](https://ampcode.com/manual/orbs) gives each unsupervised thread an **Orb**: an isolated remote machine managed by Amp, with the agent's workspace, tools, terminal, and optional services. The same product can also execute on any machine where the [Amp CLI](https://ampcode.com/manual) is running as a **runner**—the operator's laptop, a home server, or another host they already control. Servers inside an Orb are not reachable through the operator's localhost; Amp exposes them through authenticated Portal URLs. Orbs automatically pause after a few minutes of inactivity and wake when a message, terminal session, or portal access resumes the thread; `.agents/resume` can run on wake, and declared services survive pause/resume. Marina shares the conviction that agent compute should be able to leave the laptop without collapsing into a single hosted topology: isolated managed machines and operator-owned runners are both legitimate placements behind one execution contract.
+
 [Herd](https://herd.gehirn.ai/docs/index) describes a persistent meta-harness above Codex, Claude Code, Gemini CLI, OpenCode, and user-controlled machines. It keeps mission state, durable identities, approvals, worker dispatch, and recovery outside any one provider session or transport. Marina shares the conviction that the durable system must live above replaceable agent harnesses.
 
 ### Investigation priorities
 
-Both products are relevant reference points, but for different layers:
+These products are relevant reference points, but for different layers:
 
 - **Investigate Ona primarily for execution infrastructure.** Study its isolated and reproducible development environments, runner and management-plane separation, Dev Container model, guardrails, secret handling, automations, prebuilds, and warm capacity. These should inform Marina's runtime and environment extension contracts without importing Ona's cloud topology as Marina's architecture.
+- **Investigate Amp primarily for execution placement and isolated-machine lifecycle.** Study Orbs versus Amp CLI runners, pause and resume of idle machines, authenticated portals for services running inside the environment, setup and resume hooks, and the boundary between Amp-managed remote machines and any host running the CLI. These should inform Marina's runtime placement options without importing Amp's hosted Orb product as Marina's architecture.
 - **Investigate Herd primarily for orchestration and interaction.** Study its persistent state above agent CLIs, commander-worker model, machine routing, approval flow, recovery behavior, and Command Room. These should inform durable agent identity, harness abstraction, specialized-agent dispatch, and AppDeck's human-agent interaction model without turning Marina into a fleet dashboard.
 
 The framing questions are deliberately different:
 
 - Ona helps answer: **Where and how does an agent work safely?**
+- Amp helps answer: **Where can an isolated agent machine live, and how does it pause, resume, and expose services without tying work to a laptop?**
 - Herd helps answer: **How are persistent agents coordinated across harnesses and machines?**
 - Marina must answer: **How does an extensible Kubernetes-native factory govern complete, evidence-backed software outcomes?**
 
-For the first proof, Ona deserves deeper investigation while defining the Kubernetes runtime and environment contract. Herd deserves focused investigation for AppDeck interaction, approvals, agent dispatch, recovery, and harness portability. Neither is a blueprint: Marina's defining gap remains durable reconciliation across intent, execution, evidence, delivery, and production feedback.
+For the first proof, Ona deserves deeper investigation while defining the Kubernetes runtime and environment contract. Amp deserves focused investigation for dual placement—managed isolated machines versus operator-owned CLI runners—and for pause, resume, and in-environment service exposure. Herd deserves focused investigation for AppDeck interaction, approvals, agent dispatch, recovery, and harness portability. None of them is a blueprint: Marina's defining gap remains durable reconciliation across intent, execution, evidence, delivery, and production feedback.
 
 Marina's distinct product thesis is to make this durable orchestration layer a Kubernetes-native, extensible software factory:
 
@@ -442,6 +446,7 @@ Until these are decided, the recommended baseline is single-operator, installed 
 - [Kubernetes controllers](https://kubernetes.io/docs/concepts/architecture/controller/) — desired-state reconciliation as a durable control-loop model.
 - [AgentCore harness vs. Runtime](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/harness-vs-runtime.html) — a useful separation between managed execution infrastructure and the agent loop itself.
 - [Ona core components](https://ona.com/docs/ona/understanding/core-components) and [architecture](https://ona.com/docs/ona/understanding/architecture) — isolated development environments, background agents, runners, guardrails, automations, and separation of coordination from execution.
+- [Amp Orbs](https://ampcode.com/manual/orbs) and [Amp manual](https://ampcode.com/manual) — isolated remote machines versus CLI runners on any host, pause and resume of idle compute, and authenticated portals into services running inside the execution environment.
 - [Herd documentation](https://herd.gehirn.ai/docs/index) — a persistent meta-harness above replaceable agent harnesses and machines, with durable mission state, approvals, dispatch, and recovery.
 
 ## The destination
