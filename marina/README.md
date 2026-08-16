@@ -34,10 +34,16 @@ The first executable foundation is now present:
 - A bounded work-intake controller that journals intent before claim, resolves ambiguous responses without blind reacquisition, validates the frozen task snapshot, and binds one exact run before any later side effect.
 - Ordered command consumption in which cancellation and authority reduction fence ordinary progress before acknowledgement.
 - Time-bounded external calls, persisted classified backoff and exhaustion, non-overlapping cycles, lease safety windows, and durable normalized progress/failure projection.
+- A provider-neutral runtime lifecycle and immutable specification, with durable attempt, usage, artifact, and cleanup records plus explicit ambiguous-start and orphan recovery decisions.
+- Exact-revision local Git materialization, immutable provenance-rich context packages, and typed versioned policy snapshots with bounded authority and budget evaluation.
+- Structured AppDeck plan-revision submission and restart-safe approval/change-request reconciliation through durable checkpoints.
+- Narrow source-control and deterministic verification contracts, including repository-owned check manifests, evidence invalidation, and risk-based independent-review requirements.
+- Validated, correlated, classified, and deduplicated operational signals whose raw text remains untrusted and grants no mutation authority.
+- An offline `diagnostics` command that exports a deterministic, conservatively redacted journal view without exposing a new work-control API.
 
 On service startup, Marina validates AppDeck's Milestone 1 capabilities, opens the journal, reloads its stable identity and project binding, registers the logical controller, reconciles unresolved acquisitions, and then protects exact run ownership and leases. The same non-overlapping control and lease cycles run periodically. Failed, blocked, and cancelled provider runs converge into guarded local terminal states; budget exhaustion blocks the exact provider run and is classified durably. Provider completion still cannot bypass Marina's verification and evidence gates.
 
-Milestone 1 enables automatic control-plane acquisition for the configured AppDeck project, capped at one active execution by the initial binding. Marina now claims ready tasks, but deliberately does **not** start or resume a runtime, check out or modify source, write artifacts, deliver changes, or create pull requests. Runtime and source-control authority remain represented by explicit `disabled://milestone-one` binding values until Milestone 2 supplies the isolated runtime lifecycle.
+Milestone 1 enables automatic control-plane acquisition for the configured AppDeck project, capped at one active execution by the initial binding. The later local foundations define and test runtime, workspace, policy, planning, context, verification, source-control, and signal behavior, but they are not enabled in the service controller. Marina deliberately does **not** start or resume a runtime, modify source, deliver changes, or create pull requests. Runtime and source-control authority remain represented by explicit `disabled://milestone-one` binding values until an isolated runtime implementation satisfies its deployment-independent and Kubernetes acceptance gates.
 
 ## Development
 
@@ -66,6 +72,14 @@ Check an AppDeck instance:
 ```bash
 ./bin/marina doctor --appdeck-url http://localhost:8080
 ```
+
+Inspect the local journal without serving internal state as an API:
+
+```bash
+./bin/marina diagnostics --journal-path ./data/marina.db > marina-diagnostics.json
+```
+
+The export omits raw signal text and free-form journal messages, redacts arbitrary payload strings, sanitizes URLs, and fingerprints provider handles. It contains operational metadata only; AppDeck remains the authoritative human-facing work-control ledger.
 
 For an authenticated AppDeck service API, set `MARINA_APPDECK_TOKEN_FILE` to the file containing the raw opaque token. Marina reads the file for every request so a projected or atomically replaced secret rotates without changing the stable installation, logical agent, or run identity. Do not put the token in an environment variable, command argument, URL, or repository file.
 
@@ -117,9 +131,17 @@ internal/appdeck/          AppDeck adapter
 internal/execution/        Durable execution model and recovery decisions
 internal/httpserver/       Marina liveness and readiness HTTP surface
 internal/journal/sqlite/   Transactional execution journal and migrations
+internal/planning/         Versioned plan and decision reconciliation
+internal/runtime/          Provider-neutral runtime lifecycle and recovery semantics
+internal/contextpack/      Immutable context manifests and trust boundaries
+internal/policy/           Versioned authority and budget evaluator
+internal/workspace/        Exact-revision local materialization
+internal/verification/     Repository checks and source-bound evidence evaluation
+internal/sourcecontrol/    Guarded provider-neutral source-control port
+internal/signals/          Validated observations and diagnostic-work boundary
 internal/reconcile/        Restart planning, ownership checks, and recovery control
 deploy/kubernetes/         Single-replica always-on deployment baseline
 docs/decisions/            Reversible architecture decisions
 ```
 
-Read the root [AGENTS.md](../AGENTS.md) and Marina [AGENTS.md](AGENTS.md) before making changes, [ARCHITECTURE.md](../ARCHITECTURE.md) for the target system boundaries, and [TODO.md](../TODO.md) for the prioritized build sequence. The initial language choice and its reversal criteria are recorded in [Marina decision 0001](docs/decisions/0001-initial-go-core.md); the single-replica SQLite decision and its PostgreSQL migration triggers are in [Marina decision 0002](docs/decisions/0002-sqlite-execution-journal.md); the cross-product service identity and rotation model is in [platform decision 0003](../docs/decisions/0003-service-authentication.md); and the lossless handoff, fencing, command, and outbox mechanics are in [platform decision 0004](../docs/decisions/0004-milestone-one-work-control-safety.md).
+Read the root [AGENTS.md](../AGENTS.md) and Marina [AGENTS.md](AGENTS.md) before making changes, [ARCHITECTURE.md](../ARCHITECTURE.md) for the target system boundaries, and [TODO.md](../TODO.md) for the prioritized build sequence. The initial language choice and its reversal criteria are recorded in [Marina decision 0001](docs/decisions/0001-initial-go-core.md); the single-replica SQLite decision and its PostgreSQL migration triggers are in [Marina decision 0002](docs/decisions/0002-sqlite-execution-journal.md); the initial typed policy representation and local provider-neutral foundations are in [Marina decision 0003](docs/decisions/0003-initial-policy-and-local-foundations.md); the cross-product service identity and rotation model is in [platform decision 0003](../docs/decisions/0003-service-authentication.md); and the lossless handoff, fencing, command, and outbox mechanics are in [platform decision 0004](../docs/decisions/0004-milestone-one-work-control-safety.md).

@@ -10,23 +10,24 @@ const (
 	ProtocolMajor        = 1
 	ProtocolMinimumMinor = 0
 
-	CapabilityProviderInfo  = "provider.info"
-	CapabilityAgentRegister = "agent.register"
-	CapabilityWorkReadyList = "work.ready.list"
-	CapabilityWorkInspect   = "work.inspect"
-	CapabilityWorkClaim     = "work.claim.atomic"
-	CapabilityLeaseRenew    = "run.lease.renew"
-	CapabilityPlanSubmit    = "run.plan.submit"
-	CapabilityRunStart      = "run.start"
-	CapabilityProgress      = "run.progress.append"
-	CapabilityRunVerify     = "run.verify"
-	CapabilityRunComplete   = "run.complete"
-	CapabilityRunBlock      = "run.block"
-	CapabilityClaimLookup   = "work.claim.lookup"
-	CapabilityAssignedRuns  = "run.assigned.list"
-	CapabilityCommandList   = "command.list"
-	CapabilityCommandAck    = "command.ack"
-	CapabilityEventAppend   = "event.append"
+	CapabilityProviderInfo    = "provider.info"
+	CapabilityAgentRegister   = "agent.register"
+	CapabilityWorkReadyList   = "work.ready.list"
+	CapabilityWorkInspect     = "work.inspect"
+	CapabilityWorkClaim       = "work.claim.atomic"
+	CapabilityLeaseRenew      = "run.lease.renew"
+	CapabilityPlanSubmit      = "run.plan.submit"
+	CapabilityRunStart        = "run.start"
+	CapabilityProgress        = "run.progress.append"
+	CapabilityRunVerify       = "run.verify"
+	CapabilityRunComplete     = "run.complete"
+	CapabilityRunBlock        = "run.block"
+	CapabilityClaimLookup     = "work.claim.lookup"
+	CapabilityAssignedRuns    = "run.assigned.list"
+	CapabilityCommandList     = "command.list"
+	CapabilityCommandAck      = "command.ack"
+	CapabilityEventAppend     = "event.append"
+	CapabilityDecisionInspect = "decision.inspect"
 )
 
 type ProviderInfo struct {
@@ -165,6 +166,80 @@ type PlanSubmission struct {
 	RequireApproval bool
 }
 
+type PlanRevisionSubmission struct {
+	IdempotencyKey       string
+	AgentID              string
+	ExpectedVersion      int64
+	FenceToken           int64
+	Plan                 string
+	ContextDigest        string
+	RiskClass            string
+	VerificationStrategy string
+	ExpectedSideEffects  []string
+	RollbackApproach     string
+	SourceRevision       string
+	PolicyVersion        string
+	RequireApproval      bool
+	DecisionExpiresAt    *time.Time
+	DecisionEvidence     string
+	EstimatedCostMinor   int64
+	Currency             string
+	WaitingConsequence   string
+	RejectingConsequence string
+}
+
+type PlanRevision struct {
+	ID                   string
+	RunID                string
+	Revision             int
+	Plan                 string
+	ContextDigest        string
+	RiskClass            string
+	VerificationStrategy string
+	ExpectedSideEffects  []string
+	RollbackApproach     string
+	SourceRevision       string
+	PolicyVersion        string
+	CreatedAt            time.Time
+}
+
+type DecisionStatus string
+
+const (
+	DecisionPending    DecisionStatus = "pending"
+	DecisionAnswered   DecisionStatus = "answered"
+	DecisionCancelled  DecisionStatus = "cancelled"
+	DecisionExpired    DecisionStatus = "expired"
+	DecisionSuperseded DecisionStatus = "superseded"
+)
+
+type Decision struct {
+	ID                   string
+	TaskID               string
+	RunID                string
+	PlanRevisionID       string
+	Question             string
+	Options              []string
+	Recommendation       string
+	RiskClass            string
+	EvidenceSummary      string
+	EstimatedCostMinor   int64
+	Currency             string
+	WaitingConsequence   string
+	RejectingConsequence string
+	Status               DecisionStatus
+	Answer               string
+	ExpiresAt            *time.Time
+	CreatedAt            time.Time
+	AnsweredAt           *time.Time
+	AnsweredBy           string
+}
+
+type PlanRevisionResult struct {
+	PlanRevision PlanRevision
+	Decision     *Decision
+}
+
 type RunBlock struct {
 	IdempotencyKey  string
 	AgentID         string
@@ -283,11 +358,18 @@ type RecoverableAcquisition interface {
 	ListAssignedRuns(context.Context, string, string, string, int) (ActiveRunPage, error)
 }
 
-// Planning submits the provider-facing plan representation for an exact run.
-// Immutable structured revisions will replace the prototype Markdown payload
-// when the planning vertical slice reaches that safety gate.
+// Planning preserves the prototype plan mutation for protocol conformance.
 type Planning interface {
 	SubmitRunPlan(context.Context, string, PlanSubmission) error
+}
+
+// VersionedPlanning submits an immutable, source/context/policy-bound plan.
+type VersionedPlanning interface {
+	SubmitPlanRevision(context.Context, string, PlanRevisionSubmission) (PlanRevisionResult, error)
+}
+
+type DecisionInspection interface {
+	GetDecision(context.Context, string) (Decision, error)
 }
 
 // RunControl protects and stops authority already bound to an exact run.

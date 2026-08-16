@@ -129,11 +129,11 @@ The Milestone 1 safety gate is complete. Marina may automatically claim control-
 
 ### Provider-neutral runtime lifecycle
 
-- [ ] [Marina] Define the runtime adapter lifecycle: start, inspect, resume, cancel, collect artifacts, and cleanup.
-- [ ] [Marina] Persist runtime-attempt ID, idempotency key, provider handle, state, heartbeat, usage, output references, deadline, and cleanup state.
-- [ ] [Marina] Specify behavior for lost start responses, duplicate starts, unsupported resume, forced cancellation, provider disappearance, and orphan discovery.
-- [ ] [Marina] Materialize and verify a pinned repository revision in an isolated workspace.
-- [ ] [Marina] Create an immutable runtime specification containing context digest, harness version, limits, credentials references, network policy, and authority fence.
+- [x] [Marina] Define the runtime adapter lifecycle: start, inspect, resume, cancel, collect artifacts, and cleanup.
+- [x] [Marina] Persist runtime-attempt ID, idempotency key, provider handle, state, heartbeat, usage, output references, deadline, and cleanup state.
+- [x] [Marina] Specify behavior for lost start responses, duplicate starts, unsupported resume, forced cancellation, provider disappearance, and orphan discovery.
+- [x] [Marina] Materialize and verify a pinned repository revision in an isolated workspace.
+- [x] [Marina] Create an immutable runtime specification containing context digest, harness version, limits, credentials references, network policy, and authority fence.
 - [ ] [Marina] Implement the first Kubernetes Job runtime adapter without exposing Kubernetes details through the public runtime contract.
 - [ ] [Marina] Run one real agent harness in an ephemeral Kubernetes Job.
 - [ ] [Marina] Apply CPU, memory, ephemeral-storage, wall-time, process, network, and filesystem limits.
@@ -167,19 +167,19 @@ The Milestone 1 safety gate is complete. Marina may automatically claim control-
 
 ### Context and implementation
 
-- [ ] [Marina] Assemble an immutable, content-addressed context package with provenance, trust, scope, freshness, and expiry labels.
-- [ ] [Marina] Include the frozen task snapshot, repository instructions, relevant architecture decisions, policy version, pinned source revision, and tool/harness versions.
-- [ ] [Marina] Treat issue text, comments, retrieved documents, logs, and tool output as untrusted inputs and add prompt-injection boundary tests.
-- [ ] [Marina] Persist decisions and unresolved state as checkpoints rather than relying on runtime conversation history.
-- [ ] [Marina] Submit a versioned plan and reconcile approval or change-request decisions through the work-control contract.
+- [x] [Marina] Assemble an immutable, content-addressed context package with provenance, trust, scope, freshness, and expiry labels.
+- [x] [Marina] Include the frozen task snapshot, repository instructions, relevant architecture decisions, policy version, pinned source revision, and tool/harness versions.
+- [x] [Marina] Treat issue text, comments, retrieved documents, logs, and tool output as untrusted inputs and add prompt-injection boundary tests.
+- [x] [Marina] Persist decisions and unresolved state as checkpoints rather than relying on runtime conversation history.
+- [x] [Marina] Submit a versioned plan and reconcile approval or change-request decisions through the work-control contract.
 - [ ] [Marina] Execute the approved plan through the runtime adapter without exceeding its frozen authority or budget.
-- [ ] [Marina] Add a narrow source-control port for branch creation, guarded writes, pull-request creation, current-head inspection, and review/CI observations.
+- [x] [Marina] Add a narrow source-control port for branch creation, guarded writes, pull-request creation, current-head inspection, and review/CI observations.
 
 ### Verification, evidence, and delivery
 
-- [ ] [Marina] Run repository-defined deterministic tests and scanners against the produced source revision.
+- [x] [Marina] Run repository-defined deterministic tests and scanners against the produced source revision.
 - [ ] [Marina] Add risk-appropriate independent review whose identity and context are distinct from the producing runtime.
-- [ ] [Marina] Invalidate evidence automatically when the source, context, plan, policy, command, or observation window no longer matches.
+- [x] [Marina] Invalidate evidence automatically when the source, context, plan, policy, command, or observation window no longer matches.
 - [x] [AppDeck] Replace the completion Markdown blob as the gate with structured evidence records containing producer, verifier, subject digest, command, outcome, provenance, freshness, URI, and digest.
 - [x] [AppDeck] Render a concise Markdown verification report from structured evidence for human readability.
 - [ ] [Joint] Define and test the minimum evidence set for a merge-ready pull request.
@@ -206,24 +206,24 @@ The Milestone 1 safety gate is complete. Marina may automatically claim control-
 - [ ] [Marina] Add canary verification and automatic rollback within explicit versioned policy.
 - [x] [AppDeck] Present environment, rollout, observation-window, rollback, and policy state without exposing provider-specific control details as the product model.
 - [ ] [Joint] Select the first production-feedback source.
-- [ ] [Marina] Validate, correlate, classify, and deduplicate signals before creating or claiming diagnostic work.
-- [ ] [Marina] Keep raw signal text untrusted and separate observation from diagnosis and mutation authority.
+- [x] [Marina] Validate, correlate, classify, and deduplicate signals before creating or claiming diagnostic work.
+- [x] [Marina] Keep raw signal text untrusted and separate observation from diagnosis and mutation authority.
 - [ ] [Joint] Turn one validated signal into bounded diagnostic work with an inspectable causal chain.
 - [ ] [Joint] Demonstrate diagnosis, remediation proposal, canary verification, rollback or confirmation, and recovery evidence.
 - [x] [AppDeck] Show the operator one continuous evidence trail from signal through decision, change, delivery, observation, and final outcome.
 
 ## Cross-cutting factory controls
 
-- [ ] [Marina] Version autonomy policy by project, change class, environment, and risk.
+- [x] [Marina] Version autonomy policy by project, change class, environment, and risk.
 - [ ] [Marina] Enforce time, attempt, token, cost, concurrency, credential-lifetime, and blast-radius budgets.
 - [ ] [Joint] Add identity, authorization, fencing, audit, and secret-redaction tests at every boundary.
-- [ ] [Marina] Add context provenance, freshness, trust, and revocation controls.
+- [x] [Marina] Add context provenance, freshness, trust, and revocation controls.
 - [ ] [Joint] Measure verified outcomes, human attention, intervention quality, retries, failures, synchronization lag, and cost.
 - [ ] [Marina] Add entropy-control loops for documentation, dependencies, architecture, and dead code.
 - [ ] [Joint] Add protocol compatibility, migration, rolling-upgrade, backup, restore, and downgrade tests.
 - [ ] [Joint] Define artifact retention, integrity verification, garbage collection, and recovery without shared filesystems.
 - [x] [AppDeck] Add deterministic export and import for tasks, plans, decisions, commands, events, artifact metadata, and evidence.
-- [ ] [Marina] Add journal inspection and redacted diagnostic export without making internal state a second work-control API.
+- [x] [Marina] Add journal inspection and redacted diagnostic export without making internal state a second work-control API.
 - [ ] [Joint] Add load and backpressure tests for ready-work polling, event outbox replay, commands, heartbeats, and SSE clients.
 - [ ] [Joint] Maintain a crash matrix that injects failure before and after every external call and durable commit in the critical path.
 - [ ] [Joint] Document operator recovery for unavailable provider, corrupt or restored storage, expired credentials, stuck cancellation, and orphan runtime.
@@ -237,7 +237,7 @@ The Milestone 1 safety gate is complete. Marina may automatically claim control-
 - [ ] Choose the first artifact-store implementation, backup method, and retention policy.
 - [ ] Choose the first real agent harness for the Kubernetes runtime.
 - [ ] Choose the source-control credential broker or installation mechanism.
-- [ ] Choose the initial policy representation and evaluator.
+- [x] Choose the initial policy representation and evaluator; record the typed, versioned snapshot decision in [Marina decision 0003](marina/docs/decisions/0003-initial-policy-and-local-foundations.md).
 - [ ] Choose the runtime that later validates portability.
 - [ ] Choose the first production-feedback source.
 - [ ] Define actions that always require a human.

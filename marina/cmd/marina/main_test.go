@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"net/http"
 	"os"
@@ -10,6 +11,25 @@ import (
 	"testing"
 	"time"
 )
+
+func TestDiagnosticsCommandExportsRedactedJournalView(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	path := filepath.Join(t.TempDir(), "marina.db")
+	if code := run([]string{"diagnostics", "--journal-path", path}, &stdout, &stderr); code != 0 {
+		t.Fatalf("exit code = %d, stderr = %q", code, stderr.String())
+	}
+	var exported struct {
+		SchemaVersion string         `json:"schema_version"`
+		Counts        map[string]int `json:"counts"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &exported); err != nil {
+		t.Fatalf("decode diagnostics: %v\n%s", err, stdout.String())
+	}
+	if exported.SchemaVersion != "marina-diagnostics/v1" || exported.Counts["executions"] != 0 {
+		t.Fatalf("unexpected diagnostics: %#v", exported)
+	}
+}
 
 func TestVersionCommand(t *testing.T) {
 	previousVersion := version

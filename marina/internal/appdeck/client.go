@@ -69,6 +69,8 @@ var (
 	_ workcontrol.WorkInspection      = (*Client)(nil)
 	_ workcontrol.Acquisition         = (*Client)(nil)
 	_ workcontrol.Planning            = (*Client)(nil)
+	_ workcontrol.VersionedPlanning   = (*Client)(nil)
+	_ workcontrol.DecisionInspection  = (*Client)(nil)
 	_ workcontrol.RunControl          = (*Client)(nil)
 	_ workcontrol.EventPublisher      = (*Client)(nil)
 )
@@ -311,6 +313,43 @@ func (c *Client) SubmitRunPlan(
 	return c.doIdempotent(
 		ctx, http.MethodPost, "/api/v1/runs/"+runID+"/plan", submission.IdempotencyKey, request, nil,
 	)
+}
+
+func (c *Client) SubmitPlanRevision(
+	ctx context.Context,
+	runID string,
+	submission workcontrol.PlanRevisionSubmission,
+) (workcontrol.PlanRevisionResult, error) {
+	if err := validatePathSegment("run ID", runID); err != nil {
+		return workcontrol.PlanRevisionResult{}, err
+	}
+	request, err := newPlanRevisionRequest(submission)
+	if err != nil {
+		return workcontrol.PlanRevisionResult{}, err
+	}
+	var response planRevisionResponseDTO
+	if err := c.doIdempotent(
+		ctx, http.MethodPost, "/api/v1/runs/"+runID+"/plan", submission.IdempotencyKey, request, &response,
+	); err != nil {
+		return workcontrol.PlanRevisionResult{}, err
+	}
+	result := workcontrol.PlanRevisionResult{PlanRevision: response.PlanRevision.toDomain()}
+	if response.Decision != nil {
+		decision := response.Decision.toDomain()
+		result.Decision = &decision
+	}
+	return result, nil
+}
+
+func (c *Client) GetDecision(ctx context.Context, decisionID string) (workcontrol.Decision, error) {
+	if err := validatePathSegment("decision ID", decisionID); err != nil {
+		return workcontrol.Decision{}, err
+	}
+	var response decisionDTO
+	if err := c.do(ctx, http.MethodGet, "/api/v1/decisions/"+decisionID, nil, &response); err != nil {
+		return workcontrol.Decision{}, err
+	}
+	return response.toDomain(), nil
 }
 
 func (c *Client) ReportRunProgress(
@@ -678,6 +717,162 @@ type planRequest struct {
 	runGuardRequest
 	Plan            string `json:"plan"`
 	RequireApproval bool   `json:"require_approval"`
+}
+
+type planRevisionRequest struct {
+	runGuardRequest
+	Plan                 string   `json:"plan"`
+	ContextDigest        string   `json:"context_digest"`
+	RiskClass            string   `json:"risk_class"`
+	VerificationStrategy string   `json:"verification_strategy"`
+	ExpectedSideEffects  []string `json:"expected_side_effects"`
+	RollbackApproach     string   `json:"rollback_approach"`
+	SourceRevision       string   `json:"source_revision"`
+	PolicyVersion        string   `json:"policy_version"`
+	RequireApproval      bool     `json:"require_approval"`
+	DecisionExpiresAt    int64    `json:"decision_expires_at,omitempty"`
+	DecisionEvidence     string   `json:"decision_evidence,omitempty"`
+	EstimatedCostMinor   int64    `json:"estimated_cost_minor,omitempty"`
+	Currency             string   `json:"currency,omitempty"`
+	WaitingConsequence   string   `json:"waiting_consequence,omitempty"`
+	RejectingConsequence string   `json:"rejecting_consequence,omitempty"`
+}
+
+func newPlanRevisionRequest(submission workcontrol.PlanRevisionSubmission) (planRevisionRequest, error) {
+	submission.Plan = strings.TrimSpace(submission.Plan)
+	submission.ContextDigest = strings.TrimSpace(submission.ContextDigest)
+	submission.RiskClass = strings.TrimSpace(submission.RiskClass)
+	submission.VerificationStrategy = strings.TrimSpace(submission.VerificationStrategy)
+	submission.RollbackApproach = strings.TrimSpace(submission.RollbackApproach)
+	submission.SourceRevision = strings.TrimSpace(submission.SourceRevision)
+	submission.PolicyVersion = strings.TrimSpace(submission.PolicyVersion)
+	submission.AgentID = strings.TrimSpace(submission.AgentID)
+	if submission.AgentID == "" || submission.ExpectedVersion < 1 || submission.FenceToken < 1 {
+		return planRevisionRequest{}, errors.New("agent ID, expected version, and fence token are required")
+	}
+	if submission.Plan == "" || !sha256Digest(submission.ContextDigest) || submission.VerificationStrategy == "" ||
+		submission.RollbackApproach == "" || !fullCommitRevision(submission.SourceRevision) || submission.PolicyVersion == "" {
+		return planRevisionRequest{}, errors.New("plan, context digest, verification strategy, rollback approach, source revision, and policy version are required")
+	}
+	switch submission.RiskClass {
+	case "low", "medium", "high", "critical":
+	default:
+		return planRevisionRequest{}, errors.New("risk class must be low, medium, high, or critical")
+	}
+	if submission.EstimatedCostMinor < 0 {
+		return planRevisionRequest{}, errors.New("estimated cost cannot be negative")
+	}
+	if submission.Currency != "" && len(strings.TrimSpace(submission.Currency)) != 3 {
+		return planRevisionRequest{}, errors.New("currency must contain three characters")
+	}
+	expectedSideEffects := make([]string, 0, len(submission.ExpectedSideEffects))
+	for _, effect := range submission.ExpectedSideEffects {
+		effect = strings.TrimSpace(effect)
+		if effect == "" {
+			return planRevisionRequest{}, errors.New("expected side effects cannot contain empty values")
+		}
+		expectedSideEffects = append(expectedSideEffects, effect)
+	}
+	request := planRevisionRequest{
+		runGuardRequest: runGuardRequest{AgentID: submission.AgentID, ExpectedVersion: submission.ExpectedVersion, FenceToken: submission.FenceToken},
+		Plan:            submission.Plan, ContextDigest: submission.ContextDigest, RiskClass: submission.RiskClass,
+		VerificationStrategy: submission.VerificationStrategy, ExpectedSideEffects: expectedSideEffects,
+		RollbackApproach: submission.RollbackApproach, SourceRevision: submission.SourceRevision,
+		PolicyVersion: submission.PolicyVersion, RequireApproval: submission.RequireApproval,
+		DecisionEvidence: strings.TrimSpace(submission.DecisionEvidence), EstimatedCostMinor: submission.EstimatedCostMinor,
+		Currency: strings.ToUpper(strings.TrimSpace(submission.Currency)), WaitingConsequence: strings.TrimSpace(submission.WaitingConsequence),
+		RejectingConsequence: strings.TrimSpace(submission.RejectingConsequence),
+	}
+	if submission.DecisionExpiresAt != nil {
+		if submission.DecisionExpiresAt.IsZero() {
+			return planRevisionRequest{}, errors.New("decision expiry cannot be zero")
+		}
+		request.DecisionExpiresAt = submission.DecisionExpiresAt.UnixMilli()
+	}
+	return request, nil
+}
+
+func sha256Digest(value string) bool {
+	if !strings.HasPrefix(value, "sha256:") || len(value) != len("sha256:")+64 {
+		return false
+	}
+	_, err := hex.DecodeString(strings.TrimPrefix(value, "sha256:"))
+	return err == nil
+}
+
+func fullCommitRevision(value string) bool {
+	if len(value) != 40 && len(value) != 64 {
+		return false
+	}
+	_, err := hex.DecodeString(value)
+	return err == nil
+}
+
+type planRevisionResponseDTO struct {
+	PlanRevision planRevisionDTO `json:"plan_revision"`
+	Decision     *decisionDTO    `json:"decision"`
+}
+
+type planRevisionDTO struct {
+	ID                   string   `json:"id"`
+	RunID                string   `json:"run_id"`
+	Revision             int      `json:"revision"`
+	Plan                 string   `json:"plan"`
+	ContextDigest        string   `json:"context_digest"`
+	RiskClass            string   `json:"risk_class"`
+	VerificationStrategy string   `json:"verification_strategy"`
+	ExpectedSideEffects  []string `json:"expected_side_effects"`
+	RollbackApproach     string   `json:"rollback_approach"`
+	SourceRevision       string   `json:"source_revision"`
+	PolicyVersion        string   `json:"policy_version"`
+	CreatedAt            int64    `json:"created_at"`
+}
+
+func (plan planRevisionDTO) toDomain() workcontrol.PlanRevision {
+	return workcontrol.PlanRevision{
+		ID: plan.ID, RunID: plan.RunID, Revision: plan.Revision, Plan: plan.Plan,
+		ContextDigest: plan.ContextDigest, RiskClass: plan.RiskClass,
+		VerificationStrategy: plan.VerificationStrategy, ExpectedSideEffects: append([]string(nil), plan.ExpectedSideEffects...),
+		RollbackApproach: plan.RollbackApproach, SourceRevision: plan.SourceRevision,
+		PolicyVersion: plan.PolicyVersion, CreatedAt: fromUnixMilli(plan.CreatedAt),
+	}
+}
+
+type decisionDTO struct {
+	ID                   string   `json:"id"`
+	TaskID               string   `json:"task_id"`
+	RunID                *string  `json:"run_id"`
+	PlanRevisionID       string   `json:"plan_revision_id"`
+	Question             string   `json:"question"`
+	Options              []string `json:"options"`
+	Recommendation       string   `json:"recommendation"`
+	RiskClass            string   `json:"risk_class"`
+	EvidenceSummary      string   `json:"evidence_summary"`
+	EstimatedCostMinor   int64    `json:"estimated_cost_minor"`
+	Currency             string   `json:"currency"`
+	WaitingConsequence   string   `json:"waiting_consequence"`
+	RejectingConsequence string   `json:"rejecting_consequence"`
+	Status               string   `json:"status"`
+	Answer               string   `json:"answer"`
+	ExpiresAt            *int64   `json:"expires_at"`
+	CreatedAt            int64    `json:"created_at"`
+	AnsweredAt           *int64   `json:"answered_at"`
+	AnsweredBy           string   `json:"answered_by"`
+}
+
+func (decision decisionDTO) toDomain() workcontrol.Decision {
+	runID := ""
+	if decision.RunID != nil {
+		runID = *decision.RunID
+	}
+	return workcontrol.Decision{
+		ID: decision.ID, TaskID: decision.TaskID, RunID: runID, PlanRevisionID: decision.PlanRevisionID,
+		Question: decision.Question, Options: append([]string(nil), decision.Options...), Recommendation: decision.Recommendation,
+		RiskClass: decision.RiskClass, EvidenceSummary: decision.EvidenceSummary, EstimatedCostMinor: decision.EstimatedCostMinor,
+		Currency: decision.Currency, WaitingConsequence: decision.WaitingConsequence, RejectingConsequence: decision.RejectingConsequence,
+		Status: workcontrol.DecisionStatus(decision.Status), Answer: decision.Answer, ExpiresAt: optionalUnixMilli(decision.ExpiresAt),
+		CreatedAt: fromUnixMilli(decision.CreatedAt), AnsweredAt: optionalUnixMilli(decision.AnsweredAt), AnsweredBy: decision.AnsweredBy,
+	}
 }
 
 type blockRequest struct {

@@ -311,6 +311,82 @@ func TestClientReadsWorkDetailAndRenewsExistingRun(t *testing.T) {
 	}
 }
 
+func TestClientSubmitsStructuredPlanRevisionAndInspectsDecision(t *testing.T) {
+	now := time.Date(2026, time.August, 16, 9, 0, 0, 0, time.UTC)
+	expiresAt := now.Add(30 * time.Minute)
+	decisionRunID := "run-1"
+	httpClient := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		switch request.Method + " " + request.URL.Path {
+		case "POST /api/v1/runs/run-1/plan":
+			if key := request.Header.Get("Idempotency-Key"); key != "plan-run-1-v1" {
+				t.Errorf("plan Idempotency-Key = %q", key)
+			}
+			var input planRevisionRequest
+			if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
+				return nil, err
+			}
+			if input.AgentID != "marina-1" || input.ExpectedVersion != 7 || input.FenceToken != 3 ||
+				input.Plan != "Implement the bounded change." || input.ContextDigest != "sha256:"+strings.Repeat("a", 64) ||
+				input.RiskClass != "high" || input.SourceRevision != strings.Repeat("b", 40) ||
+				input.PolicyVersion != "policy-7" || input.DecisionExpiresAt != expiresAt.UnixMilli() {
+				t.Errorf("unexpected plan request: %#v", input)
+			}
+			return jsonResponse(http.StatusOK, planRevisionResponseDTO{
+				PlanRevision: planRevisionDTO{
+					ID: "plan-1", RunID: "run-1", Revision: 1,
+					Plan: "Implement the bounded change.", ContextDigest: "sha256:" + strings.Repeat("a", 64),
+					RiskClass: "high", VerificationStrategy: "go test ./...",
+					ExpectedSideEffects: []string{"repository files change"}, RollbackApproach: "revert commit",
+					SourceRevision: strings.Repeat("b", 40), PolicyVersion: "policy-7", CreatedAt: now.UnixMilli(),
+				},
+				Decision: &decisionDTO{
+					ID: "decision-1", TaskID: "task-1", RunID: &decisionRunID, PlanRevisionID: "plan-1",
+					Question: "Approve this plan?", Options: []string{"Approve plan", "Request changes"},
+					Recommendation: "Approve plan", RiskClass: "high", Status: "pending",
+					ExpiresAt: pointerTo(expiresAt.UnixMilli()), CreatedAt: now.UnixMilli(),
+				},
+			}), nil
+		case "GET /api/v1/decisions/decision-1":
+			return jsonResponse(http.StatusOK, decisionDTO{
+				ID: "decision-1", TaskID: "task-1", RunID: &decisionRunID, PlanRevisionID: "plan-1",
+				Question: "Approve this plan?", Options: []string{"Approve plan", "Request changes"},
+				Recommendation: "Approve plan", RiskClass: "high", Status: "answered", Answer: "Approve plan",
+				ExpiresAt: pointerTo(expiresAt.UnixMilli()), CreatedAt: now.UnixMilli(), AnsweredAt: pointerTo(now.Add(time.Minute).UnixMilli()),
+			}), nil
+		default:
+			return jsonResponse(http.StatusNotFound, map[string]string{"error": "unexpected route"}), nil
+		}
+	})}
+	client, err := New("http://appdeck.test", httpClient)
+	if err != nil {
+		t.Fatalf("create client: %v", err)
+	}
+
+	result, err := client.SubmitPlanRevision(context.Background(), "run-1", workcontrol.PlanRevisionSubmission{
+		IdempotencyKey: "plan-run-1-v1", AgentID: "marina-1", ExpectedVersion: 7, FenceToken: 3,
+		Plan: " Implement the bounded change. ", ContextDigest: "sha256:" + strings.Repeat("a", 64), RiskClass: "high",
+		VerificationStrategy: "go test ./...", ExpectedSideEffects: []string{"repository files change"},
+		RollbackApproach: "revert commit", SourceRevision: strings.Repeat("b", 40), PolicyVersion: "policy-7",
+		RequireApproval: true, DecisionExpiresAt: &expiresAt, DecisionEvidence: "high-risk change",
+		EstimatedCostMinor: 250, Currency: "EUR", WaitingConsequence: "work remains paused",
+		RejectingConsequence: "return to planning",
+	})
+	if err != nil {
+		t.Fatalf("submit structured plan: %v", err)
+	}
+	if result.PlanRevision.ID != "plan-1" || result.PlanRevision.Revision != 1 || result.Decision == nil || result.Decision.ID != "decision-1" {
+		t.Fatalf("unexpected plan result: %#v", result)
+	}
+
+	decision, err := client.GetDecision(context.Background(), "decision-1")
+	if err != nil {
+		t.Fatalf("inspect decision: %v", err)
+	}
+	if decision.Status != workcontrol.DecisionAnswered || decision.Answer != "Approve plan" || decision.AnsweredAt == nil {
+		t.Fatalf("unexpected decision: %#v", decision)
+	}
+}
+
 func TestClientPublishesProgressAndBlocksRun(t *testing.T) {
 	calls := make([]string, 0, 2)
 	httpClient := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
@@ -385,6 +461,8 @@ func jsonResponse(status int, payload any) *http.Response {
 	}
 }
 
+func pointerTo[T any](value T) *T { return &value }
+
 func compatibleProviderInfo(now time.Time) providerInfoDTO {
 	return providerInfoDTO{
 		Provider:        "appdeck",
@@ -407,6 +485,7 @@ func compatibleProviderInfo(now time.Time) providerInfoDTO {
 			workcontrol.CapabilityCommandList,
 			workcontrol.CapabilityCommandAck,
 			workcontrol.CapabilityEventAppend,
+			workcontrol.CapabilityDecisionInspect,
 		},
 		ServerTime: now.UnixMilli(),
 		Ready:      true,

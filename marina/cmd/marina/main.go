@@ -37,6 +37,8 @@ func run(arguments []string, stdout io.Writer, stderr io.Writer) int {
 	}
 
 	switch arguments[0] {
+	case "diagnostics":
+		return runDiagnostics(arguments[1:], stdout, stderr)
 	case "doctor":
 		return runDoctor(arguments[1:], stdout, stderr)
 	case "serve":
@@ -52,6 +54,41 @@ func run(arguments []string, stdout io.Writer, stderr io.Writer) int {
 		writeUsage(stderr)
 		return 2
 	}
+}
+
+func runDiagnostics(arguments []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("diagnostics", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	journalPath := flags.String(
+		"journal-path",
+		envOrDefault("MARINA_JOURNAL_PATH", filepath.Join("data", "marina.db")),
+		"SQLite execution journal path",
+	)
+	if err := flags.Parse(arguments); err != nil {
+		return 2
+	}
+	if flags.NArg() != 0 {
+		_, _ = fmt.Fprintln(stderr, "diagnostics does not accept positional arguments")
+		return 2
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	journal, err := sqlite.Open(ctx, *journalPath)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "open execution journal: %v\n", err)
+		return 1
+	}
+	defer journal.Close()
+	payload, err := journal.ExportDiagnostics(ctx)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "export diagnostics: %v\n", err)
+		return 1
+	}
+	if _, err := stdout.Write(payload); err != nil {
+		_, _ = fmt.Fprintf(stderr, "write diagnostics: %v\n", err)
+		return 1
+	}
+	return 0
 }
 
 func runDoctor(arguments []string, stdout io.Writer, stderr io.Writer) int {
@@ -409,6 +446,7 @@ func writeUsage(writer io.Writer) {
 	_, _ = fmt.Fprintln(writer, "Usage: marina <command> [options]")
 	_, _ = fmt.Fprintln(writer)
 	_, _ = fmt.Fprintln(writer, "Commands:")
+	_, _ = fmt.Fprintln(writer, "  diagnostics  Export a deterministic, redacted view of the local journal")
 	_, _ = fmt.Fprintln(writer, "  doctor   Check the configured work-control dependency")
 	_, _ = fmt.Fprintln(writer, "  serve    Run Marina's HTTP liveness and readiness service")
 	_, _ = fmt.Fprintln(writer, "  version  Print the Marina version")
