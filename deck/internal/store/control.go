@@ -248,7 +248,13 @@ func (s *Store) AppendProjectedEvent(ctx context.Context, mutation Mutation, run
 	}
 	if replayed {
 		var original struct{}
-		return decodeIdempotencyResult(replayResult, &original)
+		if err := decodeIdempotencyResult(replayResult, &original); err != nil {
+			return err
+		}
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+		return s.RecordProjectionAccepted(ctx, projectID, projected.Producer, projected.OccurredAt)
 	}
 	run, err := getRunTx(ctx, tx, runID)
 	if err != nil {
@@ -271,7 +277,10 @@ func (s *Store) AppendProjectedEvent(ctx context.Context, mutation Mutation, run
 		if err := finishIdempotentMutation(ctx, tx, attempt, struct{}{}); err != nil {
 			return err
 		}
-		return tx.Commit()
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+		return s.RecordProjectionAccepted(ctx, projectID, projected.Producer, projected.OccurredAt)
 	}
 	if !errors.Is(existingErr, sql.ErrNoRows) {
 		return fmt.Errorf("inspect projected event replay: %w", existingErr)
@@ -321,7 +330,7 @@ func (s *Store) AppendProjectedEvent(ctx context.Context, mutation Mutation, run
 		return fmt.Errorf("commit projected event: %w", err)
 	}
 	s.publish(event)
-	return nil
+	return s.RecordProjectionAccepted(ctx, projectID, projected.Producer, projected.OccurredAt)
 }
 
 func (s *Store) LookupClaim(ctx context.Context, projectID, actorID, key string) (domain.Run, error) {
@@ -384,8 +393,11 @@ func (s *Store) ListAssignedRuns(ctx context.Context, projectID, agentID, cursor
 			r.id, r.task_id, r.agent_id, r.status, r.plan, r.result_summary,
 			r.lease_expires_at, r.started_at, r.finished_at, r.updated_at,
 			r.version, r.fence_token, r.task_version, r.acceptance_criteria_digest,
+			r.active_plan_revision_id,
 			t.id, t.project_id, t.title, t.description, t.acceptance_criteria, t.status,
-			t.priority, t.budget_minutes, t.assigned_agent_id, t.version, t.created_at, t.updated_at
+			t.priority, t.budget_minutes, t.deadline_at, t.max_attempts, t.max_tokens,
+			t.max_cost_minor, t.currency, t.max_concurrency, t.authority_json,
+			t.assigned_agent_id, t.version, t.created_at, t.updated_at
 		FROM runs r JOIN tasks t ON t.id = r.task_id
 		WHERE t.project_id = ? AND r.agent_id = ?
 		  AND r.status IN ('planning', 'waiting_decision', 'running', 'verifying')
@@ -419,15 +431,21 @@ func (s *Store) ListAssignedRuns(ctx context.Context, projectID, agentID, cursor
 func scanActiveRun(scanner interface{ Scan(...any) error }) (domain.ActiveRun, error) {
 	var item domain.ActiveRun
 	var leaseExpiresAt, finishedAt sql.NullInt64
-	var assignedAgentID sql.NullString
+	var assignedAgentID, activePlanRevisionID sql.NullString
+	var deadlineAt sql.NullInt64
+	var authority string
 	err := scanner.Scan(
 		&item.Run.ID, &item.Run.TaskID, &item.Run.AgentID, &item.Run.Status,
 		&item.Run.Plan, &item.Run.ResultSummary, &leaseExpiresAt, &item.Run.StartedAt,
 		&finishedAt, &item.Run.UpdatedAt, &item.Run.Version, &item.Run.FenceToken,
 		&item.Run.TaskVersion, &item.Run.AcceptanceCriteriaDigest,
+		&activePlanRevisionID,
 		&item.Task.ID, &item.Task.ProjectID, &item.Task.Title, &item.Task.Description,
 		&item.Task.AcceptanceCriteria, &item.Task.Status, &item.Task.Priority,
-		&item.Task.BudgetMinutes, &assignedAgentID, &item.Task.Version,
+		&item.Task.BudgetMinutes, &deadlineAt, &item.Task.Budget.MaxAttempts,
+		&item.Task.Budget.MaxTokens, &item.Task.Budget.MaxCostMinor,
+		&item.Task.Budget.Currency, &item.Task.Budget.MaxConcurrency, &authority,
+		&assignedAgentID, &item.Task.Version,
 		&item.Task.CreatedAt, &item.Task.UpdatedAt,
 	)
 	if err != nil {
@@ -445,5 +463,15 @@ func scanActiveRun(scanner interface{ Scan(...any) error }) (domain.ActiveRun, e
 		value := assignedAgentID.String
 		item.Task.AssignedAgentID = &value
 	}
+	if activePlanRevisionID.Valid {
+		value := activePlanRevisionID.String
+		item.Run.ActivePlanRevisionID = &value
+	}
+	item.Task.Budget.TimeMinutes = item.Task.BudgetMinutes
+	if deadlineAt.Valid {
+		value := deadlineAt.Int64
+		item.Task.Budget.DeadlineAt = &value
+	}
+	item.Task.Budget.Authority = unmarshalStrings(authority)
 	return item, nil
 }

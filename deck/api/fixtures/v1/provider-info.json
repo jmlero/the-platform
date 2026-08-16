@@ -3,6 +3,9 @@
   "protocol_version": "1.0",
   "capabilities": [
     "agent.register",
+    "channel.list",
+    "channel.message.append",
+    "channel.message.list",
     "command.ack",
     "command.list",
     "decision.answer",
@@ -11,6 +14,8 @@
     "event.append",
     "event.list",
     "event.stream",
+    "evidence.record",
+    "operation.report",
     "provider.info",
     "run.assigned.list",
     "run.block",

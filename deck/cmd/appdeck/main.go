@@ -46,7 +46,7 @@ func main() {
 	}
 	go reapExpiredLeases(ctx, appStore, logger)
 
-	httpOptions := make([]httpapi.Option, 0, 1)
+	httpOptions := make([]httpapi.Option, 0, 3)
 	serviceAuthFile := strings.TrimSpace(os.Getenv("APPDECK_SERVICE_AUTH_FILE"))
 	if serviceAuthFile != "" {
 		authorizer, err := httpapi.NewFileServiceAuthorizer(serviceAuthFile)
@@ -55,6 +55,19 @@ func main() {
 			os.Exit(1)
 		}
 		httpOptions = append(httpOptions, httpapi.WithServiceAuthorizer(authorizer))
+	}
+	operatorAuthFile := strings.TrimSpace(os.Getenv("APPDECK_OPERATOR_AUTH_FILE"))
+	if operatorAuthFile != "" {
+		authenticator, err := httpapi.NewFileOperatorAuthenticator(operatorAuthFile)
+		if err != nil {
+			logger.Error("load operator authentication policy", "error", err)
+			os.Exit(1)
+		}
+		httpOptions = append(
+			httpOptions,
+			httpapi.WithOperatorAuthenticator(authenticator),
+			httpapi.WithSecureOperatorCookies(envBool("APPDECK_OPERATOR_COOKIE_SECURE", true)),
+		)
 	}
 
 	api := httpapi.New(appStore, logger, httpOptions...).Handler()
@@ -80,6 +93,7 @@ func main() {
 			"database", databasePath,
 			"demo_agent", demoEnabled,
 			"service_auth", serviceAuthFile != "",
+			"operator_auth", operatorAuthFile != "",
 		)
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Error("serve AppDeck", "error", err)

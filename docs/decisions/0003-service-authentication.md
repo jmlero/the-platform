@@ -42,7 +42,7 @@ Use scoped opaque Bearer credentials for the initial Marina-to-AppDeck mechanism
 - The authenticated service identity is distinct from Marina's logical agent and runtime-attempt identities. Later guarded run mutations must still verify the logical agent, resource version, and lease fence.
 - Bearer credentials require a protected transport. Outside single-host loopback, use TLS or an authenticated encrypted service mesh. A network policy alone does not make plaintext credentials acceptable for an exposed installation.
 
-AppDeck's current local operator routes remain unauthenticated and separate from the service-authenticated paths. They are for trusted local use only and must not be exposed through always-on ingress until human sessions are implemented.
+AppDeck's operator routes use the distinct human-session mechanism recorded in [decision 0005](0005-operator-authentication.md) when it is configured. Marina service credentials never authenticate a human session.
 
 ## Rotation procedure
 
@@ -59,7 +59,7 @@ An authorization failure during a non-atomic update is safe: Marina performs no 
 - The first service identity and authorization model are provider-neutral and require no new dependency.
 - A leaked token remains a Bearer credential until revoked, so transport protection, narrow scopes, file permissions, rotation, and redacted diagnostics are mandatory.
 - AppDeck policy distribution and Marina secret distribution remain separate deployment responsibilities. The repository contains neither token values nor usable fingerprints.
-- Human authentication, run idempotency, resource versions, and fence tokens remain required safety layers; this decision does not replace them.
+- Human authentication, run idempotency, resource versions, and fence tokens are separate safety layers; this decision does not replace them.
 
 ## Replacement criteria
 

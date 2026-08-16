@@ -12,12 +12,16 @@ import (
 
 const taskColumns = `
 	id, project_id, title, description, acceptance_criteria, status, priority,
-	budget_minutes, assigned_agent_id, version, created_at, updated_at
+	budget_minutes, deadline_at, max_attempts, max_tokens, max_cost_minor,
+	currency, max_concurrency, authority_json,
+	assigned_agent_id, version, created_at, updated_at
 `
 
 func scanTask(scanner interface{ Scan(...any) error }) (domain.Task, error) {
 	var task domain.Task
 	var assignedAgentID sql.NullString
+	var deadlineAt sql.NullInt64
+	var authority string
 	if err := scanner.Scan(
 		&task.ID,
 		&task.ProjectID,
@@ -27,6 +31,13 @@ func scanTask(scanner interface{ Scan(...any) error }) (domain.Task, error) {
 		&task.Status,
 		&task.Priority,
 		&task.BudgetMinutes,
+		&deadlineAt,
+		&task.Budget.MaxAttempts,
+		&task.Budget.MaxTokens,
+		&task.Budget.MaxCostMinor,
+		&task.Budget.Currency,
+		&task.Budget.MaxConcurrency,
+		&authority,
 		&assignedAgentID,
 		&task.Version,
 		&task.CreatedAt,
@@ -34,6 +45,12 @@ func scanTask(scanner interface{ Scan(...any) error }) (domain.Task, error) {
 	); err != nil {
 		return domain.Task{}, err
 	}
+	task.Budget.TimeMinutes = task.BudgetMinutes
+	if deadlineAt.Valid {
+		value := deadlineAt.Int64
+		task.Budget.DeadlineAt = &value
+	}
+	task.Budget.Authority = unmarshalStrings(authority)
 	if assignedAgentID.Valid {
 		task.AssignedAgentID = stringPtr(assignedAgentID.String)
 	}
@@ -53,9 +70,16 @@ func validateTaskInput(input domain.CreateTaskInput) (domain.CreateTaskInput, er
 	if input.Priority == "" {
 		input.Priority = "medium"
 	}
-	if input.BudgetMinutes <= 0 {
-		input.BudgetMinutes = 30
+	budget := domain.Budget{TimeMinutes: input.BudgetMinutes}
+	if input.Budget != nil {
+		budget = *input.Budget
 	}
+	budget, err := normalizeBudget(budget, input.BudgetMinutes)
+	if err != nil {
+		return input, err
+	}
+	input.BudgetMinutes = budget.TimeMinutes
+	input.Budget = &budget
 	if input.Title == "" {
 		return input, fmt.Errorf("title is required: %w", domain.ErrInvalidInput)
 	}
@@ -66,6 +90,32 @@ func validateTaskInput(input domain.CreateTaskInput) (domain.CreateTaskInput, er
 		return input, fmt.Errorf("unknown priority %q: %w", input.Priority, domain.ErrInvalidInput)
 	}
 	return input, nil
+}
+
+func normalizeBudget(budget domain.Budget, legacyMinutes int) (domain.Budget, error) {
+	if budget.TimeMinutes <= 0 {
+		budget.TimeMinutes = legacyMinutes
+	}
+	if budget.TimeMinutes <= 0 {
+		budget.TimeMinutes = 30
+	}
+	if budget.MaxAttempts <= 0 {
+		budget.MaxAttempts = 1
+	}
+	if budget.Currency == "" {
+		budget.Currency = "USD"
+	}
+	budget.Currency = strings.ToUpper(strings.TrimSpace(budget.Currency))
+	if budget.MaxConcurrency <= 0 {
+		budget.MaxConcurrency = 1
+	}
+	if budget.Authority == nil {
+		budget.Authority = []string{}
+	}
+	if len(budget.Currency) != 3 || budget.MaxTokens < 0 || budget.MaxCostMinor < 0 {
+		return budget, fmt.Errorf("invalid structured budget: %w", domain.ErrInvalidInput)
+	}
+	return budget, nil
 }
 
 func validPriority(value string) bool {
@@ -101,6 +151,8 @@ func (s *Store) CreateTask(ctx context.Context, input domain.CreateTaskInput) (d
 		Status:             validated.Status,
 		Priority:           validated.Priority,
 		BudgetMinutes:      validated.BudgetMinutes,
+		Budget:             *validated.Budget,
+		DisplayState:       strings.ReplaceAll(validated.Status, "_", "-"),
 		Version:            1,
 		CreatedAt:          now,
 		UpdatedAt:          now,
@@ -114,8 +166,10 @@ func (s *Store) CreateTask(ctx context.Context, input domain.CreateTaskInput) (d
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO tasks (
 			id, project_id, title, description, acceptance_criteria, status,
-			priority, budget_minutes, version, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			priority, budget_minutes, deadline_at, max_attempts, max_tokens,
+			max_cost_minor, currency, max_concurrency, authority_json,
+			version, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		task.ID,
 		task.ProjectID,
@@ -125,6 +179,13 @@ func (s *Store) CreateTask(ctx context.Context, input domain.CreateTaskInput) (d
 		task.Status,
 		task.Priority,
 		task.BudgetMinutes,
+		nullableInt64(task.Budget.DeadlineAt),
+		task.Budget.MaxAttempts,
+		task.Budget.MaxTokens,
+		task.Budget.MaxCostMinor,
+		task.Budget.Currency,
+		task.Budget.MaxConcurrency,
+		marshalJSON(task.Budget.Authority),
 		task.Version,
 		task.CreatedAt,
 		task.UpdatedAt,
@@ -175,6 +236,24 @@ func (s *Store) ListTasks(ctx context.Context) ([]domain.Task, error) {
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate tasks: %w", err)
 	}
+	if err := rows.Close(); err != nil {
+		return nil, fmt.Errorf("close tasks: %w", err)
+	}
+	providers := make(map[string]domain.ProviderStatus)
+	for index := range tasks {
+		provider, ok := providers[tasks[index].ProjectID]
+		if !ok {
+			provider, err = s.GetProviderStatus(ctx, tasks[index].ProjectID)
+			if err != nil {
+				return nil, err
+			}
+			providers[tasks[index].ProjectID] = provider
+		}
+		tasks[index].DisplayState, err = s.taskDisplayStateSummary(ctx, tasks[index], provider)
+		if err != nil {
+			return nil, err
+		}
+	}
 	return tasks, nil
 }
 
@@ -185,7 +264,41 @@ func (s *Store) GetTask(ctx context.Context, id string) (domain.Task, error) {
 	if err != nil {
 		return domain.Task{}, normalizeStoreError(err)
 	}
+	provider, err := s.GetProviderStatus(ctx, task.ProjectID)
+	if err != nil {
+		return domain.Task{}, err
+	}
+	task.DisplayState, err = s.taskDisplayStateSummary(ctx, task, provider)
+	if err != nil {
+		return domain.Task{}, err
+	}
 	return task, nil
+}
+
+func (s *Store) taskDisplayStateSummary(ctx context.Context, task domain.Task, provider domain.ProviderStatus) (string, error) {
+	commands := make([]domain.Command, 0, 1)
+	var retryCount int
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM commands c JOIN runs r ON r.id = c.run_id
+		WHERE r.task_id = ? AND c.type = 'retry' AND c.status IN ('pending', 'acknowledged')
+	`, task.ID).Scan(&retryCount); err != nil {
+		return "", fmt.Errorf("inspect retry state: %w", err)
+	}
+	if retryCount > 0 {
+		commands = append(commands, domain.Command{Type: domain.CommandRetry, Status: "pending"})
+	}
+	evidence := make([]domain.EvidenceRecord, 0, 1)
+	var staleEvidenceCount int
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM evidence_records
+		WHERE task_id = ? AND admission_status IN ('stale', 'rejected')
+	`, task.ID).Scan(&staleEvidenceCount); err != nil {
+		return "", fmt.Errorf("inspect stale evidence: %w", err)
+	}
+	if staleEvidenceCount > 0 {
+		evidence = append(evidence, domain.EvidenceRecord{AdmissionStatus: "stale"})
+	}
+	return taskDisplayState(task, commands, evidence, provider), nil
 }
 
 func (s *Store) UpdateTask(ctx context.Context, id string, input domain.UpdateTaskInput) (domain.Task, error) {
@@ -210,6 +323,15 @@ func (s *Store) UpdateTask(ctx context.Context, id string, input domain.UpdateTa
 	}
 	if input.BudgetMinutes != nil {
 		task.BudgetMinutes = *input.BudgetMinutes
+		task.Budget.TimeMinutes = *input.BudgetMinutes
+	}
+	if input.Budget != nil {
+		budget, validateErr := normalizeBudget(*input.Budget, task.BudgetMinutes)
+		if validateErr != nil {
+			return domain.Task{}, validateErr
+		}
+		task.Budget = budget
+		task.BudgetMinutes = task.Budget.TimeMinutes
 	}
 	if task.Title == "" || task.BudgetMinutes <= 0 || !validPriority(task.Priority) {
 		return domain.Task{}, fmt.Errorf("invalid task fields: %w", domain.ErrInvalidInput)
@@ -224,7 +346,9 @@ func (s *Store) UpdateTask(ctx context.Context, id string, input domain.UpdateTa
 	result, err := tx.ExecContext(ctx, `
 		UPDATE tasks
 		SET title = ?, description = ?, acceptance_criteria = ?, priority = ?,
-			budget_minutes = ?, version = version + 1, updated_at = ?
+			budget_minutes = ?, deadline_at = ?, max_attempts = ?, max_tokens = ?,
+			max_cost_minor = ?, currency = ?, max_concurrency = ?, authority_json = ?,
+			version = version + 1, updated_at = ?
 		WHERE id = ? AND version = ?
 	`,
 		task.Title,
@@ -232,6 +356,13 @@ func (s *Store) UpdateTask(ctx context.Context, id string, input domain.UpdateTa
 		task.AcceptanceCriteria,
 		task.Priority,
 		task.BudgetMinutes,
+		nullableInt64(task.Budget.DeadlineAt),
+		task.Budget.MaxAttempts,
+		task.Budget.MaxTokens,
+		task.Budget.MaxCostMinor,
+		task.Budget.Currency,
+		task.Budget.MaxConcurrency,
+		marshalJSON(task.Budget.Authority),
 		now,
 		task.ID,
 		task.Version,
@@ -259,6 +390,10 @@ func (s *Store) UpdateTask(ctx context.Context, id string, input domain.UpdateTa
 	}
 	task.Version++
 	task.UpdatedAt = now
+	provider, providerErr := s.GetProviderStatus(ctx, task.ProjectID)
+	if providerErr == nil {
+		task.DisplayState, _ = s.taskDisplayStateSummary(ctx, task, provider)
+	}
 	s.publish(event)
 	return task, nil
 }
@@ -319,6 +454,10 @@ func (s *Store) MoveTask(ctx context.Context, id, target string) (domain.Task, e
 	task.AssignedAgentID = nil
 	task.Version++
 	task.UpdatedAt = now
+	provider, providerErr := s.GetProviderStatus(ctx, task.ProjectID)
+	if providerErr == nil {
+		task.DisplayState, _ = s.taskDisplayStateSummary(ctx, task, provider)
+	}
 	s.publish(event)
 	return task, nil
 }
@@ -393,6 +532,10 @@ func (s *Store) GetTaskDetail(ctx context.Context, id string) (domain.TaskDetail
 	if err != nil {
 		return domain.TaskDetail{}, err
 	}
+	planRevisions, err := s.listPlanRevisionsForTask(ctx, id)
+	if err != nil {
+		return domain.TaskDetail{}, err
+	}
 	events, err := s.listEventsForTask(ctx, id)
 	if err != nil {
 		return domain.TaskDetail{}, err
@@ -405,8 +548,28 @@ func (s *Store) GetTaskDetail(ctx context.Context, id string) (domain.TaskDetail
 	if err != nil {
 		return domain.TaskDetail{}, err
 	}
+	evidence, err := s.listEvidenceForTask(ctx, id)
+	if err != nil {
+		return domain.TaskDetail{}, err
+	}
+	commands, err := s.listCommandsForTask(ctx, id)
+	if err != nil {
+		return domain.TaskDetail{}, err
+	}
+	operationalStates, err := s.listOperationalStatesForTask(ctx, id)
+	if err != nil {
+		return domain.TaskDetail{}, err
+	}
+	providerStatus, err := s.GetProviderStatus(ctx, task.ProjectID)
+	if err != nil {
+		return domain.TaskDetail{}, err
+	}
 	return domain.TaskDetail{
-		Task: task, Runs: runs, Events: events, Decisions: decisions, Artifacts: artifacts,
+		Task: task, Runs: runs, PlanRevisions: planRevisions, Events: events,
+		Decisions: decisions, Artifacts: artifacts, Evidence: evidence, Commands: commands,
+		OperationalStates: operationalStates, ProviderStatus: providerStatus,
+		DisplayState: taskDisplayState(task, commands, evidence, providerStatus),
+		Trail:        buildTaskTrail(events, planRevisions, decisions, commands, evidence, operationalStates),
 	}, nil
 }
 

@@ -1,4 +1,5 @@
 {
+  "time_minutes": 60,
   "deadline_at": 1784379600000,
   "max_attempts": 3,
   "max_tokens": 120000,

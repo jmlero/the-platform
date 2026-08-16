@@ -74,24 +74,18 @@ type RunFixture struct {
 }
 
 type PlanFixture struct {
-	ID                   string            `json:"id"`
-	RunID                string            `json:"run_id"`
-	Revision             int               `json:"revision"`
-	TaskVersion          int               `json:"task_version"`
-	ContextDigest        string            `json:"context_digest"`
-	RiskClass            string            `json:"risk_class"`
-	Summary              string            `json:"summary"`
-	Steps                []PlanStepFixture `json:"steps"`
-	VerificationStrategy []string          `json:"verification_strategy"`
-	ExpectedSideEffects  []string          `json:"expected_side_effects"`
-	RollbackApproach     string            `json:"rollback_approach"`
-	PolicyVersion        string            `json:"policy_version"`
-	CreatedAt            int64             `json:"created_at"`
-}
-
-type PlanStepFixture struct {
-	ID          string `json:"id"`
-	Description string `json:"description"`
+	ID                   string   `json:"id"`
+	RunID                string   `json:"run_id"`
+	Revision             int      `json:"revision"`
+	Plan                 string   `json:"plan"`
+	ContextDigest        string   `json:"context_digest"`
+	RiskClass            string   `json:"risk_class"`
+	VerificationStrategy string   `json:"verification_strategy"`
+	ExpectedSideEffects  []string `json:"expected_side_effects"`
+	RollbackApproach     string   `json:"rollback_approach"`
+	SourceRevision       string   `json:"source_revision"`
+	PolicyVersion        string   `json:"policy_version"`
+	CreatedAt            int64    `json:"created_at"`
 }
 
 type EventFixture struct {
@@ -251,7 +245,7 @@ func LoadFixtures(root string) (Fixtures, error) {
 	if fixtures.Provider.Provider == "" || fixtures.Provider.ProtocolVersion != manifest.ProtocolVersion {
 		return Fixtures{}, fmt.Errorf("provider fixture is incomplete")
 	}
-	if fixtures.Agent.ID == "" || fixtures.Task.Title == "" || fixtures.Run.Status == "" || fixtures.Plan.Summary == "" {
+	if fixtures.Agent.ID == "" || fixtures.Task.Title == "" || fixtures.Run.Status == "" || fixtures.Plan.Plan == "" {
 		return Fixtures{}, fmt.Errorf("core lifecycle fixtures are incomplete")
 	}
 	return fixtures, nil

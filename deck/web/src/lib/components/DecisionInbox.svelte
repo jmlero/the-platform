@@ -1,6 +1,6 @@
 <script lang="ts">
   import { ArrowUpRight, CheckCircle2, GitPullRequestArrow, Sparkles } from '@lucide/svelte';
-  import { timeAgo } from '$lib/format';
+  import { formatDate, timeAgo } from '$lib/format';
   import type { Decision, Task } from '$lib/types';
 
   export let decisions: Decision[] = [];
@@ -68,6 +68,19 @@
         <div class="recommendation">
           <Sparkles size={14} />
           Agent recommends <strong>{decision.recommendation}</strong>
+        </div>
+
+        <div class="decision-facts">
+          <span><small>Risk</small><strong>{decision.risk_class}</strong></span>
+          <span><small>Estimated cost</small><strong>{(decision.estimated_cost_minor / 100).toFixed(2)} {decision.currency}</strong></span>
+          <span><small>Expires</small><strong>{decision.expires_at ? formatDate(decision.expires_at) : 'No expiry'}</strong></span>
+        </div>
+        {#if decision.evidence_summary}
+          <div class="consequence"><span>Evidence</span><p>{decision.evidence_summary}</p></div>
+        {/if}
+        <div class="consequence-grid">
+          <div class="consequence"><span>If you wait</span><p>{decision.waiting_consequence}</p></div>
+          <div class="consequence"><span>If you reject</span><p>{decision.rejecting_consequence}</p></div>
         </div>
 
         <footer>
@@ -242,6 +255,45 @@
     color: var(--text);
   }
 
+  .decision-facts,
+  .consequence-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .decision-facts span,
+  .consequence {
+    padding: 8px;
+    background: rgba(255, 255, 255, 0.022);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+
+  .decision-facts small,
+  .consequence > span {
+    display: block;
+    color: var(--subtle);
+    font-size: 0.55rem;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+
+  .decision-facts strong {
+    display: block;
+    margin-top: 4px;
+    font-size: 0.64rem;
+    text-transform: capitalize;
+  }
+
+  .consequence-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .consequence { margin-top: 8px; }
+  .consequence p { margin: 5px 0 0; color: var(--muted); font-size: 0.62rem; line-height: 1.4; }
+
   footer {
     display: flex;
     gap: 8px;
@@ -311,6 +363,11 @@
 
     footer {
       flex-direction: column;
+    }
+
+    .decision-facts,
+    .consequence-grid {
+      grid-template-columns: 1fr;
     }
   }
 </style>

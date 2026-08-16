@@ -10,6 +10,13 @@
   let acceptanceCriteria = '';
   let priority: Priority = 'medium';
   let budgetMinutes = 30;
+  let maxAttempts = 1;
+  let maxTokens = 0;
+  let maxCostMinor = 0;
+  let currency = 'USD';
+  let maxConcurrency = 1;
+  let authority = 'source.read';
+  let deadline = '';
   let status: 'backlog' | 'ready' = 'backlog';
   let submitting = false;
   let error = '';
@@ -28,6 +35,16 @@
         acceptance_criteria: acceptanceCriteria.trim(),
         priority,
         budget_minutes: Number(budgetMinutes),
+        budget: {
+          time_minutes: Number(budgetMinutes),
+          ...(deadline ? { deadline_at: new Date(deadline).getTime() } : {}),
+          max_attempts: Number(maxAttempts),
+          max_tokens: Number(maxTokens),
+          max_cost_minor: Number(maxCostMinor),
+          currency: currency.trim().toUpperCase(),
+          max_concurrency: Number(maxConcurrency),
+          authority: authority.split(',').map((item) => item.trim()).filter(Boolean)
+        },
         status
       });
     } catch (caught) {
@@ -100,6 +117,40 @@
           </div>
         </label>
       </div>
+
+      <details class="budget-details">
+        <summary>Structured limits</summary>
+        <div class="budget-grid">
+          <label class="field">
+            <span>Deadline (optional)</span>
+            <input bind:value={deadline} type="datetime-local" />
+          </label>
+          <label class="field">
+            <span>Maximum attempts</span>
+            <input bind:value={maxAttempts} type="number" min="1" />
+          </label>
+          <label class="field">
+            <span>Maximum tokens</span>
+            <input bind:value={maxTokens} type="number" min="0" />
+          </label>
+          <label class="field">
+            <span>Maximum cost (minor units)</span>
+            <input bind:value={maxCostMinor} type="number" min="0" />
+          </label>
+          <label class="field">
+            <span>Currency</span>
+            <input bind:value={currency} maxlength="3" />
+          </label>
+          <label class="field">
+            <span>Maximum concurrency</span>
+            <input bind:value={maxConcurrency} type="number" min="1" />
+          </label>
+          <label class="field field-wide">
+            <span>Authority (comma separated)</span>
+            <input bind:value={authority} placeholder="source.read, pull_request.create" />
+          </label>
+        </div>
+      </details>
 
       <fieldset>
         <legend>Place task in</legend>
@@ -278,6 +329,31 @@
     border: 0;
   }
 
+  .budget-details {
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--line);
+    border-radius: 11px;
+  }
+
+  .budget-details summary {
+    color: var(--muted);
+    font-size: 0.68rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .budget-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 14px;
+  }
+
+  .budget-grid .field-wide {
+    grid-column: 1 / -1;
+  }
+
   legend {
     margin-bottom: 8px;
   }
@@ -408,6 +484,7 @@
     }
 
     .field-row,
+    .budget-grid,
     .destination-grid {
       grid-template-columns: 1fr;
     }

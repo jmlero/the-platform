@@ -10,7 +10,7 @@ The base intentionally deploys:
 - a non-root, read-only container with all Linux capabilities dropped;
 - no Kubernetes API token, because AppDeck does not call the Kubernetes API;
 - startup and liveness probes backed by `/healthz`;
-- a readiness probe backed by `/readyz`, which checks the SQLite store and configured service-authorization policy;
+- a readiness probe backed by `/readyz`, which checks the SQLite store and configured service- and operator-authentication policies;
 - bounded CPU, memory, and temporary storage;
 - a cluster-internal Service and no ingress.
 
@@ -37,9 +37,9 @@ The first always-on cluster location remains an explicit product decision. These
 
 ## Authentication boundary
 
-The base deliberately creates neither an ingress nor an `APPDECK_SERVICE_AUTH_FILE`. Human sessions are not implemented, so the operator routes must not be exposed to an untrusted network. An environment overlay may mount the selected Marina service-authorization policy as a read-only Secret and set `APPDECK_SERVICE_AUTH_FILE` to that file only when the matching encrypted service transport is also configured.
+The base deliberately creates neither an ingress nor authentication Secrets. An environment overlay that exposes AppDeck must mount the selected operator-authentication policy as a read-only Secret, set `APPDECK_OPERATOR_AUTH_FILE` to that path, retain secure cookies, and terminate authenticated TLS before AppDeck. Mount Marina's separate service-authorization policy and set `APPDECK_SERVICE_AUTH_FILE` only when the matching encrypted service transport is also configured. Never reuse either credential across the human and service boundaries.
 
-For trusted diagnostics, use local port forwarding rather than publishing the unauthenticated operator surface:
+For trusted diagnostics before an authenticated ingress exists, use local port forwarding rather than publishing the local operator surface:
 
 ```bash
 kubectl port-forward service/appdeck 8080:8080
@@ -51,4 +51,4 @@ The database and SQLite WAL files live under `/data`. The cluster's backup and r
 
 ## Current boundary
 
-This base makes AppDeck deployable while the operator's laptop is offline, but it is not the complete paired installation. Human authentication, the Marina credential Secret, encrypted service transport, network policies, backups, and ingress belong in later decisions and environment overlays. The base does not deploy Marina or any agent runtime.
+This base makes AppDeck deployable while the operator's laptop is offline, but it is not the complete paired installation. Operator- and Marina-authentication Secrets, encrypted transport, network policies, backups, and ingress belong in environment overlays. The base does not deploy Marina or any agent runtime.

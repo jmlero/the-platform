@@ -15,12 +15,14 @@ import (
 const runColumns = `
 	id, task_id, agent_id, status, plan, result_summary,
 	lease_expires_at, started_at, finished_at, updated_at,
-	version, fence_token, task_version, acceptance_criteria_digest
+	version, fence_token, task_version, acceptance_criteria_digest,
+	active_plan_revision_id
 `
 
 func scanRun(scanner interface{ Scan(...any) error }) (domain.Run, error) {
 	var run domain.Run
 	var leaseExpiresAt, finishedAt sql.NullInt64
+	var activePlanRevisionID sql.NullString
 	if err := scanner.Scan(
 		&run.ID,
 		&run.TaskID,
@@ -36,6 +38,7 @@ func scanRun(scanner interface{ Scan(...any) error }) (domain.Run, error) {
 		&run.FenceToken,
 		&run.TaskVersion,
 		&run.AcceptanceCriteriaDigest,
+		&activePlanRevisionID,
 	); err != nil {
 		return domain.Run{}, err
 	}
@@ -46,6 +49,10 @@ func scanRun(scanner interface{ Scan(...any) error }) (domain.Run, error) {
 	if finishedAt.Valid {
 		value := finishedAt.Int64
 		run.FinishedAt = &value
+	}
+	if activePlanRevisionID.Valid {
+		value := activePlanRevisionID.String
+		run.ActivePlanRevisionID = &value
 	}
 	return run, nil
 }
@@ -73,23 +80,40 @@ func scanDecision(scanner interface{ Scan(...any) error }) (domain.Decision, err
 	var decision domain.Decision
 	var runID sql.NullString
 	var options string
-	var answeredAt sql.NullInt64
+	var answeredAt, expiresAt sql.NullInt64
+	var planRevisionID sql.NullString
 	if err := scanner.Scan(
 		&decision.ID,
 		&decision.TaskID,
 		&runID,
+		&planRevisionID,
 		&decision.Question,
 		&options,
 		&decision.Recommendation,
+		&decision.RiskClass,
+		&decision.EvidenceSummary,
+		&decision.EstimatedCostMinor,
+		&decision.Currency,
+		&decision.WaitingConsequence,
+		&decision.RejectingConsequence,
 		&decision.Status,
 		&decision.Answer,
+		&expiresAt,
 		&decision.CreatedAt,
 		&answeredAt,
+		&decision.AnsweredBy,
 	); err != nil {
 		return domain.Decision{}, err
 	}
 	if runID.Valid {
 		decision.RunID = stringPtr(runID.String)
+	}
+	if planRevisionID.Valid {
+		decision.PlanRevisionID = planRevisionID.String
+	}
+	if expiresAt.Valid {
+		value := expiresAt.Int64
+		decision.ExpiresAt = &value
 	}
 	if answeredAt.Valid {
 		value := answeredAt.Int64
@@ -408,8 +432,11 @@ func (s *Store) GetActiveRunForAgent(ctx context.Context, agentID string) (domai
 			r.id, r.task_id, r.agent_id, r.status, r.plan, r.result_summary,
 			r.lease_expires_at, r.started_at, r.finished_at, r.updated_at,
 			r.version, r.fence_token, r.task_version, r.acceptance_criteria_digest,
+			r.active_plan_revision_id,
 			t.id, t.project_id, t.title, t.description, t.acceptance_criteria, t.status,
-			t.priority, t.budget_minutes, t.assigned_agent_id, t.version, t.created_at, t.updated_at
+			t.priority, t.budget_minutes, t.deadline_at, t.max_attempts, t.max_tokens,
+			t.max_cost_minor, t.currency, t.max_concurrency, t.authority_json,
+			t.assigned_agent_id, t.version, t.created_at, t.updated_at
 		FROM runs r
 		JOIN tasks t ON t.id = r.task_id
 		WHERE r.agent_id = ?
@@ -419,7 +446,9 @@ func (s *Store) GetActiveRunForAgent(ctx context.Context, agentID string) (domai
 	`, agentID)
 	var active domain.ActiveRun
 	var leaseExpiresAt, finishedAt sql.NullInt64
-	var assignedAgentID sql.NullString
+	var assignedAgentID, activePlanRevisionID sql.NullString
+	var deadlineAt sql.NullInt64
+	var authority string
 	if err := row.Scan(
 		&active.Run.ID,
 		&active.Run.TaskID,
@@ -435,6 +464,7 @@ func (s *Store) GetActiveRunForAgent(ctx context.Context, agentID string) (domai
 		&active.Run.FenceToken,
 		&active.Run.TaskVersion,
 		&active.Run.AcceptanceCriteriaDigest,
+		&activePlanRevisionID,
 		&active.Task.ID,
 		&active.Task.ProjectID,
 		&active.Task.Title,
@@ -443,6 +473,13 @@ func (s *Store) GetActiveRunForAgent(ctx context.Context, agentID string) (domai
 		&active.Task.Status,
 		&active.Task.Priority,
 		&active.Task.BudgetMinutes,
+		&deadlineAt,
+		&active.Task.Budget.MaxAttempts,
+		&active.Task.Budget.MaxTokens,
+		&active.Task.Budget.MaxCostMinor,
+		&active.Task.Budget.Currency,
+		&active.Task.Budget.MaxConcurrency,
+		&authority,
 		&assignedAgentID,
 		&active.Task.Version,
 		&active.Task.CreatedAt,
@@ -461,153 +498,17 @@ func (s *Store) GetActiveRunForAgent(ctx context.Context, agentID string) (domai
 	if assignedAgentID.Valid {
 		active.Task.AssignedAgentID = stringPtr(assignedAgentID.String)
 	}
+	if activePlanRevisionID.Valid {
+		value := activePlanRevisionID.String
+		active.Run.ActivePlanRevisionID = &value
+	}
+	active.Task.Budget.TimeMinutes = active.Task.BudgetMinutes
+	if deadlineAt.Valid {
+		value := deadlineAt.Int64
+		active.Task.Budget.DeadlineAt = &value
+	}
+	active.Task.Budget.Authority = unmarshalStrings(authority)
 	return active, nil
-}
-
-func (s *Store) SubmitPlan(
-	ctx context.Context,
-	mutation Mutation,
-	runID string,
-	plan string,
-	requireApproval bool,
-) (*domain.Decision, error) {
-	projectID, err := s.ProjectIDForRun(ctx, runID)
-	if err != nil {
-		return nil, err
-	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, fmt.Errorf("begin submit plan: %w", err)
-	}
-	defer tx.Rollback()
-	attempt, replayResult, replayed, err := beginIdempotentMutation(
-		ctx,
-		tx,
-		mutation,
-		projectID,
-		operationSubmitPlan,
-		runID,
-		struct {
-			RunID           string    `json:"run_id"`
-			Plan            string    `json:"plan"`
-			RequireApproval bool      `json:"require_approval"`
-			Guard           *RunGuard `json:"guard,omitempty"`
-		}{RunID: runID, Plan: plan, RequireApproval: requireApproval, Guard: mutation.Guard},
-	)
-	if err != nil {
-		return nil, err
-	}
-	if replayed {
-		var original *domain.Decision
-		if err := decodeIdempotencyResult(replayResult, &original); err != nil {
-			return nil, err
-		}
-		return original, nil
-	}
-	run, err := getRunTx(ctx, tx, runID)
-	if err != nil {
-		return nil, err
-	}
-	if err := validateRunGuard(run, mutation.Guard); err != nil {
-		return nil, err
-	}
-	task, err := getTaskTx(ctx, tx, run.TaskID)
-	if err != nil {
-		return nil, err
-	}
-	plan = strings.TrimSpace(plan)
-	if plan == "" {
-		return nil, fmt.Errorf("plan is required: %w", domain.ErrInvalidInput)
-	}
-	now := nowMillis()
-	nextRunStatus := domain.RunRunning
-	nextTaskStatus := domain.TaskRunning
-	if requireApproval {
-		nextRunStatus = domain.RunWaitingDecision
-		nextTaskStatus = domain.TaskWaitingDecision
-	}
-	result, err := tx.ExecContext(ctx, `
-		UPDATE runs SET plan = ?, status = ?, version = version + 1, updated_at = ?
-		WHERE id = ? AND status = 'planning' AND version = ?
-	`, plan, nextRunStatus, now, runID, run.Version)
-	if err != nil {
-		return nil, fmt.Errorf("save plan: %w", err)
-	}
-	rows, _ := result.RowsAffected()
-	if rows == 0 {
-		return nil, fmt.Errorf("run is no longer planning: %w", domain.ErrConflict)
-	}
-	if _, err := tx.ExecContext(ctx,
-		"UPDATE tasks SET status = ?, version = version + 1, updated_at = ? WHERE id = ?",
-		nextTaskStatus, now, run.TaskID,
-	); err != nil {
-		return nil, fmt.Errorf("update task for plan: %w", err)
-	}
-	if requireApproval {
-		if _, err := tx.ExecContext(ctx,
-			"UPDATE agents SET status = 'waiting', last_seen_at = ? WHERE id = ?",
-			now, run.AgentID,
-		); err != nil {
-			return nil, fmt.Errorf("mark agent waiting: %w", err)
-		}
-	}
-	planEvent, err := insertEventTx(
-		ctx, tx, &run.TaskID, &run.ID, &run.AgentID,
-		"plan.submitted", "Agent submitted a plan for review",
-		map[string]any{"requires_approval": requireApproval, "plan": plan},
-	)
-	if err != nil {
-		return nil, fmt.Errorf("create plan event: %w", err)
-	}
-
-	var decision *domain.Decision
-	var decisionEvent domain.Event
-	if requireApproval {
-		created := domain.Decision{
-			ID: newID("dec"), TaskID: run.TaskID, RunID: &run.ID,
-			Question:       fmt.Sprintf("Approve the proposed plan for “%s”?", task.Title),
-			Options:        []string{"Approve plan", "Request changes"},
-			Recommendation: "Approve plan",
-			Status:         "pending",
-			CreatedAt:      now,
-		}
-		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO decisions (
-				id, task_id, run_id, question, options_json, recommendation,
-				status, answer, created_at
-			) VALUES (?, ?, ?, ?, ?, ?, 'pending', '', ?)
-		`,
-			created.ID,
-			created.TaskID,
-			created.RunID,
-			created.Question,
-			marshalJSON(created.Options),
-			created.Recommendation,
-			created.CreatedAt,
-		); err != nil {
-			return nil, fmt.Errorf("create decision: %w", err)
-		}
-		decisionEvent, err = insertEventTx(
-			ctx, tx, &run.TaskID, &run.ID, &run.AgentID,
-			"decision.requested", "Agent is waiting for plan approval",
-			map[string]any{"decision_id": created.ID},
-		)
-		if err != nil {
-			return nil, fmt.Errorf("create decision event: %w", err)
-		}
-		decision = &created
-	}
-	if err := finishIdempotentMutation(ctx, tx, attempt, decision); err != nil {
-		return nil, err
-	}
-	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("commit plan: %w", err)
-	}
-	s.publish(planEvent)
-	if decision != nil {
-		s.publish(decisionEvent)
-	}
-	return decision, nil
 }
 
 func (s *Store) StartRun(ctx context.Context, mutation Mutation, runID string) error {
@@ -655,6 +556,12 @@ func (s *Store) StartRun(ctx context.Context, mutation Mutation, runID string) e
 	}
 	if decision.Status != "answered" {
 		return fmt.Errorf("plan decision is still pending: %w", domain.ErrConflict)
+	}
+	if decision.ExpiresAt != nil && *decision.ExpiresAt <= nowMillis() {
+		return fmt.Errorf("plan decision has expired: %w", domain.ErrConflict)
+	}
+	if run.ActivePlanRevisionID == nil || decision.PlanRevisionID == "" || *run.ActivePlanRevisionID != decision.PlanRevisionID {
+		return fmt.Errorf("plan decision does not authorize the active revision: %w", domain.ErrConflict)
 	}
 	if !strings.EqualFold(decision.Answer, decision.Recommendation) {
 		return fmt.Errorf("plan was not approved: %w", domain.ErrInvalidTransition)
@@ -841,114 +748,6 @@ func (s *Store) BeginVerification(ctx context.Context, mutation Mutation, runID 
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit verification: %w", err)
-	}
-	s.publish(event)
-	return nil
-}
-
-func (s *Store) CompleteRun(
-	ctx context.Context,
-	mutation Mutation,
-	runID string,
-	summary string,
-	evidence string,
-) error {
-	projectID, err := s.ProjectIDForRun(ctx, runID)
-	if err != nil {
-		return err
-	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin complete run: %w", err)
-	}
-	defer tx.Rollback()
-	attempt, replayResult, replayed, err := beginIdempotentMutation(
-		ctx,
-		tx,
-		mutation,
-		projectID,
-		operationCompleteRun,
-		runID,
-		struct {
-			RunID    string    `json:"run_id"`
-			Summary  string    `json:"summary"`
-			Evidence string    `json:"evidence"`
-			Guard    *RunGuard `json:"guard,omitempty"`
-		}{RunID: runID, Summary: summary, Evidence: evidence, Guard: mutation.Guard},
-	)
-	if err != nil {
-		return err
-	}
-	if replayed {
-		var original struct{}
-		return decodeIdempotencyResult(replayResult, &original)
-	}
-	run, err := getRunTx(ctx, tx, runID)
-	if err != nil {
-		return err
-	}
-	if err := validateRunGuard(run, mutation.Guard); err != nil {
-		return err
-	}
-	now := nowMillis()
-	artifact := domain.Artifact{
-		ID: newID("art"), TaskID: run.TaskID, RunID: run.ID,
-		Name: "verification-report.md", Kind: "verification", Content: evidence, CreatedAt: now,
-	}
-	artifact.URI = "appdeck://artifacts/" + artifact.ID
-	result, err := tx.ExecContext(ctx, `
-		UPDATE runs
-		SET status = 'completed', result_summary = ?, lease_expires_at = NULL,
-			finished_at = ?, version = version + 1, updated_at = ?
-		WHERE id = ? AND status = 'verifying' AND version = ?
-	`, strings.TrimSpace(summary), now, now, runID, run.Version)
-	if err != nil {
-		return fmt.Errorf("complete run: %w", err)
-	}
-	rows, _ := result.RowsAffected()
-	if rows == 0 {
-		return fmt.Errorf("run cannot complete: %w", domain.ErrInvalidTransition)
-	}
-	if _, err := tx.ExecContext(ctx, `
-		UPDATE tasks SET status = 'done', assigned_agent_id = NULL,
-			version = version + 1, updated_at = ? WHERE id = ?
-	`, now, run.TaskID); err != nil {
-		return fmt.Errorf("complete task: %w", err)
-	}
-	if _, err := tx.ExecContext(ctx,
-		"UPDATE agents SET status = 'idle', last_seen_at = ? WHERE id = ?",
-		now, run.AgentID,
-	); err != nil {
-		return fmt.Errorf("idle agent: %w", err)
-	}
-	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO artifacts (id, task_id, run_id, name, kind, uri, content, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-	`,
-		artifact.ID,
-		artifact.TaskID,
-		artifact.RunID,
-		artifact.Name,
-		artifact.Kind,
-		artifact.URI,
-		artifact.Content,
-		artifact.CreatedAt,
-	); err != nil {
-		return fmt.Errorf("create verification artifact: %w", err)
-	}
-	event, err := insertEventTx(
-		ctx, tx, &run.TaskID, &run.ID, &run.AgentID,
-		"run.completed", "Run completed with verification evidence",
-		map[string]any{"artifact_id": artifact.ID, "summary": summary},
-	)
-	if err != nil {
-		return fmt.Errorf("create completion event: %w", err)
-	}
-	if err := finishIdempotentMutation(ctx, tx, attempt, struct{}{}); err != nil {
-		return err
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit completion: %w", err)
 	}
 	s.publish(event)
 	return nil

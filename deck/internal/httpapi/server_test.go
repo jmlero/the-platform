@@ -89,8 +89,8 @@ func TestOpenAPIDeclaresIdempotencyForEveryClaimAndRunMutation(t *testing.T) {
 		t.Fatalf("read OpenAPI contract: %v", err)
 	}
 	const reference = `$ref: "#/components/parameters/IdempotencyKey"`
-	if count := strings.Count(string(contract), reference); count != 10 {
-		t.Fatalf("Idempotency-Key operation references = %d, want 10", count)
+	if count := strings.Count(string(contract), reference); count != 12 {
+		t.Fatalf("Idempotency-Key operation references = %d, want 12", count)
 	}
 }
 

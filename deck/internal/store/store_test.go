@@ -67,8 +67,9 @@ func TestHumanAgentLifecycle(t *testing.T) {
 	if err := appStore.BeginVerification(ctx, testMutation("verify-lifecycle"), run.ID); err != nil {
 		t.Fatalf("begin verification: %v", err)
 	}
-	if err := appStore.CompleteRun(
-		ctx, testMutation("complete-lifecycle"), run.ID, "All checks passed", "- Acceptance criterion passed",
+	evidenceID := recordPassingEvidence(t, ctx, appStore, run.ID, "lifecycle")
+	if err := appStore.CompleteRunWithEvidence(
+		ctx, testMutation("complete-lifecycle"), run.ID, "All checks passed", []string{evidenceID},
 	); err != nil {
 		t.Fatalf("complete run: %v", err)
 	}
@@ -325,14 +326,15 @@ func TestAllRunMutationsReplayWithoutDuplicateEffects(t *testing.T) {
 	if err := appStore.BeginVerification(ctx, verifyMutation, run.ID); err != nil {
 		t.Fatalf("replay verification: %v", err)
 	}
+	evidenceID := recordPassingEvidence(t, ctx, appStore, run.ID, "complete-idempotency")
 	completeMutation := testMutation("complete-complete")
-	if err := appStore.CompleteRun(ctx, completeMutation, run.ID, "Passed", "Evidence"); err != nil {
+	if err := appStore.CompleteRunWithEvidence(ctx, completeMutation, run.ID, "Passed", []string{evidenceID}); err != nil {
 		t.Fatalf("complete run: %v", err)
 	}
-	if err := appStore.CompleteRun(ctx, completeMutation, run.ID, "Passed", "Evidence"); err != nil {
+	if err := appStore.CompleteRunWithEvidence(ctx, completeMutation, run.ID, "Passed", []string{evidenceID}); err != nil {
 		t.Fatalf("replay completion: %v", err)
 	}
-	if err := appStore.CompleteRun(ctx, completeMutation, run.ID, "Passed", "Different evidence"); !errors.Is(err, domain.ErrConflict) {
+	if err := appStore.CompleteRunWithEvidence(ctx, completeMutation, run.ID, "Different summary", []string{evidenceID}); !errors.Is(err, domain.ErrConflict) {
 		t.Fatalf("changed completion payload error = %v, want conflict", err)
 	}
 	detail, err := appStore.GetTaskDetail(ctx, task.ID)
@@ -409,4 +411,36 @@ func TestAllRunMutationsReplayWithoutDuplicateEffects(t *testing.T) {
 
 func testMutation(key string) Mutation {
 	return Mutation{ActorID: "service:test-marina", IdempotencyKey: key}
+}
+
+func recordPassingEvidence(t *testing.T, ctx context.Context, appStore *Store, runID, suffix string) string {
+	t.Helper()
+	run, err := appStore.GetRun(ctx, runID)
+	if err != nil {
+		t.Fatalf("get run for evidence: %v", err)
+	}
+	if run.ActivePlanRevisionID == nil {
+		t.Fatal("run has no active plan revision")
+	}
+	evidence, err := appStore.RecordEvidence(ctx, domain.EvidenceInput{
+		RunID:            runID,
+		PlanRevisionID:   *run.ActivePlanRevisionID,
+		Type:             "acceptance",
+		Producer:         "agent:test",
+		Verifier:         "check:" + suffix,
+		SubjectDigest:    run.AcceptanceCriteriaDigest,
+		SourceRevision:   "test-source",
+		Command:          "go test ./...",
+		Outcome:          "passed",
+		ProvenanceURI:    "test://" + suffix + "/provenance",
+		ProvenanceDigest: "sha256:" + suffix + "-provenance",
+		ObservedAt:       time.Now().UTC().UnixMilli(),
+		ArtifactURI:      "test://" + suffix + "/artifact",
+		ArtifactDigest:   "sha256:" + suffix + "-artifact",
+		PolicyVersion:    "test-v1",
+	})
+	if err != nil {
+		t.Fatalf("record evidence: %v", err)
+	}
+	return evidence.ID
 }

@@ -16,6 +16,8 @@
     urgent: 'priority-urgent'
   };
 
+  $: displayState = task.display_state ?? (task.status === 'done' ? 'completed' : task.status.replace('_', '-'));
+
 </script>
 
 <button
@@ -42,12 +44,18 @@
     <p class="clamp-2">{task.description}</p>
   {/if}
 
-  {#if task.status === 'waiting_decision'}
+  {#if displayState === 'waiting'}
     <div class="signal signal-decision">
       <GitPullRequestArrow size={13} strokeWidth={2.2} />
       Human decision needed
     </div>
-  {:else if task.status === 'verifying'}
+  {:else if displayState === 'stale-evidence'}
+    <div class="signal signal-attention"><ShieldCheck size={13} /> Evidence is stale</div>
+  {:else if displayState === 'syncing'}
+    <div class="signal signal-decision"><span class="mini-wave"><i></i><i></i><i></i></span> Synchronizing provider state</div>
+  {:else if displayState === 'retrying'}
+    <div class="signal signal-decision"><span class="mini-wave"><i></i><i></i><i></i></span> Retrying bounded work</div>
+  {:else if displayState === 'verifying'}
     <div class="signal signal-verify">
       <ShieldCheck size={13} strokeWidth={2.2} />
       Checking acceptance
@@ -221,6 +229,11 @@
   .signal-verify {
     color: var(--cyan);
     background: var(--cyan-soft);
+  }
+
+  .signal-attention {
+    color: var(--red);
+    background: var(--red-soft);
   }
 
   footer {

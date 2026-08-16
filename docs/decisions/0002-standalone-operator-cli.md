@@ -36,7 +36,7 @@ Costs and controls:
 
 - Wire types currently needed by the CLI are mirrored locally and require compatibility tests against AppDeck behavior.
 - Root tooling includes a third Go module and must keep it independently buildable.
-- Human authentication is not yet implemented, so the initial CLI remains restricted to trusted local use even though it already supports bearer injection.
+- The browser uses the human session mechanism recorded in [decision 0005](0005-operator-authentication.md). The CLI's supported operator-authentication flow remains separate work, so bearer injection alone must not be mistaken for permission to reuse Marina's service credential.
 - No shared client library is extracted until a second real consumer justifies that boundary.
 
 ## Reversal criteria

@@ -2,7 +2,6 @@
   import { onMount } from 'svelte';
   import {
     Activity,
-    Archive,
     ArrowRight,
     Blocks,
     Bot,
@@ -15,6 +14,10 @@
     GitPullRequestArrow,
     Inbox,
     Layers3,
+		LogOut,
+    MessageSquare,
+    Download,
+    Upload,
     Menu,
     Plus,
     Search,
@@ -28,22 +31,26 @@
   import AgentStrip from '$lib/components/AgentStrip.svelte';
   import CreateTaskModal from '$lib/components/CreateTaskModal.svelte';
   import DecisionInbox from '$lib/components/DecisionInbox.svelte';
+  import ChannelsView from '$lib/components/ChannelsView.svelte';
   import TaskCard from '$lib/components/TaskCard.svelte';
   import TaskDrawer from '$lib/components/TaskDrawer.svelte';
   import { api, subscribeToEvents } from '$lib/api';
-  import { formatDate, statusLabels, timeAgo } from '$lib/format';
+	import type { OperatorSession } from '$lib/api';
+  import { formatDate } from '$lib/format';
   import type {
     Agent,
     AppEvent,
+    Channel,
     CreateTaskInput,
     Decision,
     Task,
     TaskDetail,
     TaskStatus,
-    UpdateTaskInput
+    UpdateTaskInput,
+    ProviderStatus
   } from '$lib/types';
 
-  type View = 'factory' | 'backlog' | 'decisions';
+  type View = 'factory' | 'backlog' | 'decisions' | 'channels';
 
   const boardColumns: Array<{
     status: TaskStatus;
@@ -64,6 +71,11 @@
   let agents: Agent[] = [];
   let decisions: Decision[] = [];
   let events: AppEvent[] = [];
+  let channels: Channel[] = [];
+  let providerStatus: ProviderStatus = {
+    project_id: 'prj_default', connectivity: 'unknown', sync_state: 'unknown', sync_lag_millis: 0,
+    lease_state: 'none', degraded_dependencies: [], stale_projection_count: 0, rejected_projection_count: 0
+  };
   let selectedDetail: TaskDetail | null = null;
   let loading = true;
   let selectedLoading = false;
@@ -75,6 +87,12 @@
   let dragTarget: TaskStatus | '' = '';
   let sidebarOpen = false;
   let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+	let session: OperatorSession | null = null;
+	let sessionChecking = true;
+	let loginToken = '';
+	let loginError = '';
+	let authenticating = false;
+	let unsubscribeLiveEvents: (() => void) | undefined;
 
   $: normalizedSearch = search.trim().toLowerCase();
   $: filteredTasks = normalizedSearch
@@ -89,18 +107,76 @@
     ['planning', 'waiting_decision', 'running', 'verifying'].includes(task.status)
   );
   $: completedTasks = tasks.filter((task) => task.status === 'done');
-  $: agentUtilization = agents.length
-    ? Math.round((agents.filter((agent) => agent.status === 'active').length / agents.length) * 100)
-    : 0;
 
   onMount(() => {
-    void loadWorkspace();
-    const unsubscribe = subscribeToEvents(handleLiveEvent, (state) => (connected = state));
+		const handleUnauthenticated = () => resetAuthenticatedWorkspace();
+		window.addEventListener('appdeck:unauthenticated', handleUnauthenticated);
+		void initializeSession();
     return () => {
-      unsubscribe();
+			window.removeEventListener('appdeck:unauthenticated', handleUnauthenticated);
+			unsubscribeLiveEvents?.();
       if (refreshTimer) clearTimeout(refreshTimer);
     };
   });
+
+	async function initializeSession() {
+		try {
+			session = await api.session();
+			startLiveUpdates();
+			await loadWorkspace();
+		} catch (caught) {
+			if (!session) {
+				loginError = '';
+			} else {
+				error = caught instanceof Error ? caught.message : 'Could not load AppDeck.';
+			}
+		} finally {
+			sessionChecking = false;
+			loading = false;
+		}
+	}
+
+	async function login() {
+		authenticating = true;
+		loginError = '';
+		try {
+			session = await api.login(loginToken);
+			loginToken = '';
+			startLiveUpdates();
+			await loadWorkspace();
+		} catch (caught) {
+			loginError = caught instanceof Error ? caught.message : 'Could not sign in.';
+		} finally {
+			authenticating = false;
+		}
+	}
+
+	async function logout() {
+		try {
+			await api.logout();
+		} finally {
+			resetAuthenticatedWorkspace();
+		}
+	}
+
+	function startLiveUpdates() {
+		unsubscribeLiveEvents?.();
+		unsubscribeLiveEvents = subscribeToEvents(handleLiveEvent, (state) => (connected = state));
+	}
+
+	function resetAuthenticatedWorkspace() {
+		session = null;
+		connected = false;
+		loading = false;
+		tasks = [];
+		agents = [];
+		decisions = [];
+		events = [];
+		channels = [];
+		selectedDetail = null;
+		unsubscribeLiveEvents?.();
+		unsubscribeLiveEvents = undefined;
+	}
 
   async function loadWorkspace(options: { quiet?: boolean } = {}) {
     if (!options.quiet) loading = true;
@@ -110,6 +186,8 @@
       agents = snapshot.agents;
       decisions = snapshot.decisions;
       events = snapshot.events;
+      channels = snapshot.channels;
+      providerStatus = snapshot.provider_status;
       error = '';
     } catch (caught) {
       error = caught instanceof Error ? caught.message : 'Could not load AppDeck.';
@@ -171,6 +249,25 @@
     await loadWorkspace({ quiet: true });
   }
 
+  async function handlePromotedTask(task: Task) {
+    await loadWorkspace({ quiet: true });
+    await openTask(task);
+  }
+
+  async function importProject(event: Event) {
+    const input = event.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    try {
+      await api.importProject(await file.text());
+      await loadWorkspace({ quiet: true });
+    } catch (caught) {
+      error = caught instanceof Error ? caught.message : 'Could not import the project ledger.';
+    } finally {
+      input.value = '';
+    }
+  }
+
   function startDrag(event: DragEvent, task: Task) {
     draggedTaskID = task.id;
     event.dataTransfer?.setData('text/plain', task.id);
@@ -212,6 +309,38 @@
   <title>AppDeck · Agent control plane</title>
 </svelte:head>
 
+{#if sessionChecking}
+	<div class="auth-shell" aria-busy="true">
+		<div class="auth-loading"><span></span><span>Checking operator session…</span></div>
+	</div>
+{:else if !session}
+	<div class="auth-shell">
+		<section class="auth-card" aria-labelledby="operator-login-title">
+			<div class="brand auth-brand">
+				<span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+				<div><strong>AppDeck</strong><small>CONTROL PLANE</small></div>
+			</div>
+			<span class="eyebrow">Operator access</span>
+			<h1 id="operator-login-title">Sign in to the control room</h1>
+			<p>Enter the high-entropy operator token issued for this installation.</p>
+			<form on:submit|preventDefault={login}>
+				<label for="operator-token">Operator token</label>
+				<input
+					id="operator-token"
+					type="password"
+					bind:value={loginToken}
+					autocomplete="current-password"
+					required
+				/>
+				{#if loginError}<div class="auth-error" role="alert">{loginError}</div>{/if}
+				<button type="submit" disabled={authenticating || loginToken.length < 32}>
+					{authenticating ? 'Signing in…' : 'Enter AppDeck'} <ArrowRight size={15} />
+				</button>
+			</form>
+			<small class="auth-note">The token is exchanged for a revocable 12-hour browser session.</small>
+		</section>
+	</div>
+{:else}
 <div class="app-shell">
   {#if sidebarOpen}
     <button class="mobile-scrim" type="button" on:click={() => (sidebarOpen = false)} aria-label="Close menu"></button>
@@ -248,6 +377,11 @@
         <span>Decisions</span>
         {#if decisions.length}<em class="attention-count">{decisions.length}</em>{/if}
       </button>
+      <button class:active={activeView === 'channels'} type="button" on:click={() => selectView('channels')}>
+        <MessageSquare size={17} />
+        <span>Channels</span>
+        {#if channels.length}<em>{channels.length}</em>{/if}
+      </button>
 
       <span class="nav-label secondary-label">System</span>
       <button type="button" disabled>
@@ -262,13 +396,16 @@
     <div class="sidebar-bottom">
       <div class="system-card">
         <div class="system-top">
-          <span><CircleGauge size={14} /> Local control plane</span>
-          <i class:offline={!connected}></i>
+          <span><CircleGauge size={14} /> Provider {providerStatus.connectivity}</span>
+          <i class:offline={providerStatus.connectivity !== 'connected'}></i>
         </div>
         <div class="system-stats">
-          <span><strong>{agents.length}</strong> agents</span>
-          <span><strong>{agentUtilization}%</strong> utilized</span>
+          <span><strong>{providerStatus.sync_state}</strong> sync</span>
+          <span><strong>{providerStatus.lease_state}</strong> lease</span>
         </div>
+        {#if providerStatus.rejected_projection_count || providerStatus.degraded_dependencies.length}
+          <small class="system-warning">{providerStatus.rejected_projection_count} rejected · {providerStatus.degraded_dependencies.join(', ') || 'no dependency detail'}</small>
+        {/if}
       </div>
       <div class="version"><Command size={12} /> Prototype 0.1</div>
     </div>
@@ -295,6 +432,14 @@
         <span class:offline={!connected} class="connection">
           {#if connected}<Wifi size={13} /> Live{:else}<WifiOff size={13} /> Reconnecting{/if}
         </span>
+				<a class="export-link" href={api.exportURL()} download="appdeck-export.json" title="Export deterministic project ledger"><Download size={15} /></a>
+				<label class="export-link import-link" title="Import into an empty project ledger"><Upload size={15} /><input type="file" accept="application/json,.json" on:change={importProject} /></label>
+				{#if session.expires_at}
+					<span class="operator-name">{session.operator_id}</span>
+					<button class="sign-out" type="button" on:click={logout} aria-label="Sign out" title="Sign out">
+						<LogOut size={15} />
+					</button>
+				{/if}
         <button class="new-task" type="button" on:click={() => (createOpen = true)}>
           <Plus size={15} strokeWidth={2.5} /> New task
         </button>
@@ -305,17 +450,19 @@
       <header class="page-heading">
         <div>
           <span class="eyebrow">
-            {activeView === 'factory' ? 'Operations overview' : activeView === 'backlog' ? 'Work inventory' : 'Human attention'}
+            {activeView === 'factory' ? 'Operations overview' : activeView === 'backlog' ? 'Work inventory' : activeView === 'channels' ? 'Project conversation' : 'Human attention'}
           </span>
           <h1>
-            {activeView === 'factory' ? 'Agent factory' : activeView === 'backlog' ? 'Backlog' : 'Decision inbox'}
+            {activeView === 'factory' ? 'Agent factory' : activeView === 'backlog' ? 'Backlog' : activeView === 'channels' ? 'Channels' : 'Decision inbox'}
           </h1>
           <p>
             {activeView === 'factory'
               ? 'Observe, steer, and verify every active unit of work.'
               : activeView === 'backlog'
                 ? 'Shape outcomes before releasing them to the agent floor.'
-                : 'Resolve the questions currently blocking execution.'}
+                : activeView === 'channels'
+                  ? 'Converse with agents, cite canonical records, and promote messages into bounded work.'
+                  : 'Resolve the questions currently blocking execution.'}
           </p>
         </div>
         <div class="headline-stats">
@@ -430,6 +577,8 @@
             </ul>
           </aside>
         </div>
+      {:else if activeView === 'channels'}
+        <ChannelsView {channels} onpromoted={handlePromotedTask} />
       {:else}
         <DecisionInbox {decisions} {tasks} onanswer={answerDecision} onselect={openTask} />
       {/if}
@@ -456,8 +605,79 @@
     <CreateTaskModal onclose={() => (createOpen = false)} oncreate={createTask} />
   {/if}
 </div>
+{/if}
 
 <style>
+	.auth-shell {
+		display: grid;
+		width: 100vw;
+		height: 100vh;
+		padding: 24px;
+		background:
+			radial-gradient(circle at 50% 20%, rgba(184, 243, 107, 0.08), transparent 30%),
+			var(--bg);
+		place-items: center;
+	}
+
+	.auth-card {
+		width: min(420px, 100%);
+		padding: 34px;
+		background: var(--panel);
+		border: 1px solid var(--line-strong);
+		border-radius: 18px;
+		box-shadow: var(--shadow);
+	}
+
+	.auth-brand { margin: 0 0 42px; padding: 0; }
+	.auth-card > .eyebrow { color: var(--acid); }
+	.auth-card h1 { margin: 9px 0 10px; font-size: 1.65rem; letter-spacing: -0.04em; }
+	.auth-card > p { margin: 0; color: var(--muted); font-size: 0.84rem; line-height: 1.6; }
+	.auth-card form { display: grid; gap: 10px; margin-top: 28px; }
+	.auth-card label { color: var(--muted); font-size: 0.68rem; font-weight: 700; }
+	.auth-card input {
+		width: 100%;
+		height: 45px;
+		padding: 0 12px;
+		color: var(--text);
+		background: var(--bg);
+		border: 1px solid var(--line-strong);
+		border-radius: 9px;
+		font-family: "SFMono-Regular", Consolas, monospace;
+	}
+	.auth-card form button {
+		display: inline-flex;
+		height: 43px;
+		align-items: center;
+		justify-content: center;
+		gap: 8px;
+		margin-top: 5px;
+		color: #11150d;
+		font-size: 0.74rem;
+		font-weight: 750;
+		background: var(--acid);
+		border: 0;
+		border-radius: 9px;
+		cursor: pointer;
+	}
+	.auth-card form button:disabled { cursor: not-allowed; opacity: 0.45; }
+	.auth-error { color: var(--red); font-size: 0.7rem; }
+	.auth-note { display: block; margin-top: 20px; color: var(--subtle); font-size: 0.62rem; line-height: 1.5; }
+	.auth-loading { display: inline-flex; align-items: center; gap: 10px; color: var(--muted); font-size: 0.75rem; }
+	.auth-loading span:first-child { width: 9px; height: 9px; background: var(--acid); border-radius: 50%; animation: pulse-ring 1.2s infinite; }
+	.operator-name { max-width: 130px; overflow: hidden; color: var(--subtle); font-size: 0.62rem; text-overflow: ellipsis; white-space: nowrap; }
+	.sign-out {
+		display: grid;
+		width: 32px;
+		height: 32px;
+		color: var(--muted);
+		background: transparent;
+		border: 1px solid var(--line);
+		border-radius: 8px;
+		cursor: pointer;
+		place-items: center;
+	}
+	.sign-out:hover { color: var(--text); border-color: var(--line-strong); }
+
   .app-shell {
     display: flex;
     width: 100vw;
@@ -616,6 +836,7 @@
   .system-top i.offline { background: var(--amber); box-shadow: 0 0 0 4px var(--amber-soft); }
   .system-stats { display: flex; gap: 16px; margin-top: 12px; color: var(--subtle); font-size: 0.56rem; }
   .system-stats strong { display: block; margin-bottom: 2px; color: var(--text); font-size: 0.7rem; }
+  .system-warning { display: block; margin-top: 9px; color: var(--amber); font-size: 0.54rem; line-height: 1.4; }
   .version { display: flex; align-items: center; gap: 6px; margin: 10px 4px 0; color: #4e5654; font-family: "SFMono-Regular", Consolas, monospace; font-size: 0.52rem; }
 
   main { display: flex; min-width: 0; flex: 1; flex-direction: column; }
@@ -656,6 +877,10 @@
 
   .connection { display: inline-flex; height: 30px; align-items: center; gap: 6px; padding: 0 9px; color: var(--acid); font-size: 0.61rem; font-weight: 700; background: var(--acid-soft); border-radius: 8px; }
   .connection.offline { color: var(--amber); background: var(--amber-soft); }
+  .export-link { display: grid; width: 32px; height: 32px; color: var(--muted); border: 1px solid var(--line); border-radius: 8px; place-items: center; }
+  .export-link:hover { color: var(--text); border-color: var(--line-strong); }
+  .import-link { cursor: pointer; }
+  .import-link input { position: absolute; width: 1px; height: 1px; opacity: 0; }
 
   .new-task,
   .list-header button {

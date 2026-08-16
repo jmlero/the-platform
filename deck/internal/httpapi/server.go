@@ -7,8 +7,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -18,9 +20,12 @@ import (
 )
 
 type Server struct {
-	store             *store.Store
-	logger            *slog.Logger
-	serviceAuthorizer *FileServiceAuthorizer
+	store                 *store.Store
+	logger                *slog.Logger
+	serviceAuthorizer     *FileServiceAuthorizer
+	operatorAuthenticator *FileOperatorAuthenticator
+	secureOperatorCookies bool
+	operatorSessionTTL    time.Duration
 }
 
 type Option func(*Server)
@@ -31,18 +36,56 @@ func WithServiceAuthorizer(authorizer *FileServiceAuthorizer) Option {
 	}
 }
 
+func WithOperatorAuthenticator(authenticator *FileOperatorAuthenticator) Option {
+	return func(server *Server) {
+		server.operatorAuthenticator = authenticator
+	}
+}
+
+func WithSecureOperatorCookies(secure bool) Option {
+	return func(server *Server) {
+		server.secureOperatorCookies = secure
+	}
+}
+
 type serviceIdentityContextKey struct{}
 
+type operatorSessionContextKey struct{}
+
+const (
+	operatorSessionCookieName = "appdeck_operator_session"
+	operatorCSRFCookieName    = "appdeck_operator_csrf"
+	operatorCSRFHeader        = "X-CSRF-Token"
+	defaultOperatorSessionTTL = 12 * time.Hour
+)
+
+type authenticatedOperatorSession struct {
+	OperatorID string
+	TokenHash  string
+	ExpiresAt  int64
+}
+
+type operatorSessionResponse struct {
+	Authenticated bool   `json:"authenticated"`
+	OperatorID    string `json:"operator_id"`
+	ExpiresAt     int64  `json:"expires_at,omitempty"`
+}
+
 type bootstrapResponse struct {
-	Tasks     []domain.Task     `json:"tasks"`
-	Agents    []domain.Agent    `json:"agents"`
-	Decisions []domain.Decision `json:"decisions"`
-	Events    []domain.Event    `json:"events"`
-	Now       int64             `json:"now"`
+	Tasks          []domain.Task         `json:"tasks"`
+	Agents         []domain.Agent        `json:"agents"`
+	Decisions      []domain.Decision     `json:"decisions"`
+	Events         []domain.Event        `json:"events"`
+	Channels       []domain.Channel      `json:"channels"`
+	ProviderStatus domain.ProviderStatus `json:"provider_status"`
+	Now            int64                 `json:"now"`
 }
 
 func New(store *store.Store, logger *slog.Logger, options ...Option) *Server {
-	server := &Server{store: store, logger: logger}
+	server := &Server{
+		store: store, logger: logger, secureOperatorCookies: true,
+		operatorSessionTTL: defaultOperatorSessionTTL,
+	}
 	for _, option := range options {
 		option(server)
 	}
@@ -54,15 +97,18 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /healthz", s.health)
 	mux.HandleFunc("GET /readyz", s.readiness)
 	mux.HandleFunc("GET /api/v1/provider", s.requireService(capabilityProviderInfo, s.providerInfo))
-	mux.HandleFunc("GET /api/v1/bootstrap", s.bootstrap)
+	mux.HandleFunc("POST /api/v1/operator/session", s.createOperatorSession)
+	mux.HandleFunc("GET /api/v1/operator/session", s.requireOperator(s.getOperatorSession))
+	mux.HandleFunc("DELETE /api/v1/operator/session", s.requireOperator(s.deleteOperatorSession))
+	mux.HandleFunc("GET /api/v1/bootstrap", s.requireOperator(s.bootstrap))
 	mux.HandleFunc("GET /api/v1/tasks", s.requireService(capabilityWorkReadyList, s.listTasks))
-	mux.HandleFunc("POST /api/v1/tasks", s.createTask)
+	mux.HandleFunc("POST /api/v1/tasks", s.requireOperator(s.createTask))
 	mux.HandleFunc("GET /api/v1/tasks/{id}", s.requireService(capabilityWorkInspect, s.getTask))
-	mux.HandleFunc("PATCH /api/v1/tasks/{id}", s.updateTask)
-	mux.HandleFunc("POST /api/v1/tasks/{id}/move", s.moveTask)
+	mux.HandleFunc("PATCH /api/v1/tasks/{id}", s.requireOperator(s.updateTask))
+	mux.HandleFunc("POST /api/v1/tasks/{id}/move", s.requireOperator(s.moveTask))
 	mux.HandleFunc("POST /api/v1/tasks/{id}/claim", s.requireService(capabilityWorkClaim, s.claimTask))
 	mux.HandleFunc("GET /api/v1/claims/{key}", s.requireService(capabilityClaimLookup, s.lookupClaim))
-	mux.HandleFunc("GET /api/v1/agents", s.listAgents)
+	mux.HandleFunc("GET /api/v1/agents", s.requireOperator(s.listAgents))
 	mux.HandleFunc("POST /api/v1/agents", s.requireService(capabilityAgentRegister, s.registerAgent))
 	mux.HandleFunc("POST /api/v1/runs/{id}/heartbeat", s.requireService(capabilityLeaseRenew, s.heartbeatRun))
 	mux.HandleFunc("POST /api/v1/runs/{id}/plan", s.requireService(capabilityPlanSubmit, s.submitPlan))
@@ -75,20 +121,123 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/runs/{id}/commands", s.requireService(capabilityCommandList, s.listCommands))
 	mux.HandleFunc("POST /api/v1/runs/{id}/commands/{commandId}/ack", s.requireService(capabilityCommandAck, s.acknowledgeCommand))
 	mux.HandleFunc("POST /api/v1/runs/{id}/events", s.requireService(capabilityEventAppend, s.appendProjectedEvent))
+	mux.HandleFunc("POST /api/v1/runs/{id}/evidence", s.requireService(capabilityEvidenceRecord, s.recordEvidence))
+	mux.HandleFunc("POST /api/v1/runs/{id}/operations", s.requireService(capabilityOperationReport, s.reportOperationalState))
+	mux.HandleFunc("GET /api/v1/channels", s.requireService(capabilityChannelList, s.listChannels))
+	mux.HandleFunc("GET /api/v1/channels/{id}/messages", s.requireService(capabilityChannelRead, s.listChannelMessages))
+	mux.HandleFunc("POST /api/v1/channels/{id}/messages", s.requireService(capabilityChannelMessage, s.postChannelMessage))
 	mux.HandleFunc("GET /api/v1/decisions", s.requireService(capabilityDecisionList, s.listDecisions))
 	mux.HandleFunc("GET /api/v1/decisions/{id}", s.requireService(capabilityDecisionInspect, s.getDecision))
 	mux.HandleFunc("POST /api/v1/decisions/{id}/answer", s.requireService(capabilityDecisionAnswer, s.answerDecision))
 	mux.HandleFunc("GET /api/v1/events", s.requireService(capabilityEventList, s.listEvents))
 	mux.HandleFunc("GET /api/v1/events/stream", s.requireService(capabilityEventStream, s.streamEvents))
 
-	// Local operator routes remain separate from the authenticated service
-	// surface until human sessions are implemented. They must not be exposed to
-	// an untrusted network.
-	mux.HandleFunc("GET /api/v1/operator/tasks/{id}", s.getTask)
-	mux.HandleFunc("POST /api/v1/operator/decisions/{id}/answer", s.answerDecision)
-	mux.HandleFunc("POST /api/v1/operator/runs/{id}/commands", s.createOperatorCommand)
-	mux.HandleFunc("GET /api/v1/operator/events/stream", s.streamEvents)
+	mux.HandleFunc("GET /api/v1/operator/tasks/{id}", s.requireOperator(s.getTask))
+	mux.HandleFunc("POST /api/v1/operator/decisions/{id}/answer", s.requireOperator(s.answerDecision))
+	mux.HandleFunc("POST /api/v1/operator/runs/{id}/commands", s.requireOperator(s.createOperatorCommand))
+	mux.HandleFunc("GET /api/v1/operator/events/stream", s.requireOperator(s.streamEvents))
+	mux.HandleFunc("GET /api/v1/operator/channels", s.requireOperator(s.listChannels))
+	mux.HandleFunc("POST /api/v1/operator/channels", s.requireOperator(s.createChannel))
+	mux.HandleFunc("GET /api/v1/operator/channels/{id}/messages", s.requireOperator(s.listChannelMessages))
+	mux.HandleFunc("POST /api/v1/operator/channels/{id}/messages", s.requireOperator(s.postChannelMessage))
+	mux.HandleFunc("POST /api/v1/operator/messages/{id}/promote", s.requireOperator(s.promoteChannelMessage))
+	mux.HandleFunc("GET /api/v1/operator/export", s.requireOperator(s.exportProject))
+	mux.HandleFunc("POST /api/v1/operator/import", s.requireOperator(s.importProject))
 	return s.middleware(mux)
+}
+
+func (s *Server) createOperatorSession(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	if s.operatorAuthenticator == nil {
+		s.writeAPIError(w, http.StatusNotFound, errorCodeNotFound, "operator authentication is disabled", false)
+		return
+	}
+	var input struct {
+		Token string `json:"token"`
+	}
+	if err := readJSON(r, &input); err != nil {
+		s.writeError(w, err)
+		return
+	}
+	identity, err := s.operatorAuthenticator.Authenticate(input.Token)
+	if err != nil {
+		s.writeOperatorAuthError(w, err)
+		return
+	}
+	sessionToken, err := newOperatorSecret()
+	if err != nil {
+		s.logger.Error("generate operator session token", "error", err)
+		s.writeAPIError(w, http.StatusInternalServerError, errorCodeInternal, "internal server error", true)
+		return
+	}
+	csrfToken, err := newOperatorSecret()
+	if err != nil {
+		s.logger.Error("generate operator CSRF token", "error", err)
+		s.writeAPIError(w, http.StatusInternalServerError, errorCodeInternal, "internal server error", true)
+		return
+	}
+	expiresAt := time.Now().UTC().Add(s.operatorSessionTTL)
+	if err := s.store.CreateOperatorSession(r.Context(), store.OperatorSession{
+		TokenHash: sha256Hex(sessionToken), CSRFHash: sha256Hex(csrfToken),
+		OperatorID: identity.ID, ExpiresAt: expiresAt.UnixMilli(),
+	}); err != nil {
+		s.logger.Error("create operator session", "error", err)
+		s.writeAPIError(w, http.StatusInternalServerError, errorCodeInternal, "internal server error", true)
+		return
+	}
+	s.setOperatorCookies(w, sessionToken, csrfToken, expiresAt)
+	writeJSON(w, http.StatusCreated, operatorSessionResponse{
+		Authenticated: true, OperatorID: identity.ID, ExpiresAt: expiresAt.UnixMilli(),
+	})
+}
+
+func (s *Server) getOperatorSession(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	session, _ := operatorSessionFromRequest(r)
+	writeJSON(w, http.StatusOK, operatorSessionResponse{
+		Authenticated: true, OperatorID: session.OperatorID, ExpiresAt: session.ExpiresAt,
+	})
+}
+
+func (s *Server) deleteOperatorSession(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	session, _ := operatorSessionFromRequest(r)
+	if err := s.store.DeleteOperatorSession(r.Context(), session.TokenHash); err != nil {
+		s.logger.Error("delete operator session", "error", err)
+		s.writeAPIError(w, http.StatusInternalServerError, errorCodeInternal, "internal server error", true)
+		return
+	}
+	s.clearOperatorCookies(w)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) setOperatorCookies(
+	w http.ResponseWriter,
+	sessionToken string,
+	csrfToken string,
+	expiresAt time.Time,
+) {
+	maxAge := int(time.Until(expiresAt).Seconds())
+	http.SetCookie(w, &http.Cookie{
+		Name: operatorSessionCookieName, Value: sessionToken, Path: "/",
+		Expires: expiresAt, MaxAge: maxAge, HttpOnly: true,
+		Secure: s.secureOperatorCookies, SameSite: http.SameSiteStrictMode,
+	})
+	http.SetCookie(w, &http.Cookie{
+		Name: operatorCSRFCookieName, Value: csrfToken, Path: "/",
+		Expires: expiresAt, MaxAge: maxAge, HttpOnly: false,
+		Secure: s.secureOperatorCookies, SameSite: http.SameSiteStrictMode,
+	})
+}
+
+func (s *Server) clearOperatorCookies(w http.ResponseWriter) {
+	for _, name := range []string{operatorSessionCookieName, operatorCSRFCookieName} {
+		http.SetCookie(w, &http.Cookie{
+			Name: name, Path: "/", MaxAge: -1, Expires: time.Unix(1, 0),
+			HttpOnly: name == operatorSessionCookieName,
+			Secure:   s.secureOperatorCookies, SameSite: http.SameSiteStrictMode,
+		})
+	}
 }
 
 func (s *Server) lookupClaim(w http.ResponseWriter, r *http.Request) {
@@ -136,7 +285,10 @@ func (s *Server) createOperatorCommand(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, err)
 		return
 	}
-	command, err := s.store.CreateCommand(r.Context(), r.PathValue("id"), input.Type, input.Reason, "operator:local")
+	command, err := s.store.CreateCommand(
+		r.Context(), r.PathValue("id"), input.Type, input.Reason,
+		"operator:"+operatorIDFromRequest(r),
+	)
 	if err != nil {
 		s.writeError(w, err)
 		return
@@ -217,10 +369,234 @@ func (s *Server) appendProjectedEvent(w http.ResponseWriter, r *http.Request) {
 		ExecutionID: input.ExecutionID, Sequence: input.Sequence, Type: input.Type, Message: input.Message,
 		Payload: input.Payload, OccurredAt: input.OccurredAt}
 	if err := s.store.AppendProjectedEvent(r.Context(), mutation, r.PathValue("id"), projected); err != nil {
+		if projectID, projectErr := s.store.ProjectIDForRun(r.Context(), r.PathValue("id")); projectErr == nil && projected.Producer != "" {
+			dependencies := stringSliceFromAny(projected.Payload["degraded_dependencies"])
+			_ = s.store.RecordProjectionRejected(r.Context(), projectID, projected.Producer, err.Error(), dependencies)
+		}
 		s.writeError(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) recordEvidence(w http.ResponseWriter, r *http.Request) {
+	if !s.requireRunProject(w, r, r.PathValue("id")) {
+		return
+	}
+	var input struct {
+		AgentID         string `json:"agent_id"`
+		ExpectedVersion int64  `json:"expected_version"`
+		FenceToken      int64  `json:"fence_token"`
+		domain.EvidenceInput
+	}
+	if err := readJSON(r, &input); err != nil {
+		s.writeError(w, err)
+		return
+	}
+	mutation, err := mutationFromRequest(r)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	mutation.Guard = &store.RunGuard{AgentID: input.AgentID, ExpectedVersion: input.ExpectedVersion, FenceToken: input.FenceToken}
+	input.RunID = r.PathValue("id")
+	evidence, err := s.store.RecordEvidenceGuarded(r.Context(), mutation, input.EvidenceInput)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, evidence)
+}
+
+func (s *Server) reportOperationalState(w http.ResponseWriter, r *http.Request) {
+	if !s.requireRunProject(w, r, r.PathValue("id")) {
+		return
+	}
+	var input struct {
+		AgentID              string `json:"agent_id"`
+		ExpectedVersion      int64  `json:"expected_version"`
+		FenceToken           int64  `json:"fence_token"`
+		Environment          string `json:"environment"`
+		RolloutState         string `json:"rollout_state"`
+		ObservationStartedAt *int64 `json:"observation_started_at"`
+		ObservationEndsAt    *int64 `json:"observation_ends_at"`
+		RollbackState        string `json:"rollback_state"`
+		PolicyVersion        string `json:"policy_version"`
+		SourceRevision       string `json:"source_revision"`
+		Outcome              string `json:"outcome"`
+	}
+	if err := readJSON(r, &input); err != nil {
+		s.writeError(w, err)
+		return
+	}
+	run, err := s.store.GetRun(r.Context(), r.PathValue("id"))
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	guard := &store.RunGuard{AgentID: input.AgentID, ExpectedVersion: input.ExpectedVersion, FenceToken: input.FenceToken}
+	mutation, err := mutationFromRequest(r)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	mutation.Guard = guard
+	state, err := s.store.RecordOperationalStateGuarded(r.Context(), mutation, domain.OperationalStateInput{
+		RunID: run.ID, Environment: input.Environment, RolloutState: input.RolloutState,
+		ObservationStartedAt: input.ObservationStartedAt, ObservationEndsAt: input.ObservationEndsAt,
+		RollbackState: input.RollbackState, PolicyVersion: input.PolicyVersion,
+		SourceRevision: input.SourceRevision, Outcome: input.Outcome,
+	})
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, state)
+}
+
+func (s *Server) listChannels(w http.ResponseWriter, r *http.Request) {
+	projectID := strings.TrimSpace(r.URL.Query().Get("project_id"))
+	if projectID == "" {
+		projectID = "prj_default"
+	}
+	if !s.requireProject(w, r, projectID) {
+		return
+	}
+	channels, err := s.store.ListChannels(r.Context(), projectID)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": channels})
+}
+
+func (s *Server) createChannel(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		ProjectID string `json:"project_id"`
+		Name      string `json:"name"`
+	}
+	if err := readJSON(r, &input); err != nil {
+		s.writeError(w, err)
+		return
+	}
+	channel, err := s.store.CreateChannel(r.Context(), input.ProjectID, input.Name)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, channel)
+}
+
+func (s *Server) listChannelMessages(w http.ResponseWriter, r *http.Request) {
+	channel, err := s.store.GetChannel(r.Context(), r.PathValue("id"))
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	if !s.requireProject(w, r, channel.ProjectID) {
+		return
+	}
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	messages, err := s.store.ListChannelMessages(r.Context(), channel.ID, limit)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": messages})
+}
+
+func (s *Server) postChannelMessage(w http.ResponseWriter, r *http.Request) {
+	channel, err := s.store.GetChannel(r.Context(), r.PathValue("id"))
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	if !s.requireProject(w, r, channel.ProjectID) {
+		return
+	}
+	var input struct {
+		Body       string                     `json:"body"`
+		References domain.CanonicalReferences `json:"references"`
+	}
+	if err := readJSON(r, &input); err != nil {
+		s.writeError(w, err)
+		return
+	}
+	authorType, authorID := "agent", "service:local-prototype"
+	if operatorID, ok := operatorSessionFromRequest(r); ok {
+		authorType, authorID = "human", "operator:"+operatorID.OperatorID
+	} else if identity, ok := serviceIdentityFromRequest(r); ok {
+		authorID = "service:" + identity.ID
+	}
+	message, err := s.store.PostChannelMessage(r.Context(), domain.ChannelMessageInput{
+		ChannelID: channel.ID, AuthorType: authorType, AuthorID: authorID,
+		Body: input.Body, References: input.References,
+	})
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, message)
+}
+
+func (s *Server) promoteChannelMessage(w http.ResponseWriter, r *http.Request) {
+	var input domain.CreateTaskInput
+	if err := readJSON(r, &input); err != nil {
+		s.writeError(w, err)
+		return
+	}
+	task, err := s.store.PromoteChannelMessage(r.Context(), r.PathValue("id"), input)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, task)
+}
+
+func (s *Server) exportProject(w http.ResponseWriter, r *http.Request) {
+	projectID := strings.TrimSpace(r.URL.Query().Get("project_id"))
+	if projectID == "" {
+		projectID = "prj_default"
+	}
+	encoded, err := s.store.ExportProject(r.Context(), projectID)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Disposition", `attachment; filename="appdeck-export.json"`)
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(encoded)
+}
+
+func (s *Server) importProject(w http.ResponseWriter, r *http.Request) {
+	encoded, err := io.ReadAll(io.LimitReader(r.Body, 32<<20))
+	if err != nil {
+		s.writeError(w, fmt.Errorf("read project import: %w", domain.ErrInvalidInput))
+		return
+	}
+	if err := s.store.ImportProject(r.Context(), encoded); err != nil {
+		s.writeError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func stringSliceFromAny(value any) []string {
+	items, ok := value.([]any)
+	if !ok {
+		if stringsValue, ok := value.([]string); ok {
+			return stringsValue
+		}
+		return nil
+	}
+	result := make([]string, 0, len(items))
+	for _, item := range items {
+		if text, ok := item.(string); ok && strings.TrimSpace(text) != "" {
+			result = append(result, strings.TrimSpace(text))
+		}
+	}
+	return result
 }
 
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
@@ -232,8 +608,9 @@ func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 func (s *Server) readiness(w http.ResponseWriter, r *http.Request) {
 	ready := true
 	checks := map[string]string{
-		"store":        "available",
-		"service_auth": "disabled",
+		"store":         "available",
+		"service_auth":  "disabled",
+		"operator_auth": "disabled",
 	}
 	if err := s.store.Health(r.Context()); err != nil {
 		ready = false
@@ -244,6 +621,13 @@ func (s *Server) readiness(w http.ResponseWriter, r *http.Request) {
 		if _, err := s.serviceAuthorizer.load(); err != nil {
 			ready = false
 			checks["service_auth"] = "unavailable"
+		}
+	}
+	if s.operatorAuthenticator != nil {
+		checks["operator_auth"] = "available"
+		if _, err := s.operatorAuthenticator.load(); err != nil {
+			ready = false
+			checks["operator_auth"] = "unavailable"
 		}
 	}
 
@@ -299,8 +683,19 @@ func (s *Server) bootstrap(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, err)
 		return
 	}
+	channels, err := s.store.ListChannels(r.Context(), "prj_default")
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	providerStatus, err := s.store.GetProviderStatus(r.Context(), "prj_default")
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
 	writeJSON(w, http.StatusOK, bootstrapResponse{
-		Tasks: tasks, Agents: agents, Decisions: decisions, Events: events, Now: time.Now().UTC().UnixMilli(),
+		Tasks: tasks, Agents: agents, Decisions: decisions, Events: events,
+		Channels: channels, ProviderStatus: providerStatus, Now: time.Now().UTC().UnixMilli(),
 	})
 }
 
@@ -486,11 +881,24 @@ func (s *Server) submitPlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input struct {
-		AgentID         string `json:"agent_id"`
-		ExpectedVersion int64  `json:"expected_version"`
-		FenceToken      int64  `json:"fence_token"`
-		Plan            string `json:"plan"`
-		RequireApproval bool   `json:"require_approval"`
+		AgentID              string   `json:"agent_id"`
+		ExpectedVersion      int64    `json:"expected_version"`
+		FenceToken           int64    `json:"fence_token"`
+		Plan                 string   `json:"plan"`
+		ContextDigest        string   `json:"context_digest"`
+		RiskClass            string   `json:"risk_class"`
+		VerificationStrategy string   `json:"verification_strategy"`
+		ExpectedSideEffects  []string `json:"expected_side_effects"`
+		RollbackApproach     string   `json:"rollback_approach"`
+		SourceRevision       string   `json:"source_revision"`
+		PolicyVersion        string   `json:"policy_version"`
+		RequireApproval      bool     `json:"require_approval"`
+		DecisionExpiresAt    *int64   `json:"decision_expires_at"`
+		DecisionEvidence     string   `json:"decision_evidence"`
+		EstimatedCostMinor   int64    `json:"estimated_cost_minor"`
+		Currency             string   `json:"currency"`
+		WaitingConsequence   string   `json:"waiting_consequence"`
+		RejectingConsequence string   `json:"rejecting_consequence"`
 	}
 	if err := readJSON(r, &input); err != nil {
 		s.writeError(w, err)
@@ -502,14 +910,39 @@ func (s *Server) submitPlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	mutation.Guard = &store.RunGuard{AgentID: input.AgentID, ExpectedVersion: input.ExpectedVersion, FenceToken: input.FenceToken}
-	decision, err := s.store.SubmitPlan(
-		r.Context(), mutation, r.PathValue("id"), input.Plan, input.RequireApproval,
-	)
+	var revision domain.PlanRevision
+	var decision *domain.Decision
+	if strings.TrimSpace(input.ContextDigest) == "" && strings.TrimSpace(input.RiskClass) == "" &&
+		strings.TrimSpace(input.VerificationStrategy) == "" && strings.TrimSpace(input.RollbackApproach) == "" {
+		decision, err = s.store.SubmitPlan(r.Context(), mutation, r.PathValue("id"), input.Plan, input.RequireApproval)
+		if err == nil {
+			revisions, listErr := s.store.ListPlanRevisions(r.Context(), r.PathValue("id"))
+			if listErr != nil {
+				err = listErr
+			} else if len(revisions) > 0 {
+				revision = revisions[len(revisions)-1]
+			}
+		}
+	} else {
+		revision, decision, err = s.store.SubmitPlanRevision(
+			r.Context(), mutation, r.PathValue("id"), domain.PlanRevisionInput{
+				Plan: input.Plan, ContextDigest: input.ContextDigest, RiskClass: input.RiskClass,
+				VerificationStrategy: input.VerificationStrategy, ExpectedSideEffects: input.ExpectedSideEffects,
+				RollbackApproach: input.RollbackApproach, SourceRevision: input.SourceRevision,
+				PolicyVersion: input.PolicyVersion,
+			}, domain.DecisionRequest{
+				Required: input.RequireApproval, ExpiresAt: input.DecisionExpiresAt, Risk: input.RiskClass,
+				EvidenceSummary: input.DecisionEvidence, EstimatedCostMinor: input.EstimatedCostMinor,
+				Currency: input.Currency, WaitingConsequence: input.WaitingConsequence,
+				RejectingConsequence: input.RejectingConsequence,
+			},
+		)
+	}
 	if err != nil {
 		s.writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"decision": decision})
+	writeJSON(w, http.StatusOK, map[string]any{"plan_revision": revision, "decision": decision})
 }
 
 func (s *Server) reportProgress(w http.ResponseWriter, r *http.Request) {
@@ -591,11 +1024,12 @@ func (s *Server) completeRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input struct {
-		AgentID         string `json:"agent_id"`
-		ExpectedVersion int64  `json:"expected_version"`
-		FenceToken      int64  `json:"fence_token"`
-		Summary         string `json:"summary"`
-		Evidence        string `json:"evidence"`
+		AgentID         string   `json:"agent_id"`
+		ExpectedVersion int64    `json:"expected_version"`
+		FenceToken      int64    `json:"fence_token"`
+		Summary         string   `json:"summary"`
+		Evidence        string   `json:"evidence"`
+		EvidenceIDs     []string `json:"evidence_ids"`
 	}
 	if err := readJSON(r, &input); err != nil {
 		s.writeError(w, err)
@@ -607,8 +1041,12 @@ func (s *Server) completeRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	mutation.Guard = &store.RunGuard{AgentID: input.AgentID, ExpectedVersion: input.ExpectedVersion, FenceToken: input.FenceToken}
-	if err := s.store.CompleteRun(
-		r.Context(), mutation, r.PathValue("id"), input.Summary, input.Evidence,
+	if len(input.EvidenceIDs) == 0 {
+		s.writeError(w, fmt.Errorf("evidence_ids must reference current structured evidence; Markdown evidence is no longer a completion gate: %w", domain.ErrInvalidInput))
+		return
+	}
+	if err := s.store.CompleteRunWithEvidence(
+		r.Context(), mutation, r.PathValue("id"), input.Summary, input.EvidenceIDs,
 	); err != nil {
 		s.writeError(w, err)
 		return
@@ -802,6 +1240,106 @@ func (s *Server) requireService(capability string, next http.HandlerFunc) http.H
 	}
 }
 
+func (s *Server) requireOperator(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		if s.operatorAuthenticator == nil {
+			ctx := context.WithValue(r.Context(), operatorSessionContextKey{}, authenticatedOperatorSession{
+				OperatorID: "local",
+			})
+			next(w, r.WithContext(ctx))
+			return
+		}
+		if !operatorOriginAllowed(r) {
+			s.writeAPIError(w, http.StatusForbidden, errorCodeForbidden, "same-origin operator request required", false)
+			return
+		}
+		cookie, err := r.Cookie(operatorSessionCookieName)
+		if err != nil || strings.TrimSpace(cookie.Value) == "" {
+			s.writeOperatorAuthError(w, ErrOperatorUnauthenticated)
+			return
+		}
+		tokenHash := sha256Hex(cookie.Value)
+		stored, err := s.store.GetOperatorSession(r.Context(), tokenHash, time.Now().UTC().UnixMilli())
+		if err != nil {
+			if errors.Is(err, domain.ErrNotFound) {
+				s.clearOperatorCookies(w)
+				s.writeOperatorAuthError(w, ErrOperatorUnauthenticated)
+				return
+			}
+			s.logger.Error("read operator session", "error", err)
+			s.writeAPIError(w, http.StatusInternalServerError, errorCodeInternal, "internal server error", true)
+			return
+		}
+		if !isSafeMethod(r.Method) {
+			csrfCookie, cookieErr := r.Cookie(operatorCSRFCookieName)
+			headers := r.Header.Values(operatorCSRFHeader)
+			if cookieErr != nil || len(headers) != 1 || csrfCookie.Value == "" ||
+				!constantTimeStringEqual(csrfCookie.Value, strings.TrimSpace(headers[0])) ||
+				!constantTimeStringEqual(sha256Hex(csrfCookie.Value), stored.CSRFHash) {
+				s.writeAPIError(w, http.StatusForbidden, errorCodeForbidden, "valid CSRF token required", false)
+				return
+			}
+		}
+		ctx := context.WithValue(r.Context(), operatorSessionContextKey{}, authenticatedOperatorSession{
+			OperatorID: stored.OperatorID, TokenHash: stored.TokenHash, ExpiresAt: stored.ExpiresAt,
+		})
+		next(w, r.WithContext(ctx))
+	}
+}
+
+func (s *Server) writeOperatorAuthError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, ErrOperatorUnauthenticated):
+		s.writeAPIError(w, http.StatusUnauthorized, errorCodeUnauthenticated, "operator authentication required", false)
+	case errors.Is(err, ErrOperatorAuthUnavailable):
+		s.logger.Error("operator authentication policy unavailable", "error", err)
+		s.writeAPIError(w, http.StatusServiceUnavailable, errorCodeServiceUnavailable, "operator authentication is unavailable", true)
+	default:
+		s.logger.Error("operator authentication failed", "error", err)
+		s.writeAPIError(w, http.StatusInternalServerError, errorCodeInternal, "internal server error", true)
+	}
+}
+
+func operatorSessionFromRequest(r *http.Request) (authenticatedOperatorSession, bool) {
+	session, ok := r.Context().Value(operatorSessionContextKey{}).(authenticatedOperatorSession)
+	return session, ok
+}
+
+func operatorIDFromRequest(r *http.Request) string {
+	if session, ok := operatorSessionFromRequest(r); ok && session.OperatorID != "" {
+		return session.OperatorID
+	}
+	return "local"
+}
+
+func isSafeMethod(method string) bool {
+	return method == http.MethodGet || method == http.MethodHead || method == http.MethodOptions
+}
+
+func operatorOriginAllowed(r *http.Request) bool {
+	if strings.EqualFold(strings.TrimSpace(r.Header.Get("Sec-Fetch-Site")), "cross-site") {
+		return false
+	}
+	origin := strings.TrimSpace(r.Header.Get("Origin"))
+	if origin == "" {
+		return true
+	}
+	parsed, err := url.Parse(origin)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		return false
+	}
+	return strings.EqualFold(parsed.Host, r.Host)
+}
+
+func newOperatorSecret() (string, error) {
+	value := make([]byte, 32)
+	if _, err := rand.Read(value); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(value), nil
+}
+
 func mutationFromRequest(r *http.Request) (store.Mutation, error) {
 	actorID := "local-prototype"
 	if identity, ok := serviceIdentityFromRequest(r); ok {
@@ -970,7 +1508,7 @@ func (s *Server) middleware(next http.Handler) http.Handler {
 		w.Header().Set("Referrer-Policy", "same-origin")
 		if origin := r.Header.Get("Origin"); origin != "" && isDevelopmentOrigin(origin) {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Idempotency-Key, Last-Event-ID, X-Request-ID")
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Idempotency-Key, Last-Event-ID, X-CSRF-Token, X-Request-ID")
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS")
 			w.Header().Set("Access-Control-Expose-Headers", "X-Request-ID")
 			w.Header().Set("Vary", "Origin")

@@ -42,6 +42,8 @@ tags:
   - name: Runs
   - name: Decisions
   - name: Events
+  - name: Channels
+  - name: Operations
 
 paths:
   /provider:
@@ -428,9 +430,24 @@ paths:
                 fence_token: { type: integer, format: int64, minimum: 1 }
                 plan:
                   type: string
+                context_digest: { type: string }
+                risk_class: { type: string, enum: [low, medium, high, critical] }
+                verification_strategy: { type: string }
+                expected_side_effects:
+                  type: array
+                  items: { type: string }
+                rollback_approach: { type: string }
+                source_revision: { type: string }
+                policy_version: { type: string }
                 require_approval:
                   type: boolean
                   default: true
+                decision_expires_at: { type: integer, format: int64 }
+                decision_evidence: { type: string }
+                estimated_cost_minor: { type: integer, format: int64, minimum: 0 }
+                currency: { type: string, minLength: 3, maxLength: 3 }
+                waiting_consequence: { type: string }
+                rejecting_consequence: { type: string }
       responses:
         "200":
           description: Optional decision created for human approval
@@ -439,6 +456,8 @@ paths:
               schema:
                 type: object
                 properties:
+                  plan_revision:
+                    $ref: "#/components/schemas/PlanRevision"
                   decision:
                     oneOf:
                       - $ref: "#/components/schemas/Decision"
@@ -575,16 +594,19 @@ paths:
           application/json:
             schema:
               type: object
-              required: [agent_id, expected_version, fence_token, summary, evidence]
+              required: [agent_id, expected_version, fence_token, summary, evidence_ids]
               properties:
                 agent_id: { type: string }
                 expected_version: { type: integer, format: int64, minimum: 1 }
                 fence_token: { type: integer, format: int64, minimum: 1 }
                 summary:
                   type: string
-                evidence:
-                  type: string
-                  description: Markdown verification report
+                evidence_ids:
+                  type: array
+                  minItems: 1
+                  uniqueItems: true
+                  items: { type: string }
+                  description: IDs of current structured evidence records admitted for the active plan revision.
       responses:
         "204":
           description: Run completed and evidence artifact created
@@ -725,6 +747,145 @@ paths:
       responses:
         "204": { description: Event appended or exact replay accepted }
         "409": { $ref: "#/components/responses/Conflict" }
+        "401": { $ref: "#/components/responses/AuthenticationRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /runs/{runId}/evidence:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+      - $ref: "#/components/parameters/IdempotencyKey"
+    post:
+      tags: [Runs]
+      operationId: recordRunEvidence
+      x-capability: evidence.record
+      security:
+        - serviceBearer: []
+      summary: Record immutable source-bound evidence for an exact plan and authority epoch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: "#/components/schemas/RunGuard"
+                - $ref: "#/components/schemas/EvidenceInput"
+      responses:
+        "201":
+          description: Evidence recorded or exact retry replayed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Evidence" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/InvalidInput" }
+        "401": { $ref: "#/components/responses/AuthenticationRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /runs/{runId}/operations:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+      - $ref: "#/components/parameters/IdempotencyKey"
+    post:
+      tags: [Operations]
+      operationId: reportOperationalState
+      x-capability: operation.report
+      security:
+        - serviceBearer: []
+      summary: Report provider-neutral rollout, observation, rollback, and policy state
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: "#/components/schemas/RunGuard"
+                - $ref: "#/components/schemas/OperationalStateInput"
+      responses:
+        "200":
+          description: Current operational state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OperationalState" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/InvalidInput" }
+        "401": { $ref: "#/components/responses/AuthenticationRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /channels:
+    get:
+      tags: [Channels]
+      operationId: listProjectChannels
+      x-capability: channel.list
+      security:
+        - serviceBearer: []
+      summary: List agent-native conversation channels without treating chat as work authority
+      parameters:
+        - { name: project_id, in: query, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Project channels
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Channel" }
+        "401": { $ref: "#/components/responses/AuthenticationRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /channels/{channelId}/messages:
+    parameters:
+      - name: channelId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [Channels]
+      operationId: listChannelMessages
+      x-capability: channel.message.list
+      security:
+        - serviceBearer: []
+      summary: List ordered channel messages and canonical references
+      responses:
+        "200":
+          description: Channel messages
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/ChannelMessage" }
+        "401": { $ref: "#/components/responses/AuthenticationRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [Channels]
+      operationId: appendChannelMessage
+      x-capability: channel.message.append
+      security:
+        - serviceBearer: []
+      summary: Append a message which carries references but no ambient execution authority
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [body]
+              properties:
+                body: { type: string }
+                references: { $ref: "#/components/schemas/CanonicalReferences" }
+      responses:
+        "201":
+          description: Message appended
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ChannelMessage" }
+        "422": { $ref: "#/components/responses/InvalidInput" }
         "401": { $ref: "#/components/responses/AuthenticationRequired" }
         "403": { $ref: "#/components/responses/Forbidden" }
 
@@ -1086,6 +1247,7 @@ components:
         - status
         - priority
         - budget_minutes
+        - budget
         - version
         - created_at
         - updated_at
@@ -1106,6 +1268,8 @@ components:
           $ref: "#/components/schemas/Priority"
         budget_minutes:
           type: integer
+        budget:
+          $ref: "#/components/schemas/Budget"
         assigned_agent_id:
           type: string
         version:
@@ -1140,6 +1304,8 @@ components:
           type: integer
           minimum: 1
           default: 30
+        budget:
+          $ref: "#/components/schemas/Budget"
 
     UpdateTask:
       type: object
@@ -1155,6 +1321,8 @@ components:
         budget_minutes:
           type: integer
           minimum: 1
+        budget:
+          $ref: "#/components/schemas/Budget"
         version:
           type: integer
           description: Optional optimistic concurrency version
@@ -1239,6 +1407,8 @@ components:
           enum: [planning, waiting_decision, running, verifying, completed, blocked, failed, cancelled]
         plan:
           type: string
+        active_plan_revision_id:
+          type: string
         result_summary:
           type: string
         lease_expires_at:
@@ -1272,6 +1442,8 @@ components:
           type: string
         run_id:
           type: string
+        plan_revision_id:
+          type: string
         question:
           type: string
         options:
@@ -1280,9 +1452,23 @@ components:
             type: string
         recommendation:
           type: string
+        risk_class:
+          type: string
+          enum: [low, medium, high, critical]
+        evidence_summary:
+          type: string
+        estimated_cost_minor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        waiting_consequence:
+          type: string
+        rejecting_consequence:
+          type: string
         status:
           type: string
-          enum: [pending, answered, cancelled]
+          enum: [pending, answered, cancelled, expired, superseded]
         answer:
           type: string
         created_at:
@@ -1291,6 +1477,11 @@ components:
         answered_at:
           type: integer
           format: int64
+        expires_at:
+          type: integer
+          format: int64
+        answered_by:
+          type: string
 
     Event:
       type: object
@@ -1343,22 +1534,19 @@ components:
 
     PlanRevision:
       type: object
-      x-implementation-status: planned
+      x-implementation-status: implemented
       x-fixture: ./fixtures/v1/plan.json
-      description: Target immutable plan revision; the current plan endpoint still accepts Markdown.
+      description: Immutable numbered plan revision bound to one provider run.
       required:
         - id
         - run_id
         - revision
-        - task_version
+        - plan
         - context_digest
         - risk_class
-        - summary
-        - steps
         - verification_strategy
         - expected_side_effects
         - rollback_approach
-        - policy_version
         - created_at
       properties:
         id:
@@ -1368,35 +1556,22 @@ components:
         revision:
           type: integer
           minimum: 1
-        task_version:
-          type: integer
-          minimum: 1
+        plan:
+          type: string
         context_digest:
           type: string
         risk_class:
           type: string
           enum: [low, medium, high, critical]
-        summary:
-          type: string
-        steps:
-          type: array
-          items:
-            type: object
-            required: [id, description]
-            properties:
-              id:
-                type: string
-              description:
-                type: string
         verification_strategy:
-          type: array
-          items:
-            type: string
+          type: string
         expected_side_effects:
           type: array
           items:
             type: string
         rollback_approach:
+          type: string
+        source_revision:
           type: string
         policy_version:
           type: string
@@ -1520,11 +1695,11 @@ components:
 
     Budget:
       type: object
-      x-implementation-status: planned
+      x-implementation-status: implemented
       x-fixture: ./fixtures/v1/budget.json
-      description: Target structured execution budget; AppDeck currently exposes budget_minutes only.
+      description: Structured task execution budget retained alongside the version-1 budget_minutes compatibility field.
       required:
-        - deadline_at
+        - time_minutes
         - max_attempts
         - max_tokens
         - max_cost_minor
@@ -1532,6 +1707,9 @@ components:
         - max_concurrency
         - authority
       properties:
+        time_minutes:
+          type: integer
+          minimum: 1
         deadline_at:
           type: integer
           format: int64
@@ -1559,12 +1737,14 @@ components:
 
     Evidence:
       type: object
-      x-implementation-status: planned
+      x-implementation-status: implemented
       x-fixture: ./fixtures/v1/evidence.json
-      description: Target structured, source-bound evidence record.
+      description: Immutable structured, source-bound evidence record admitted against an exact plan revision.
       required:
         - id
+        - task_id
         - run_id
+        - plan_revision_id
         - type
         - producer
         - verifier
@@ -1575,11 +1755,18 @@ components:
         - provenance_uri
         - provenance_digest
         - observed_at
-        - policy_version
+        - artifact_uri
+        - artifact_digest
+        - admission_status
+        - created_at
       properties:
         id:
           type: string
+        task_id:
+          type: string
         run_id:
+          type: string
+        plan_revision_id:
           type: string
         type:
           type: string
@@ -1606,12 +1793,150 @@ components:
         expires_at:
           type: integer
           format: int64
+        artifact_uri:
+          type: string
+        artifact_digest:
+          type: string
         policy_version:
           type: string
+        admission_status:
+          type: string
+          enum: [current, stale, rejected, superseded]
+        created_at:
+          type: integer
+          format: int64
+
+    EvidenceInput:
+      type: object
+      required:
+        - id
+        - plan_revision_id
+        - type
+        - producer
+        - verifier
+        - subject_digest
+        - source_revision
+        - command
+        - outcome
+        - provenance_uri
+        - provenance_digest
+        - observed_at
+        - artifact_uri
+        - artifact_digest
+      properties:
+        id: { type: string }
+        plan_revision_id: { type: string }
+        type: { type: string }
+        producer: { type: string }
+        verifier: { type: string }
+        subject_digest: { type: string }
+        source_revision: { type: string }
+        command: { type: string }
+        outcome: { type: string, enum: [passed, failed] }
+        provenance_uri: { type: string }
+        provenance_digest: { type: string }
+        observed_at: { type: integer, format: int64 }
+        expires_at: { type: integer, format: int64 }
+        artifact_uri: { type: string }
+        artifact_digest: { type: string }
+        policy_version: { type: string }
+
+    CanonicalReferences:
+      type: object
+      properties:
+        task_ids: { type: array, items: { type: string } }
+        run_ids: { type: array, items: { type: string } }
+        decision_ids: { type: array, items: { type: string } }
+        artifact_ids: { type: array, items: { type: string } }
+        evidence_ids: { type: array, items: { type: string } }
+
+    Channel:
+      type: object
+      required: [id, project_id, name, created_at]
+      properties:
+        id: { type: string }
+        project_id: { type: string }
+        name: { type: string }
+        created_at: { type: integer, format: int64 }
+
+    ChannelMessage:
+      type: object
+      required: [id, channel_id, project_id, author_type, author_id, body, references, created_at]
+      properties:
+        id: { type: string }
+        channel_id: { type: string }
+        project_id: { type: string }
+        author_type: { type: string, enum: [human, agent, system] }
+        author_id: { type: string }
+        body: { type: string }
+        references: { $ref: "#/components/schemas/CanonicalReferences" }
+        promoted_task_id: { type: string }
+        created_at: { type: integer, format: int64 }
+
+    ProviderStatus:
+      type: object
+      required:
+        - project_id
+        - connectivity
+        - sync_state
+        - sync_lag_millis
+        - lease_state
+        - degraded_dependencies
+        - stale_projection_count
+        - rejected_projection_count
+      properties:
+        project_id: { type: string }
+        connectivity: { type: string, enum: [unknown, connected, stale, disconnected] }
+        last_seen_at: { type: integer, format: int64 }
+        sync_state: { type: string, enum: [unknown, current, lagging, stale, rejected] }
+        sync_lag_millis: { type: integer, format: int64, minimum: 0 }
+        lease_state: { type: string, enum: [none, active, expiring, expired] }
+        lease_expires_at: { type: integer, format: int64 }
+        degraded_dependencies: { type: array, items: { type: string } }
+        stale_projection_count: { type: integer, format: int64, minimum: 0 }
+        rejected_projection_count: { type: integer, format: int64, minimum: 0 }
+        last_error: { type: string }
+
+    OperationalStateInput:
+      type: object
+      required: [environment, rollout_state, rollback_state, policy_version, source_revision]
+      properties:
+        environment: { type: string }
+        rollout_state: { type: string }
+        observation_started_at: { type: integer, format: int64 }
+        observation_ends_at: { type: integer, format: int64 }
+        rollback_state: { type: string }
+        policy_version: { type: string }
+        source_revision: { type: string }
+        outcome: { type: string }
+
+    OperationalState:
+      allOf:
+        - $ref: "#/components/schemas/OperationalStateInput"
+        - type: object
+          required: [id, project_id, task_id, run_id, updated_at]
+          properties:
+            id: { type: string }
+            project_id: { type: string }
+            task_id: { type: string }
+            run_id: { type: string }
+            updated_at: { type: integer, format: int64 }
+
+    TrailEntry:
+      type: object
+      required: [id, stage, type, title, occurred_at]
+      properties:
+        id: { type: string }
+        stage: { type: string, enum: [signal, decision, change, delivery, observation, verification, outcome] }
+        type: { type: string }
+        title: { type: string }
+        resource_id: { type: string }
+        payload: { type: object, additionalProperties: true }
+        occurred_at: { type: integer, format: int64 }
 
     Artifact:
       type: object
-      required: [id, task_id, run_id, name, kind, uri, content, created_at]
+      required: [id, task_id, run_id, name, kind, uri, content, digest, size_bytes, created_at]
       properties:
         id:
           type: string
@@ -1627,13 +1952,30 @@ components:
           type: string
         content:
           type: string
+        digest:
+          type: string
+        size_bytes:
+          type: integer
+          format: int64
         created_at:
           type: integer
           format: int64
 
     TaskDetail:
       type: object
-      required: [task, runs, events, decisions, artifacts]
+      required:
+        - task
+        - runs
+        - plan_revisions
+        - events
+        - decisions
+        - commands
+        - artifacts
+        - evidence
+        - operational_states
+        - provider_status
+        - display_state
+        - trail
       properties:
         task:
           $ref: "#/components/schemas/Task"
@@ -1641,6 +1983,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Run"
+        plan_revisions:
+          type: array
+          items:
+            $ref: "#/components/schemas/PlanRevision"
         events:
           type: array
           items:
@@ -1653,10 +1999,31 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Artifact"
+        commands:
+          type: array
+          items:
+            $ref: "#/components/schemas/Command"
+        evidence:
+          type: array
+          items:
+            $ref: "#/components/schemas/Evidence"
+        operational_states:
+          type: array
+          items:
+            $ref: "#/components/schemas/OperationalState"
+        provider_status:
+          $ref: "#/components/schemas/ProviderStatus"
+        display_state:
+          type: string
+          enum: [planning, waiting, running, retrying, verifying, syncing, stale-evidence, blocked, completed, backlog, ready]
+        trail:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrailEntry"
 
     Bootstrap:
       type: object
-      required: [tasks, agents, decisions, events, now]
+      required: [tasks, agents, decisions, events, channels, provider_status, now]
       properties:
         tasks:
           type: array
@@ -1674,6 +2041,12 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Event"
+        channels:
+          type: array
+          items:
+            $ref: "#/components/schemas/Channel"
+        provider_status:
+          $ref: "#/components/schemas/ProviderStatus"
         now:
           type: integer
           format: int64

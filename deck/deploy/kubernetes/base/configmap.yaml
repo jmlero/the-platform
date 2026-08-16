@@ -7,3 +7,4 @@ data:
   APPDECK_DATA_DIR: "/data"
   APPDECK_DEMO_AGENT: "false"
   APPDECK_LOG_LEVEL: "info"
+  APPDECK_OPERATOR_COOKIE_SECURE: "true"

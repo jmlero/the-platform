@@ -16,7 +16,7 @@
     ShieldCheck,
     X
   } from '@lucide/svelte';
-  import { eventLabel, formatDate, initials, statusLabels, timeAgo } from '$lib/format';
+  import { eventLabel, formatDate, initials, timeAgo } from '$lib/format';
   import type {
     Agent,
     Decision,
@@ -45,6 +45,13 @@
   let acceptanceCriteria = '';
   let priority: Priority = 'medium';
   let budgetMinutes = 30;
+  let maxAttempts = 1;
+  let maxTokens = 0;
+  let maxCostMinor = 0;
+  let currency = 'USD';
+  let maxConcurrency = 1;
+  let authority = '';
+  let deadline = '';
 
   $: task = detail.task;
   $: run = detail.runs[0];
@@ -61,6 +68,13 @@
     acceptanceCriteria = task.acceptance_criteria;
     priority = task.priority;
     budgetMinutes = task.budget_minutes;
+    maxAttempts = task.budget.max_attempts;
+    maxTokens = task.budget.max_tokens;
+    maxCostMinor = task.budget.max_cost_minor;
+    currency = task.budget.currency;
+    maxConcurrency = task.budget.max_concurrency;
+    authority = task.budget.authority.join(', ');
+    deadline = task.budget.deadline_at ? new Date(task.budget.deadline_at).toISOString().slice(0, 16) : '';
     editing = false;
     tab = 'overview';
     error = '';
@@ -109,6 +123,16 @@
         acceptance_criteria: acceptanceCriteria.trim(),
         priority,
         budget_minutes: Number(budgetMinutes),
+        budget: {
+          time_minutes: Number(budgetMinutes),
+          ...(deadline ? { deadline_at: new Date(deadline).getTime() } : {}),
+          max_attempts: Number(maxAttempts),
+          max_tokens: Number(maxTokens),
+          max_cost_minor: Number(maxCostMinor),
+          currency: currency.trim().toUpperCase(),
+          max_concurrency: Number(maxConcurrency),
+          authority: authority.split(',').map((item) => item.trim()).filter(Boolean)
+        },
         version: task.version
       });
       editing = false;
@@ -136,6 +160,10 @@
   function handleKeydown(event: KeyboardEvent) {
     if (event.key === 'Escape') onclose();
   }
+
+  function displayLabel(value: string): string {
+    return value.split('-').map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(' ');
+  }
 </script>
 
 <svelte:window on:keydown={handleKeydown} />
@@ -161,7 +189,7 @@
     <div class="drawer-scroll">
       <section class="task-heading">
         <div class="status-line">
-          <span class="status status-{task.status}"><i></i>{statusLabels[task.status]}</span>
+          <span class="status status-{task.status}"><i></i>{displayLabel(detail.display_state)}</span>
           <span class="priority priority-{task.priority}">{task.priority} priority</span>
         </div>
 
@@ -175,6 +203,22 @@
           <span><Clock3 size={13} /> {task.budget_minutes} minute budget</span>
           <span><History size={13} /> Updated {timeAgo(task.updated_at)}</span>
         </div>
+        <div class="budget-summary">
+          <span>{task.budget.max_attempts} attempt{task.budget.max_attempts === 1 ? '' : 's'}</span>
+          <span>{task.budget.max_tokens ? `${task.budget.max_tokens.toLocaleString()} tokens` : 'No token cap'}</span>
+          <span>{task.budget.max_cost_minor ? `${(task.budget.max_cost_minor / 100).toFixed(2)} ${task.budget.currency}` : 'No cost cap'}</span>
+          <span>Concurrency {task.budget.max_concurrency}</span>
+        </div>
+      </section>
+
+      <section class="provider-truth state-{detail.provider_status.connectivity}">
+        <div><span>Provider</span><strong>{detail.provider_status.connectivity}</strong></div>
+        <div><span>Synchronization</span><strong>{detail.provider_status.sync_state}</strong><small>{Math.round(detail.provider_status.sync_lag_millis / 1000)}s lag</small></div>
+        <div><span>Lease</span><strong>{detail.provider_status.lease_state}</strong>{#if detail.provider_status.lease_expires_at}<small>{formatDate(detail.provider_status.lease_expires_at)}</small>{/if}</div>
+        <div><span>Projections</span><strong>{detail.provider_status.rejected_projection_count} rejected</strong><small>{detail.provider_status.stale_projection_count} stale</small></div>
+        {#if detail.provider_status.degraded_dependencies.length}
+          <p>Degraded: {detail.provider_status.degraded_dependencies.join(', ')}</p>
+        {/if}
       </section>
 
       {#if run && ['running', 'verifying', 'done'].includes(task.status)}
@@ -199,6 +243,14 @@
           <div class="recommendation">
             Recommended: <strong>{pendingDecision.recommendation}</strong>
           </div>
+          <div class="decision-facts">
+            <span>Risk <strong>{pendingDecision.risk_class}</strong></span>
+            <span>Cost <strong>{(pendingDecision.estimated_cost_minor / 100).toFixed(2)} {pendingDecision.currency}</strong></span>
+            {#if pendingDecision.expires_at}<span>Expires <strong>{formatDate(pendingDecision.expires_at)}</strong></span>{/if}
+          </div>
+          {#if pendingDecision.evidence_summary}<p class="decision-context"><strong>Evidence:</strong> {pendingDecision.evidence_summary}</p>{/if}
+          <p class="decision-context"><strong>If waiting:</strong> {pendingDecision.waiting_consequence}</p>
+          <p class="decision-context"><strong>If rejected:</strong> {pendingDecision.rejecting_consequence}</p>
           <div class="decision-actions">
             {#each pendingDecision.options as option}
               <button
@@ -225,7 +277,7 @@
           <History size={14} /> Activity <span>{detail.events.length}</span>
         </button>
         <button class:active={tab === 'evidence'} type="button" on:click={() => (tab = 'evidence')}>
-          <FileCheck2 size={14} /> Evidence <span>{detail.artifacts.length}</span>
+          <FileCheck2 size={14} /> Evidence <span>{detail.evidence.length}</span>
         </button>
       </nav>
 
@@ -274,6 +326,15 @@
                 <input type="number" min="1" max="1440" bind:value={budgetMinutes} />
               </label>
             </section>
+            <section class="edit-grid structured-budget">
+              <label>Deadline<input type="datetime-local" bind:value={deadline} /></label>
+              <label>Attempts<input type="number" min="1" bind:value={maxAttempts} /></label>
+              <label>Tokens<input type="number" min="0" bind:value={maxTokens} /></label>
+              <label>Cost, minor units<input type="number" min="0" bind:value={maxCostMinor} /></label>
+              <label>Currency<input maxlength="3" bind:value={currency} /></label>
+              <label>Concurrency<input type="number" min="1" bind:value={maxConcurrency} /></label>
+              <label class="wide">Authority<input bind:value={authority} placeholder="source.read, pull_request.create" /></label>
+            </section>
             <div class="edit-actions">
               <button class="secondary" type="button" on:click={() => (editing = false)}>Cancel</button>
               <button class="primary" type="button" disabled={busy} on:click={save}>
@@ -310,24 +371,72 @@
               </div>
             </section>
           {/if}
+
+          {#if detail.plan_revisions.length}
+            <section>
+              <span class="section-label">Immutable plan history</span>
+              <div class="plan-history">
+                {#each detail.plan_revisions as plan (plan.id)}
+                  <article>
+                    <header><strong>Revision {plan.revision}</strong><span>{plan.risk_class} risk · {formatDate(plan.created_at)}</span></header>
+                    <p>{plan.plan}</p>
+                    <dl>
+                      <div><dt>Context</dt><dd>{plan.context_digest}</dd></div>
+                      <div><dt>Verification</dt><dd>{plan.verification_strategy}</dd></div>
+                      <div><dt>Side effects</dt><dd>{plan.expected_side_effects.join(', ') || 'None reported'}</dd></div>
+                      <div><dt>Rollback</dt><dd>{plan.rollback_approach}</dd></div>
+                    </dl>
+                  </article>
+                {/each}
+              </div>
+            </section>
+          {/if}
+
+          {#if detail.operational_states.length}
+            <section>
+              <span class="section-label">Delivery and observation</span>
+              <div class="operations-grid">
+                {#each detail.operational_states as state (state.id)}
+                  <article>
+                    <strong>{state.environment}</strong><span>Rollout {state.rollout_state}</span>
+                    <span>Rollback {state.rollback_state}</span><span>Policy {state.policy_version}</span>
+                    {#if state.observation_started_at}<small>Observed {formatDate(state.observation_started_at)}{state.observation_ends_at ? ` – ${formatDate(state.observation_ends_at)}` : ''}</small>{/if}
+                  </article>
+                {/each}
+              </div>
+            </section>
+          {/if}
         </div>
       {:else if tab === 'activity'}
         <div class="tab-content timeline">
-          {#each detail.events as event (event.id)}
-            <article class:decision-event={event.type.startsWith('decision.')}>
+          {#each detail.trail as event (event.id)}
+            <article class:decision-event={event.stage === 'decision'}>
               <span class="timeline-dot"></span>
               <div class="timeline-copy">
                 <div>
-                  <strong>{eventLabel(event.type)}</strong>
-                  <time>{formatDate(event.created_at)}</time>
+                  <strong>{event.stage} · {eventLabel(event.type)}</strong>
+                  <time>{formatDate(event.occurred_at)}</time>
                 </div>
-                <p>{event.message}</p>
+                <p>{event.title}</p>
               </div>
             </article>
           {/each}
         </div>
       {:else}
         <div class="tab-content evidence-list">
+          {#each detail.evidence as evidence (evidence.id)}
+            <article class="evidence-record status-{evidence.admission_status}">
+              <header><div><strong>{evidence.type} · {evidence.outcome}</strong><small>{evidence.admission_status} · observed {formatDate(evidence.observed_at)}</small></div></header>
+              <dl>
+                <div><dt>Producer</dt><dd>{evidence.producer}</dd></div>
+                <div><dt>Verifier</dt><dd>{evidence.verifier}</dd></div>
+                <div><dt>Command</dt><dd>{evidence.command}</dd></div>
+                <div><dt>Subject</dt><dd>{evidence.subject_digest}</dd></div>
+                <div><dt>Artifact</dt><dd>{evidence.artifact_digest}</dd></div>
+                <div><dt>Source</dt><dd>{evidence.source_revision}</dd></div>
+              </dl>
+            </article>
+          {/each}
           {#each detail.artifacts as artifact (artifact.id)}
             <article class="artifact">
               <header>
@@ -339,13 +448,14 @@
               </header>
               <pre>{artifact.content}</pre>
             </article>
-          {:else}
+          {/each}
+          {#if detail.artifacts.length === 0 && detail.evidence.length === 0}
             <div class="empty-evidence">
               <FileCheck2 size={25} />
               <h3>No evidence attached yet</h3>
-              <p>Artifacts will appear here when an agent verifies a run.</p>
+              <p>Structured records and generated reports will appear after verification.</p>
             </div>
-          {/each}
+          {/if}
         </div>
       {/if}
     </div>
@@ -721,7 +831,40 @@
   .acceptance > span { color: var(--cyan); }
 
   .edit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .structured-budget { padding: 12px; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--line); border-radius: 11px; }
+  .structured-budget .wide { grid-column: 1 / -1; }
   .edit-actions { justify-content: flex-end; gap: 8px; margin-top: -10px; }
+
+  .budget-summary { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .budget-summary span { padding: 4px 7px; color: var(--subtle); font-size: 0.59rem; background: rgba(255, 255, 255, 0.035); border-radius: 6px; }
+
+  .provider-truth { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; margin: 0 28px 16px; overflow: hidden; background: var(--line); border: 1px solid var(--line); border-radius: 11px; }
+  .provider-truth > div { display: grid; gap: 3px; padding: 10px; background: #12161b; }
+  .provider-truth span, .provider-truth small { color: var(--subtle); font-size: 0.56rem; text-transform: uppercase; }
+  .provider-truth strong { font-size: 0.66rem; text-transform: capitalize; }
+  .provider-truth p { grid-column: 1 / -1; margin: 0; padding: 8px 10px; color: var(--amber); font-size: 0.62rem; background: var(--amber-soft); }
+
+  .decision-facts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; color: var(--subtle); font-size: 0.61rem; }
+  .decision-context { margin: 8px 0 0; color: var(--muted); font-size: 0.65rem; line-height: 1.45; }
+
+  .plan-history, .operations-grid { display: grid; gap: 9px; }
+  .plan-history article, .operations-grid article, .evidence-record { padding: 11px; background: rgba(255, 255, 255, 0.025); border: 1px solid var(--line); border-radius: 11px; }
+  .plan-history header { display: flex; justify-content: space-between; gap: 10px; }
+  .plan-history header span { color: var(--subtle); font-size: 0.58rem; }
+  .plan-history p { margin: 8px 0; color: var(--muted); font-size: 0.68rem; line-height: 1.5; }
+  dl { display: grid; gap: 6px; margin: 0; }
+  dl div { display: grid; grid-template-columns: 88px 1fr; gap: 8px; }
+  dt { color: var(--subtle); font-size: 0.56rem; text-transform: uppercase; }
+  dd { min-width: 0; margin: 0; overflow-wrap: anywhere; color: var(--muted); font-size: 0.62rem; }
+  .operations-grid { grid-template-columns: repeat(2, 1fr); }
+  .operations-grid article { display: grid; gap: 4px; }
+  .operations-grid span, .operations-grid small { color: var(--muted); font-size: 0.61rem; }
+
+  .evidence-record { border-left: 3px solid var(--acid); }
+  .evidence-record.status-stale, .evidence-record.status-rejected { border-left-color: var(--red); }
+  .evidence-record header { margin-bottom: 10px; }
+  .evidence-record strong, .evidence-record small { display: block; }
+  .evidence-record small { margin-top: 3px; color: var(--subtle); font-size: 0.58rem; }
 
   .run-card {
     overflow: hidden;
@@ -834,6 +977,9 @@
     .task-heading, .tab-content { padding-right: 18px; padding-left: 18px; }
     .decision-callout, .run-progress { margin-right: 18px; margin-left: 18px; }
     .edit-grid { grid-template-columns: 1fr; }
+    .structured-budget .wide { grid-column: auto; }
+    .provider-truth { grid-template-columns: 1fr 1fr; margin-right: 18px; margin-left: 18px; }
+    .operations-grid { grid-template-columns: 1fr; }
     .task-meta { flex-direction: column; align-items: flex-start; gap: 6px; }
   }
 </style>

@@ -111,12 +111,12 @@ The Milestone 1 safety gate is complete. Marina may automatically claim control-
 - [x] [Marina] Build a static, non-root control-service image for Linux AMD64 and ARM64.
 - [x] [Marina] Add a single-replica Kubernetes base with `ReadWriteOnce` journal storage, `Recreate` rollout semantics, resource limits, and real probes.
 - [x] [AppDeck] Add a non-root single-replica Kubernetes base with its own `ReadWriteOnce` SQLite volume, `Recreate` updates, startup/liveness/readiness probes, and demo mode disabled.
-- [ ] [AppDeck] Add authenticated human sessions before exposing the always-on installation.
+- [x] [AppDeck] Add authenticated human sessions before exposing the always-on installation.
 - [ ] [Joint] Deploy the selected service-authentication and run-fencing mechanisms using rotatable secret references.
 - [ ] [Joint] Add a paired local environment that starts production AppDeck and Marina binaries with separate databases and no in-process shortcut.
 - [ ] [Joint] Add a Kubernetes overlay with separate service accounts, PVCs, backups, network policies, resource limits, and an AppDeck-only authenticated ingress.
 - [ ] [Joint] Verify backup and restore of both databases independently, then reconcile the exact cross-product run without timestamp-based last-write-wins repair.
-- [ ] [AppDeck] Show provider connectivity, synchronization lag, lease expiry, degraded dependencies, and stale or rejected projections truthfully.
+- [x] [AppDeck] Show provider connectivity, synchronization lag, lease expiry, degraded dependencies, and stale or rejected projections truthfully.
 - [ ] [Joint] Select and deploy the paired control plane to the first always-on Kubernetes cluster.
 
 ### Operator clients
@@ -157,11 +157,11 @@ The Milestone 1 safety gate is complete. Marina may automatically claim control-
 
 ### Intent, plans, and policy
 
-- [ ] [AppDeck] Expand task budgets from minutes into structured time, attempts, tokens, cost, concurrency, and authority limits.
-- [ ] [AppDeck] Store immutable, numbered plan revisions with context digest, risk class, verification strategy, expected side effects, and rollback approach.
-- [ ] [AppDeck] Bind every decision request and answer to an exact run, plan revision, and expiry; reject stale answers.
-- [ ] [AppDeck] Support change requests by creating a new plan revision rather than blocking the task or overwriting history.
-- [ ] [AppDeck] Add project-scoped agent-native channels where humans and agents can converse, reference canonical tasks, runs, decisions, artifacts, and evidence, and promote a message into a bounded versioned task without making chat a second ledger or a source of ambient execution authority.
+- [x] [AppDeck] Expand task budgets from minutes into structured time, attempts, tokens, cost, concurrency, and authority limits.
+- [x] [AppDeck] Store immutable, numbered plan revisions with context digest, risk class, verification strategy, expected side effects, and rollback approach.
+- [x] [AppDeck] Bind every decision request and answer to an exact run, plan revision, and expiry; reject stale answers.
+- [x] [AppDeck] Support change requests by creating a new plan revision rather than blocking the task or overwriting history.
+- [x] [AppDeck] Add project-scoped agent-native channels where humans and agents can converse, reference canonical tasks, runs, decisions, artifacts, and evidence, and promote a message into a bounded versioned task without making chat a second ledger or a source of ambient execution authority.
 - [ ] [Marina] Evaluate versioned project policy before claim, runtime start, external mutation, completion, and any expansion of authority.
 - [ ] [Joint] Display the active task, plan, policy, and authority versions in AppDeck for every consequential action.
 
@@ -180,14 +180,14 @@ The Milestone 1 safety gate is complete. Marina may automatically claim control-
 - [ ] [Marina] Run repository-defined deterministic tests and scanners against the produced source revision.
 - [ ] [Marina] Add risk-appropriate independent review whose identity and context are distinct from the producing runtime.
 - [ ] [Marina] Invalidate evidence automatically when the source, context, plan, policy, command, or observation window no longer matches.
-- [ ] [AppDeck] Replace the completion Markdown blob as the gate with structured evidence records containing producer, verifier, subject digest, command, outcome, provenance, freshness, URI, and digest.
-- [ ] [AppDeck] Render a concise Markdown verification report from structured evidence for human readability.
+- [x] [AppDeck] Replace the completion Markdown blob as the gate with structured evidence records containing producer, verifier, subject digest, command, outcome, provenance, freshness, URI, and digest.
+- [x] [AppDeck] Render a concise Markdown verification report from structured evidence for human readability.
 - [ ] [Joint] Define and test the minimum evidence set for a merge-ready pull request.
 - [ ] [Marina] Create a pull request with source-bound evidence and a stable link to the AppDeck run.
 - [ ] [Marina] Reconcile CI failures, review feedback, head changes, and merge conflicts through bounded revision loops.
 - [ ] [Marina] Re-run only invalidated gates and retain superseded evidence without presenting it as current.
-- [ ] [AppDeck] Show planning, waiting, running, retrying, verifying, syncing, stale-evidence, blocked, and completed states without activity theatre.
-- [ ] [AppDeck] Present focused decisions with recommendation, risk, evidence, cost, and the consequence of waiting or rejecting.
+- [x] [AppDeck] Show planning, waiting, running, retrying, verifying, syncing, stale-evidence, blocked, and completed states without activity theatre.
+- [x] [AppDeck] Present focused decisions with recommendation, risk, evidence, cost, and the consequence of waiting or rejecting.
 - [ ] [Marina] Stop at a merge-ready pull request by default and refuse merge or release without an explicit policy capability.
 - [ ] [Joint] Demonstrate the complete loop while the operator is offline, including at least one bounded CI or review revision.
 
@@ -204,13 +204,13 @@ The Milestone 1 safety gate is complete. Marina may automatically claim control-
 - [ ] [Marina] Integrate preview and non-production delivery without replacing the repository's existing CD system.
 - [ ] [Joint] Define observation windows and admissible deployment-health evidence by risk class.
 - [ ] [Marina] Add canary verification and automatic rollback within explicit versioned policy.
-- [ ] [AppDeck] Present environment, rollout, observation-window, rollback, and policy state without exposing provider-specific control details as the product model.
+- [x] [AppDeck] Present environment, rollout, observation-window, rollback, and policy state without exposing provider-specific control details as the product model.
 - [ ] [Joint] Select the first production-feedback source.
 - [ ] [Marina] Validate, correlate, classify, and deduplicate signals before creating or claiming diagnostic work.
 - [ ] [Marina] Keep raw signal text untrusted and separate observation from diagnosis and mutation authority.
 - [ ] [Joint] Turn one validated signal into bounded diagnostic work with an inspectable causal chain.
 - [ ] [Joint] Demonstrate diagnosis, remediation proposal, canary verification, rollback or confirmation, and recovery evidence.
-- [ ] [AppDeck] Show the operator one continuous evidence trail from signal through decision, change, delivery, observation, and final outcome.
+- [x] [AppDeck] Show the operator one continuous evidence trail from signal through decision, change, delivery, observation, and final outcome.
 
 ## Cross-cutting factory controls
 
@@ -222,7 +222,7 @@ The Milestone 1 safety gate is complete. Marina may automatically claim control-
 - [ ] [Marina] Add entropy-control loops for documentation, dependencies, architecture, and dead code.
 - [ ] [Joint] Add protocol compatibility, migration, rolling-upgrade, backup, restore, and downgrade tests.
 - [ ] [Joint] Define artifact retention, integrity verification, garbage collection, and recovery without shared filesystems.
-- [ ] [AppDeck] Add deterministic export and import for tasks, plans, decisions, commands, events, artifact metadata, and evidence.
+- [x] [AppDeck] Add deterministic export and import for tasks, plans, decisions, commands, events, artifact metadata, and evidence.
 - [ ] [Marina] Add journal inspection and redacted diagnostic export without making internal state a second work-control API.
 - [ ] [Joint] Add load and backpressure tests for ready-work polling, event outbox replay, commands, heartbeats, and SSE clients.
 - [ ] [Joint] Maintain a crash matrix that injects failure before and after every external call and durable commit in the critical path.
@@ -232,7 +232,7 @@ The Milestone 1 safety gate is complete. Marina may automatically claim control-
 
 - [ ] Choose where the first always-on Kubernetes installation runs.
 - [x] Choose SQLite as Marina's durable journal for the single-replica stage.
-- [ ] Choose human authentication for AppDeck.
+- [x] Choose high-entropy operator-token exchange with short-lived server-side sessions for initial AppDeck human authentication; record the choice in [decision 0005](docs/decisions/0005-operator-authentication.md).
 - [x] Choose scoped opaque credentials for initial Marina-to-AppDeck service authentication.
 - [ ] Choose the first artifact-store implementation, backup method, and retention policy.
 - [ ] Choose the first real agent harness for the Kubernetes runtime.

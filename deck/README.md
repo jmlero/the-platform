@@ -7,13 +7,21 @@ This directory contains the first working prototype. Read the root [AppDeck visi
 ## What the prototype demonstrates
 
 - Persistent tasks backed by SQLite.
+- Optional authenticated human sessions backed by SQLite with CSRF-protected browser mutations.
 - Backlog refinement and a Kanban-style execution board.
 - Atomic task claims with expiring leases.
 - A durable distinction between a task and its execution runs.
-- Agent registration, heartbeats, plans, progress, and verification.
-- Human approval or change requests through a decision inbox.
+- Structured task budgets covering time, deadline, attempts, tokens, cost, concurrency, and explicit authority.
+- Agent registration, heartbeats, immutable numbered plan revisions, progress, and verification.
+- Focused, expiring human decisions bound to one run and plan revision; change requests preserve history and reopen planning.
+- Structured, source-bound evidence as the public completion gate, with a generated Markdown verification report.
+- Project-scoped human and agent channels with canonical ledger references and explicit promotion into a bounded task.
 - Append-only events streamed live to the browser with SSE.
-- Verification artifacts attached to completed runs.
+- Verification artifacts and their immutable metadata attached to completed runs.
+- Provider connectivity, synchronization, lease, dependency, and rejected-projection truth derived from ledger facts.
+- Provider-neutral environment, rollout, observation-window, rollback, and policy records.
+- A continuous operator trail from signal and decision through change, delivery, observation, verification, and outcome.
+- Deterministic, versioned project export and transactional import into an empty target project.
 - Optional service authentication with stable identities and explicit project and capability grants.
 - Durable idempotency records for claims and every run mutation.
 - Monotonic run versions and ownership fence tokens required on every service mutation.
@@ -90,6 +98,30 @@ The hardened single-replica base is under [deploy/kubernetes/](deploy/kubernetes
 | `APPDECK_DEMO_AGENT` | `true` | Seed demo tasks and run Atlas |
 | `APPDECK_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, or `error` |
 | `APPDECK_SERVICE_AUTH_FILE` | unset | Version-1 service-identity policy for authenticated machine API operations |
+| `APPDECK_OPERATOR_AUTH_FILE` | unset | Version-1 operator-token fingerprint policy used to create human sessions |
+| `APPDECK_OPERATOR_COOKIE_SECURE` | `true` | Require HTTPS for operator cookies; set `false` only for trusted local HTTP development |
+
+## Operator authentication
+
+For an exposed installation, configure `APPDECK_OPERATOR_AUTH_FILE` with a stable operator ID and the SHA-256 fingerprint of a token containing at least 256 bits of cryptographically random material:
+
+```json
+{
+  "version": 1,
+  "operators": [
+    {
+      "id": "operator-primary",
+      "token_sha256": ["<64-lowercase-hex-characters>"]
+    }
+  ]
+}
+```
+
+The login page exchanges the raw token for a 12-hour server-side session. AppDeck persists only SHA-256 digests of the session and CSRF secrets, sets a host-only `HttpOnly` session cookie with `SameSite=Strict`, rejects cross-origin authenticated browser requests, and requires the browser to echo the separate CSRF cookie in `X-CSRF-Token` for mutations. Sessions survive process restart and are deleted on logout.
+
+AppDeck reloads the policy for every login and readiness check, so token fingerprints can overlap during rotation without changing the operator ID. Existing sessions remain valid until logout or expiry. Keep the raw token in a secret manager or mounted secret file, never in this repository or AppDeck data. Outside trusted loopback, use TLS and leave secure cookies enabled.
+
+When `APPDECK_OPERATOR_AUTH_FILE` is unset, the local prototype keeps its original unauthenticated operator workflow. That mode must not be exposed to an untrusted network. The complete rationale is in [decision 0005](../docs/decisions/0005-operator-authentication.md).
 
 ## Service authentication
 
@@ -106,7 +138,10 @@ Set `APPDECK_SERVICE_AUTH_FILE` before connecting Marina outside the trusted loc
       "capabilities": [
         "provider.info", "agent.register", "work.ready.list", "work.inspect",
         "work.claim.atomic", "work.claim.lookup", "run.assigned.list",
-        "run.lease.renew", "run.block", "command.list", "command.ack", "event.append"
+        "run.lease.renew", "run.plan.submit", "run.start", "run.progress.append",
+        "run.verify", "evidence.record", "run.complete", "run.block",
+        "command.list", "command.ack", "event.append", "operation.report",
+        "channel.list", "channel.message.list", "channel.message.append"
       ]
     }
   ]
@@ -115,7 +150,7 @@ Set `APPDECK_SERVICE_AUTH_FILE` before connecting Marina outside the trusted loc
 
 Use at least 256 bits of random token material and give the raw value only to Marina through its token-file reference. AppDeck reloads and validates the policy on every request, so two fingerprints can overlap during rotation without changing the identity. Wildcard grants, malformed policies, missing credentials, and unauthorized projects or capabilities fail closed. Bearer credentials require TLS or another authenticated encrypted transport outside single-host loopback.
 
-The browser currently uses separate local operator routes. Those routes do not yet have human sessions and must not be exposed to an untrusted network. The complete rationale and rotation sequence are in [decision 0003](../docs/decisions/0003-service-authentication.md).
+The browser uses separate operator routes and, when configured, the human-session boundary above. Marina's service credential cannot create a human session. The complete service-authentication rationale and rotation sequence are in [decision 0003](../docs/decisions/0003-service-authentication.md).
 
 ## Agent API
 
@@ -131,12 +166,14 @@ Every active-run mutation also requires the stable logical agent ID, exact run v
 2. Discover ready tasks.
 3. Atomically claim one task with a lease.
 4. Send heartbeats while holding the lease.
-5. Submit a plan and optionally request approval.
-6. Wait for the decision and explicitly start the approved run.
-7. Report durable progress events.
-8. Enter verification and complete with evidence.
+5. Submit an immutable structured plan revision and optionally request approval.
+6. Wait for the revision-bound decision and explicitly start the approved run; a change request creates the next revision loop.
+7. Report durable progress and provider-neutral operational state.
+8. Enter verification, record current structured evidence, and complete by referencing its IDs.
 
-Operator commands are durable resources rather than direct lifecycle-column edits. Marina lists them after its persisted cursor and acknowledges each result idempotently. Projected events are deduplicated by producer event ID and execution sequence before entering AppDeck's visible timeline.
+Operator commands are durable resources rather than direct lifecycle-column edits. Marina lists them after its persisted cursor and acknowledges each result idempotently. Projected events are deduplicated by producer event ID and execution sequence before entering AppDeck's visible timeline. Provider state and display states are derived from admitted records, lease timestamps, evidence freshness, and synchronization lag; missing facts remain visibly unknown.
+
+Channels are conversation, not execution authority. Messages may reference canonical tasks, runs, decisions, artifacts, and evidence, but only an explicit operator promotion with acceptance criteria and a structured budget creates a task. Project export includes ledger records and artifact metadata in stable order while excluding credentials and artifact bytes; import refuses a non-empty target instead of inventing last-write-wins reconciliation.
 
 Example health check:
 
@@ -149,7 +186,7 @@ curl http://localhost:8080/readyz
 
 ```text
 cmd/appdeck/              application entry point
-internal/domain/          task, run, decision, event, and artifact model
+internal/domain/          task, run, plan, decision, evidence, channel, operation, event, and artifact model
 internal/store/           SQLite repositories and migrations
 internal/httpapi/         REST and SSE API
 internal/demo/            restart-resumable demo agent
@@ -160,4 +197,4 @@ api/openapi.yaml          agent-facing HTTP contract
 
 ## Prototype boundaries
 
-This release is single-user and single-process. Machine operations authenticate a scoped Marina service identity and use guarded, idempotent, fenced mutations; the human operator login session is not implemented yet. Do not expose the local operator routes directly to an untrusted network. Multi-user permissions, distributed scheduling, autonomous task decomposition, and a general-purpose agent execution runtime remain outside the prototype.
+This release is single-user and single-process. Machine operations authenticate a scoped Marina service identity and use guarded, idempotent, fenced mutations; human routes use a separate optional operator session. AppDeck records provider-neutral work-control and operational facts but does not execute runtimes, mutate source control, operate deployments, or store artifact bytes. Multi-user permissions, password recovery, federated identity, distributed scheduling, autonomous task decomposition, and a general-purpose agent execution runtime remain outside the prototype.

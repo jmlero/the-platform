@@ -125,13 +125,36 @@ func (a *Agent) step(ctx context.Context) error {
 		return a.store.BeginVerification(ctx, demoMutation("verify:"+active.Run.ID), active.Run.ID)
 
 	case domain.RunVerifying:
-		evidence := "# Verification report\n\n- The agent followed the approved plan.\n- Each simulated execution stage emitted a durable event.\n- The task lifecycle and final artifact are visible in AppDeck.\n- The run completed within its configured time budget."
-		return a.store.CompleteRun(
+		if active.Run.ActivePlanRevisionID == nil {
+			return fmt.Errorf("demo run has no active plan revision")
+		}
+		evidence, err := a.store.RecordEvidence(ctx, domain.EvidenceInput{
+			ID:               "evd_demo_" + active.Run.ID,
+			RunID:            active.Run.ID,
+			PlanRevisionID:   *active.Run.ActivePlanRevisionID,
+			Type:             "acceptance",
+			Producer:         "agent:" + AgentID,
+			Verifier:         "check:demo-lifecycle",
+			SubjectDigest:    active.Run.AcceptanceCriteriaDigest,
+			SourceRevision:   "demo-snapshot",
+			Command:          "appdeck-demo-lifecycle",
+			Outcome:          "passed",
+			ProvenanceURI:    "appdeck://demo/runs/" + active.Run.ID + "/verification",
+			ProvenanceDigest: "sha256:demo-lifecycle",
+			ObservedAt:       time.Now().UTC().UnixMilli(),
+			ArtifactURI:      "appdeck://demo/runs/" + active.Run.ID + "/result",
+			ArtifactDigest:   "sha256:demo-result",
+			PolicyVersion:    "demo-v1",
+		})
+		if err != nil {
+			return err
+		}
+		return a.store.CompleteRunWithEvidence(
 			ctx,
 			demoMutation("complete:"+active.Run.ID),
 			active.Run.ID,
 			"Approved plan executed and acceptance criteria verified.",
-			evidence,
+			[]string{evidence.ID},
 		)
 	}
 	return nil

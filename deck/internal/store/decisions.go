@@ -10,8 +10,10 @@ import (
 )
 
 const decisionColumns = `
-	id, task_id, run_id, question, options_json, recommendation,
-	status, answer, created_at, answered_at
+	id, task_id, run_id, plan_revision_id, question, options_json, recommendation,
+	risk_class, evidence_summary, estimated_cost_minor, currency,
+	waiting_consequence, rejecting_consequence,
+	status, answer, expires_at, created_at, answered_at, answered_by
 `
 
 func (s *Store) ListDecisions(ctx context.Context, status string) ([]domain.Decision, error) {
@@ -77,8 +79,47 @@ func (s *Store) AnswerDecision(ctx context.Context, id, answer string) (domain.D
 		return domain.Decision{}, fmt.Errorf("begin answer decision: %w", err)
 	}
 	defer tx.Rollback()
+	if decision.ExpiresAt != nil && *decision.ExpiresAt <= now {
+		if _, err := tx.ExecContext(ctx,
+			"UPDATE decisions SET status = 'expired' WHERE id = ? AND status = 'pending'", id,
+		); err != nil {
+			return domain.Decision{}, fmt.Errorf("expire decision: %w", err)
+		}
+		if err := tx.Commit(); err != nil {
+			return domain.Decision{}, fmt.Errorf("commit decision expiry: %w", err)
+		}
+		return domain.Decision{}, fmt.Errorf("decision has expired: %w", domain.ErrConflict)
+	}
+	if decision.RunID != nil && decision.PlanRevisionID != "" {
+		run, runErr := getRunTx(ctx, tx, *decision.RunID)
+		if runErr != nil {
+			return domain.Decision{}, runErr
+		}
+		if run.ActivePlanRevisionID == nil || *run.ActivePlanRevisionID != decision.PlanRevisionID {
+			if _, err := tx.ExecContext(ctx,
+				"UPDATE decisions SET status = 'superseded' WHERE id = ? AND status = 'pending'", id,
+			); err != nil {
+				return domain.Decision{}, fmt.Errorf("supersede stale decision: %w", err)
+			}
+			if err := tx.Commit(); err != nil {
+				return domain.Decision{}, fmt.Errorf("commit stale decision: %w", err)
+			}
+			return domain.Decision{}, fmt.Errorf("decision belongs to a superseded plan revision: %w", domain.ErrConflict)
+		}
+	}
+	validAnswer := false
+	for _, option := range decision.Options {
+		if strings.EqualFold(answer, option) {
+			answer = option
+			validAnswer = true
+			break
+		}
+	}
+	if !validAnswer {
+		return domain.Decision{}, fmt.Errorf("answer is not one of the available options: %w", domain.ErrInvalidInput)
+	}
 	result, err := tx.ExecContext(ctx, `
-		UPDATE decisions SET status = 'answered', answer = ?, answered_at = ?
+		UPDATE decisions SET status = 'answered', answer = ?, answered_at = ?, answered_by = 'operator'
 		WHERE id = ? AND status = 'pending'
 	`, answer, now, id)
 	if err != nil {
@@ -88,10 +129,41 @@ func (s *Store) AnswerDecision(ctx context.Context, id, answer string) (domain.D
 	if rows == 0 {
 		return domain.Decision{}, fmt.Errorf("decision changed concurrently: %w", domain.ErrConflict)
 	}
+	eventType := "decision.answered"
+	eventMessage := "Human answered: " + answer
+	if strings.EqualFold(answer, "Request changes") && decision.RunID != nil {
+		run, runErr := getRunTx(ctx, tx, *decision.RunID)
+		if runErr != nil {
+			return domain.Decision{}, runErr
+		}
+		result, runErr := tx.ExecContext(ctx, `
+			UPDATE runs SET status = 'planning', version = version + 1, updated_at = ?
+			WHERE id = ? AND status = 'waiting_decision' AND active_plan_revision_id = ? AND version = ?
+		`, now, run.ID, decision.PlanRevisionID, run.Version)
+		if runErr != nil {
+			return domain.Decision{}, fmt.Errorf("return run to planning: %w", runErr)
+		}
+		if rows, _ := result.RowsAffected(); rows != 1 {
+			return domain.Decision{}, fmt.Errorf("run changed before the change request was applied: %w", domain.ErrConflict)
+		}
+		if _, runErr := tx.ExecContext(ctx,
+			"UPDATE tasks SET status = 'planning', version = version + 1, updated_at = ? WHERE id = ?",
+			now, run.TaskID,
+		); runErr != nil {
+			return domain.Decision{}, fmt.Errorf("return task to planning: %w", runErr)
+		}
+		if _, runErr := tx.ExecContext(ctx,
+			"UPDATE agents SET status = 'active', last_seen_at = ? WHERE id = ?", now, run.AgentID,
+		); runErr != nil {
+			return domain.Decision{}, fmt.Errorf("wake agent for replanning: %w", runErr)
+		}
+		eventType = "plan.changes_requested"
+		eventMessage = "Human requested a new plan revision"
+	}
 	event, err := insertEventTx(
 		ctx, tx, &decision.TaskID, decision.RunID, nil,
-		"decision.answered", "Human answered: "+answer,
-		map[string]any{"decision_id": decision.ID, "answer": answer},
+		eventType, eventMessage,
+		map[string]any{"decision_id": decision.ID, "plan_revision_id": decision.PlanRevisionID, "answer": answer},
 	)
 	if err != nil {
 		return domain.Decision{}, fmt.Errorf("create decision answer event: %w", err)
@@ -102,6 +174,7 @@ func (s *Store) AnswerDecision(ctx context.Context, id, answer string) (domain.D
 	decision.Status = "answered"
 	decision.Answer = answer
 	decision.AnsweredAt = &now
+	decision.AnsweredBy = "operator"
 	s.publish(event)
 	return decision, nil
 }
@@ -128,7 +201,7 @@ func (s *Store) listDecisionsForTask(ctx context.Context, taskID string) ([]doma
 
 func (s *Store) listArtifactsForTask(ctx context.Context, taskID string) ([]domain.Artifact, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, task_id, run_id, name, kind, uri, content, created_at
+		SELECT id, task_id, run_id, name, kind, uri, content, digest, size_bytes, created_at
 		FROM artifacts WHERE task_id = ? ORDER BY created_at DESC
 	`, taskID)
 	if err != nil {
@@ -146,6 +219,8 @@ func (s *Store) listArtifactsForTask(ctx context.Context, taskID string) ([]doma
 			&artifact.Kind,
 			&artifact.URI,
 			&artifact.Content,
+			&artifact.Digest,
+			&artifact.SizeBytes,
 			&artifact.CreatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scan artifact: %w", err)
@@ -158,6 +233,13 @@ func (s *Store) listArtifactsForTask(ctx context.Context, taskID string) ([]doma
 func nullableString(value *string) any {
 	if value == nil {
 		return sql.NullString{}
+	}
+	return *value
+}
+
+func nullableInt64(value *int64) any {
+	if value == nil {
+		return sql.NullInt64{}
 	}
 	return *value
 }

@@ -35,7 +35,7 @@
       "kind": "plan",
       "schema": "PlanRevision",
       "path": "plan.json",
-      "implementation_status": "planned"
+      "implementation_status": "implemented"
     },
     {
       "kind": "command",
@@ -53,13 +53,13 @@
       "kind": "budget",
       "schema": "Budget",
       "path": "budget.json",
-      "implementation_status": "planned"
+      "implementation_status": "implemented"
     },
     {
       "kind": "evidence",
       "schema": "Evidence",
       "path": "evidence.json",
-      "implementation_status": "planned"
+      "implementation_status": "implemented"
     },
     {
       "kind": "error.conflict",

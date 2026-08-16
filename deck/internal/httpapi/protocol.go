@@ -13,6 +13,11 @@ const (
 	capabilityEventList       = "event.list"
 	capabilityEventStream     = "event.stream"
 	capabilityEventAppend     = "event.append"
+	capabilityChannelList     = "channel.list"
+	capabilityChannelMessage  = "channel.message.append"
+	capabilityChannelRead     = "channel.message.list"
+	capabilityEvidenceRecord  = "evidence.record"
+	capabilityOperationReport = "operation.report"
 	capabilityProviderInfo    = "provider.info"
 	capabilityRunBlock        = "run.block"
 	capabilityRunComplete     = "run.complete"
@@ -42,6 +47,9 @@ const (
 // remain deterministic.
 var protocolCapabilities = []string{
 	capabilityAgentRegister,
+	capabilityChannelList,
+	capabilityChannelMessage,
+	capabilityChannelRead,
 	capabilityCommandAck,
 	capabilityCommandList,
 	capabilityDecisionAnswer,
@@ -50,6 +58,8 @@ var protocolCapabilities = []string{
 	capabilityEventAppend,
 	capabilityEventList,
 	capabilityEventStream,
+	capabilityEvidenceRecord,
+	capabilityOperationReport,
 	capabilityProviderInfo,
 	capabilityAssignedRuns,
 	capabilityRunBlock,

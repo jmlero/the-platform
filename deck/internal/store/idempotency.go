@@ -23,6 +23,8 @@ const (
 	operationBlockRun             = "run.block"
 	operationAcknowledgeCommand   = "command.ack"
 	operationAppendProjectedEvent = "event.append"
+	operationRecordEvidence       = "evidence.record"
+	operationReportOperational    = "operation.report"
 )
 
 // Mutation identifies one retriable request. AppDeck scopes keys by canonical

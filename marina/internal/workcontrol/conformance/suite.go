@@ -143,7 +143,7 @@ func Verify(
 	if err := subject.SubmitRunPlan(ctx, run.ID, workcontrol.PlanSubmission{
 		IdempotencyKey: "conformance-plan:" + seededWorkID,
 		AgentID:        agent.ID, ExpectedVersion: observed.Version, FenceToken: observed.FenceToken,
-		Plan:            fixtures.Plan.Summary,
+		Plan:            fixtures.Plan.Plan,
 		RequireApproval: false,
 	}); err != nil {
 		return Result{}, fmt.Errorf("submit conformance plan: %w", err)

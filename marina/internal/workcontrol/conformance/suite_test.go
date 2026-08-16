@@ -155,7 +155,7 @@ func TestVerifyExercisesOneExactLifecycle(t *testing.T) {
 			AcceptanceCriteria: "One exact run", Status: "ready", Priority: "high", BudgetMinutes: 45,
 		},
 		Run:   RunFixture{Status: "planning"},
-		Plan:  PlanFixture{Summary: "Verify without runtime mutation"},
+		Plan:  PlanFixture{Plan: "Verify without runtime mutation"},
 		Event: EventFixture{CorrelationID: "correlation-fixture", Payload: map[string]any{"message": "observed"}},
 	}
 	subject := &subjectStub{
@@ -179,7 +179,7 @@ func TestVerifyExercisesOneExactLifecycle(t *testing.T) {
 	if result.Run.Status != workcontrol.RunBlocked || result.Work.ID != "task-real-1" {
 		t.Fatalf("result = %#v", result)
 	}
-	if subject.plan != fixtures.Plan.Summary {
+	if subject.plan != fixtures.Plan.Plan {
 		t.Fatalf("plan = %q", subject.plan)
 	}
 	if !reflect.DeepEqual(subject.progressMessages, []string{"observed"}) {

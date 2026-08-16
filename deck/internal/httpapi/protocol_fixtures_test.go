@@ -38,9 +38,10 @@ var fixtureShapes = map[string]fixtureShape{
 	},
 	"plan": {
 		required: []string{
-			"id", "run_id", "revision", "task_version", "context_digest", "risk_class", "summary",
-			"steps", "verification_strategy", "expected_side_effects", "rollback_approach", "policy_version", "created_at",
+			"id", "run_id", "revision", "plan", "context_digest", "risk_class",
+			"verification_strategy", "expected_side_effects", "rollback_approach", "created_at",
 		},
+		optional: []string{"source_revision", "policy_version"},
 	},
 	"command": {
 		required: []string{"id", "run_id", "sequence", "type", "status", "reason", "requested_by", "result", "run_version", "fence_token", "created_at", "updated_at"},
@@ -55,15 +56,17 @@ var fixtureShapes = map[string]fixtureShape{
 	},
 	"budget": {
 		required: []string{
-			"deadline_at", "max_attempts", "max_tokens", "max_cost_minor", "currency", "max_concurrency", "authority",
+			"time_minutes", "max_attempts", "max_tokens", "max_cost_minor", "currency", "max_concurrency", "authority",
 		},
+		optional: []string{"deadline_at"},
 	},
 	"evidence": {
 		required: []string{
-			"id", "run_id", "type", "producer", "verifier", "subject_digest", "source_revision", "command",
-			"outcome", "provenance_uri", "provenance_digest", "observed_at", "policy_version",
+			"id", "task_id", "run_id", "plan_revision_id", "type", "producer", "verifier", "subject_digest",
+			"source_revision", "command", "outcome", "provenance_uri", "provenance_digest", "observed_at",
+			"artifact_uri", "artifact_digest", "admission_status", "created_at",
 		},
-		optional: []string{"expires_at"},
+		optional: []string{"expires_at", "policy_version"},
 	},
 }
 

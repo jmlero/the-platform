@@ -2,28 +2,15 @@
   "id": "plan_fixture_001",
   "run_id": "run_fixture_001",
   "revision": 1,
-  "task_version": 7,
+  "plan": "Inspect the provider, exercise the exact run, and retain verification evidence.",
   "context_digest": "sha256:7c761f73f5fdb826ea9eeb95b6295fff31172d5c86dfc65cf3aa83a233e591a4",
   "risk_class": "medium",
-  "summary": "Validate the provider contract without enabling runtime mutation.",
-  "steps": [
-    {
-      "id": "inspect",
-      "description": "Inspect provider information and the seeded task."
-    },
-    {
-      "id": "lifecycle",
-      "description": "Claim, renew, report progress, and block the exact run."
-    }
-  ],
-  "verification_strategy": [
-    "Compare decoded values with the canonical fixture.",
-    "Confirm one run remains attached to the seeded task."
-  ],
+  "verification_strategy": "Compare decoded values with the canonical fixtures and confirm one exact run remains attached.",
   "expected_side_effects": [
     "One temporary AppDeck task and run are written to an isolated test database."
   ],
   "rollback_approach": "Delete the temporary database after the conformance process exits.",
+  "source_revision": "6be7d803a65a5667e9c9b91f649ec8c01c901bd9",
   "policy_version": "policy_fixture_v1",
   "created_at": 1784376060000
 }
