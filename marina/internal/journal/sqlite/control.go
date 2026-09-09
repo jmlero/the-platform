@@ -99,7 +99,7 @@ func (store *Store) GetProjectBinding(ctx context.Context, projectID string) (ex
 	return scanBinding(store.db.QueryRowContext(ctx, "SELECT "+bindingColumns+" FROM project_bindings WHERE project_id = ?", projectID))
 }
 
-const acquisitionColumns = `id, project_id, work_id, task_version, task_digest, acceptance_criteria_digest, claim_key, agent_id,
+const acquisitionColumns = `task_snapshot, id, project_id, work_id, task_version, task_digest, acceptance_criteria_digest, claim_key, agent_id,
 	lease_seconds, budget_minutes, status, external_run_id, external_version, fence_token, lease_expires_at,
 	retry_attempt, next_eligible_at, last_error_class, exhaustion_reason, created_at, updated_at`
 
@@ -107,7 +107,7 @@ func scanAcquisition(source scanner) (execution.AcquisitionIntent, error) {
 	var result execution.AcquisitionIntent
 	var lease, next sql.NullInt64
 	var created, updated int64
-	err := source.Scan(&result.ID, &result.ProjectID, &result.WorkID, &result.TaskVersion, &result.TaskDigest,
+	err := source.Scan(&result.TaskSnapshot, &result.ID, &result.ProjectID, &result.WorkID, &result.TaskVersion, &result.TaskDigest,
 		&result.AcceptanceCriteriaDigest, &result.ClaimKey, &result.AgentID, &result.LeaseSeconds, &result.BudgetMinutes, &result.Status, &result.ExternalRunID,
 		&result.ExternalVersion, &result.FenceToken, &lease, &result.RetryAttempt, &next,
 		&result.LastErrorClass, &result.ExhaustionReason, &created, &updated)
@@ -143,9 +143,9 @@ func (store *Store) EnsureAcquisitionIntent(ctx context.Context, input execution
 	}
 	now := store.now()
 	result, err := store.db.ExecContext(ctx, `INSERT OR IGNORE INTO acquisition_intents
-		(id, project_id, work_id, task_version, task_digest, acceptance_criteria_digest, claim_key, agent_id, lease_seconds, budget_minutes, status, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`, id, input.ProjectID, input.WorkID, input.TaskVersion,
-		input.TaskDigest, input.AcceptanceCriteriaDigest, input.ClaimKey, input.AgentID, input.LeaseSeconds, input.BudgetMinutes, now.UnixMilli(), now.UnixMilli())
+		(id, project_id, work_id, task_version, task_digest, acceptance_criteria_digest, claim_key, agent_id, lease_seconds, budget_minutes, status, created_at, updated_at, task_snapshot)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)`, id, input.ProjectID, input.WorkID, input.TaskVersion,
+		input.TaskDigest, input.AcceptanceCriteriaDigest, input.ClaimKey, input.AgentID, input.LeaseSeconds, input.BudgetMinutes, now.UnixMilli(), now.UnixMilli(), input.TaskSnapshot)
 	if err != nil {
 		return execution.AcquisitionIntent{}, false, fmt.Errorf("ensure acquisition intent: %w", err)
 	}
@@ -154,10 +154,17 @@ func (store *Store) EnsureAcquisitionIntent(ctx context.Context, input execution
 	if err != nil {
 		return execution.AcquisitionIntent{}, false, err
 	}
-	if record.TaskDigest != input.TaskDigest || record.AcceptanceCriteriaDigest != input.AcceptanceCriteriaDigest || record.AgentID != input.AgentID || record.LeaseSeconds != input.LeaseSeconds || record.BudgetMinutes != input.BudgetMinutes {
+	if record.TaskSnapshot != input.TaskSnapshot || record.TaskDigest != input.TaskDigest || record.AcceptanceCriteriaDigest != input.AcceptanceCriteriaDigest || record.AgentID != input.AgentID || record.LeaseSeconds != input.LeaseSeconds || record.BudgetMinutes != input.BudgetMinutes {
 		return execution.AcquisitionIntent{}, false, execution.ErrConflict
 	}
 	return record, created == 1, nil
+}
+
+func (store *Store) AcquiredTaskSnapshot(ctx context.Context, projectID, workID string, taskVersion int) (string, error) {
+	var snapshot string
+	err := store.db.QueryRowContext(ctx, `SELECT task_snapshot FROM acquisition_intents
+		WHERE project_id = ? AND work_id = ? AND task_version = ?`, projectID, workID, taskVersion).Scan(&snapshot)
+	return snapshot, wrapNotFound(err)
 }
 
 func (store *Store) ListUnresolvedAcquisitions(ctx context.Context, limit int) ([]execution.AcquisitionIntent, error) {

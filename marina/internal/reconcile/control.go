@@ -54,16 +54,30 @@ type ControlCycle struct {
 }
 
 type ControlController struct {
-	provider         ControlProvider
-	journal          ControlJournal
-	binding          execution.ProjectBinding
-	identity         execution.InstallationIdentity
-	lease            time.Duration
-	operationTimeout time.Duration
-	safetyWindow     time.Duration
-	maxRetries       int
-	clock            func() time.Time
-	cycleMu          sync.Mutex
+	provider          ControlProvider
+	journal           ControlJournal
+	binding           execution.ProjectBinding
+	identity          execution.InstallationIdentity
+	lease             time.Duration
+	operationTimeout  time.Duration
+	safetyWindow      time.Duration
+	maxRetries        int
+	clock             func() time.Time
+	cycleMu           sync.Mutex
+	executionTokens   int64
+	executionAttempts int
+	commandHandler    func(context.Context, execution.Execution, workcontrol.Command) (string, string, error)
+}
+
+func (controller *ControlController) WithExecutionLimits(attempts int, tokens int64) *ControlController {
+	controller.executionAttempts = attempts
+	controller.executionTokens = tokens
+	return controller
+}
+
+func (controller *ControlController) WithCommandHandler(handler func(context.Context, execution.Execution, workcontrol.Command) (string, string, error)) *ControlController {
+	controller.commandHandler = handler
+	return controller
 }
 
 func NewControlController(provider ControlProvider, journal ControlJournal, binding execution.ProjectBinding,
@@ -130,9 +144,15 @@ func (controller *ControlController) intake(ctx context.Context, cycle *ControlC
 			continue
 		}
 		digest := workDigest(item)
+		snapshot, snapshotErr := json.Marshal(item)
+		if snapshotErr != nil {
+			cycle.Errors = append(cycle.Errors, snapshotErr)
+			continue
+		}
 		acceptanceDigest := sha256.Sum256([]byte(item.AcceptanceCriteria))
 		intent, created, err := controller.journal.EnsureAcquisitionIntent(ctx, execution.NewAcquisitionIntent{
-			ProjectID: item.ProjectID, WorkID: item.ID, TaskVersion: item.Version, TaskDigest: digest,
+			TaskSnapshot: string(snapshot),
+			ProjectID:    item.ProjectID, WorkID: item.ID, TaskVersion: item.Version, TaskDigest: digest,
 			AcceptanceCriteriaDigest: hex.EncodeToString(acceptanceDigest[:]),
 			ClaimKey:                 fmt.Sprintf("claim:%s:%s:v%d", item.ProjectID, item.ID, item.Version),
 			AgentID:                  controller.identity.LogicalAgentID, LeaseSeconds: int(controller.lease / time.Second),
@@ -236,12 +256,33 @@ func (controller *ControlController) processAcquisition(ctx context.Context, int
 		return err
 	}
 	deadline := intent.CreatedAt.Add(time.Duration(intent.BudgetMinutes) * time.Minute)
+	budget := execution.Budget{DeadlineAt: deadline, MaxAttempts: controller.maxRetries, MaxTokens: 1}
+	if controller.executionTokens > 0 && controller.executionAttempts > 0 {
+		var task workcontrol.WorkItem
+		if err := json.Unmarshal([]byte(intent.TaskSnapshot), &task); err != nil {
+			return fmt.Errorf("runtime intake requires a frozen task snapshot: %w", err)
+		}
+		budget.MaxAttempts = controller.executionAttempts
+		budget.MaxTokens = controller.executionTokens
+		if task.Budget.MaxAttempts > 0 {
+			budget.MaxAttempts = min(budget.MaxAttempts, task.Budget.MaxAttempts)
+		}
+		if task.Budget.MaxTokens > 0 {
+			budget.MaxTokens = min(budget.MaxTokens, task.Budget.MaxTokens)
+		}
+		if task.Budget.MaxCostMinor > 0 && task.Budget.MaxCostMinor <= 1<<40 {
+			budget.MaxCostMicros = task.Budget.MaxCostMinor * 10000
+		}
+		if task.Budget.DeadlineAt != nil && task.Budget.DeadlineAt.Before(budget.DeadlineAt) {
+			budget.DeadlineAt = *task.Budget.DeadlineAt
+		}
+	}
 	record, _, err := controller.journal.EnsureExecution(ctx, execution.NewExecution{
 		WorkProvider: controller.binding.Provider, ProjectID: intent.ProjectID, ExternalWorkID: intent.WorkID,
 		ExternalRunID: intent.ExternalRunID, AgentID: intent.AgentID, ExternalRunVersion: intent.ExternalVersion,
 		FenceToken: intent.FenceToken, TaskVersion: intent.TaskVersion, TaskDigest: intent.TaskDigest,
 		BindingVersion: controller.binding.Version, LeaseExpiresAt: *intent.LeaseExpiresAt,
-		Budget: execution.Budget{DeadlineAt: deadline, MaxAttempts: controller.maxRetries, MaxTokens: 1},
+		Budget: budget,
 	})
 	if err != nil {
 		return err
@@ -318,6 +359,18 @@ func (controller *ControlController) consumeCommands(ctx context.Context, cycle 
 				}
 			}
 			status, result := commandOutcome(command.Type)
+			if controller.commandHandler != nil {
+				status, result, err = controller.commandHandler(ctx, record, command)
+				if err != nil {
+					cycle.Errors = append(cycle.Errors, err)
+					break
+				}
+				record, err = controller.journal.GetExecution(ctx, record.ID)
+				if err != nil {
+					cycle.Errors = append(cycle.Errors, err)
+					break
+				}
+			}
 			if command.Type == "cancel" && !record.State.Terminal() {
 				record, err = controller.journal.Transition(ctx, record.ID, execution.Transition{ExpectedVersion: record.Version,
 					Target: execution.StateCancelled, Message: "operator cancellation pre-empted ordinary progress"})

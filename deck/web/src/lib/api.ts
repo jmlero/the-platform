@@ -72,6 +72,7 @@ export const api = {
   logout: () => request<void>('/api/v1/operator/session', { method: 'DELETE' }),
   bootstrap: () => request<Bootstrap>('/api/v1/bootstrap'),
   task: (id: string) => request<TaskDetail>(`/api/v1/operator/tasks/${id}`),
+  cancelRun: (id: string) => request<unknown>(`/api/v1/operator/runs/${id}/commands`, {method:'POST', body:JSON.stringify({type:'cancel',reason:'Operator cancelled from task details'})}),
   createTask: (input: CreateTaskInput) =>
     request<Task>('/api/v1/tasks', { method: 'POST', body: JSON.stringify(input) }),
   updateTask: (id: string, input: UpdateTaskInput) =>

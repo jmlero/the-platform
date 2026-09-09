@@ -146,6 +146,9 @@ func (store *Store) EnsureRuntimeAttempt(
 	).Scan(&number); err != nil {
 		return execution.Execution{}, runtimeapi.Attempt{}, false, fmt.Errorf("number runtime attempt: %w", err)
 	}
+	if number > record.MaxAttempts {
+		return execution.Execution{}, runtimeapi.Attempt{}, false, execution.ErrBudgetExhausted
+	}
 	if _, err := transaction.ExecContext(ctx, `
 		INSERT INTO runtime_attempts (
 			id, execution_id, attempt_number, idempotency_key, specification_json,
@@ -470,4 +473,21 @@ func boolInt(value bool) int {
 		return 1
 	}
 	return 0
+}
+
+func (store *Store) ListRuntimeCleanup(ctx context.Context) ([]runtimeapi.Attempt, error) {
+	rows, err := store.db.QueryContext(ctx, "SELECT "+runtimeAttemptColumns+" FROM runtime_attempts WHERE cleanup_state <> 'completed' ORDER BY created_at LIMIT 100")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []runtimeapi.Attempt
+	for rows.Next() {
+		item, err := scanRuntimeAttempt(rows)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
 }

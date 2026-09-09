@@ -8,6 +8,13 @@ The Platform is the monorepo for AppDeck and Marina, two independently deployabl
 
 They evolve together through a versioned HTTP/JSON contract while retaining separate binaries, Go modules, container images, databases, service identities, deployment lifecycles, and product responsibilities. Neither product imports the other's internal packages.
 
+The current release focuses on one outcome: an authorized repository fix becomes
+a verified pull request for human review, running on Kubernetes infrastructure
+you control. AppDeck opens with attention, active work and results. Marina runs
+one coding Job and a separate verification Job, with explicit Git/model endpoints,
+durable artifacts and bounded authority. See the [paired installation and
+acceptance guide](deploy/kubernetes/first-release/README.md).
+
 Read the [Marina vision](VISION.md), [AppDeck vision](VISION_DECK.md), and [dark-factory definition](DARK_FACTORY.md) for product direction; [ARCHITECTURE.md](ARCHITECTURE.md) for joint boundaries and failure semantics; and [TODO.md](TODO.md) for the ordered implementation backlog. Consequential cross-product choices are recorded in the [monorepo decision](docs/decisions/0001-product-boundary-monorepo.md), [operator CLI decision](docs/decisions/0002-standalone-operator-cli.md), [service-authentication decision](docs/decisions/0003-service-authentication.md), [Milestone 1 safety decision](docs/decisions/0004-milestone-one-work-control-safety.md), [operator-authentication decision](docs/decisions/0005-operator-authentication.md), and [versioned AppDeck-ledger decision](docs/decisions/0006-versioned-appdeck-ledger.md).
 
 An illustrative pre-monorepo architecture export is preserved under [docs/architecture/](docs/architecture/); [ARCHITECTURE.md](ARCHITECTURE.md) is authoritative for current packaging and boundaries.
@@ -60,4 +67,7 @@ TODO.md                       Prioritized cross-product delivery backlog
 go.work                       Local workspace over three independent Go modules
 ```
 
-Milestone 1's control-system safety gate is complete: Marina can durably acquire one bounded AppDeck task, recover ambiguous handoffs, enforce fenced authority, consume operator commands, and project ordered state without duplicates. Runtime and source-control mutation remain disabled while Milestone 2 introduces isolated worker attempts.
+`marina serve --config workflow.json` enables the bounded repository workflow.
+Without that configuration, Marina retains its control-only compatibility mode.
+Real-process tests verify the workflow with deterministic Git/runtime doubles;
+the selected Kubernetes installation and coding model still need acceptance testing.

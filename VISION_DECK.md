@@ -2,9 +2,14 @@
 
 ## Purpose
 
-AppDeck is a lightweight, local-first control plane for human-agent work.
+AppDeck is the lightweight operator surface for authorized agent work, usable locally and on infrastructure controlled by its operator.
 
 It gives people a clear place to define outcomes and approval boundaries, lets agents claim structured work, and keeps every plan, decision, event, artifact, and result visible and auditable.
+
+The first usable release focuses on task authorization, decisions, results ready
+for review, and exceptions. It forms one coherent installation with Marina while
+retaining its separate service and public API. General project-management and chat
+expansion are deferred under [decision 0007](docs/decisions/0007-sovereign-first-usable-release.md).
 
 AppDeck is not intended to be a "main brain" that understands or executes everything. It is the shared contract between humans and replaceable agent runtimes: a dependable place to coordinate, observe, steer, and verify work.
 

@@ -23,6 +23,7 @@ type Change struct {
 	Path          string
 	ContentDigest string
 	Operation     ChangeOperation
+	Mode          string
 }
 
 type BranchRequest struct {
@@ -112,6 +113,7 @@ type Port interface {
 	CreateBranch(context.Context, BranchRequest) (Revision, error)
 	WriteChanges(context.Context, WriteRequest) (Revision, error)
 	CreatePullRequest(context.Context, PullRequestRequest) (PullRequest, error)
+	GetPullRequest(context.Context, ObservationRequest) (PullRequest, error)
 	CurrentHead(context.Context, HeadRequest) (Revision, error)
 	ObserveReviews(context.Context, ObservationRequest) ([]ReviewObservation, error)
 	ObserveChecks(context.Context, ObservationRequest) ([]CheckObservation, error)

@@ -25,6 +25,7 @@ type ProjectBinding struct {
 }
 
 type NewAcquisitionIntent struct {
+	TaskSnapshot             string
 	ProjectID                string
 	WorkID                   string
 	TaskVersion              int
@@ -37,6 +38,7 @@ type NewAcquisitionIntent struct {
 }
 
 type AcquisitionIntent struct {
+	TaskSnapshot             string
 	ID                       string
 	ProjectID                string
 	WorkID                   string

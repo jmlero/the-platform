@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: marina
+spec:
+  template:
+    spec:
+      automountServiceAccountToken: true
+      containers:
+        - name: marina
+          env:
+            - {name: MARINA_APPDECK_URL, value: "https://appdeck.marina-system.svc:8080"}
+            - {name: SSL_CERT_FILE, value: /run/service-ca/ca.crt}
+            - {name: MARINA_CONFIG_FILE, value: /etc/marina/workflow.json}
+            - {name: MARINA_APPDECK_TOKEN_FILE, value: /run/marina-secrets/appdeck-token}
+            - {name: MARINA_RECONCILE_INTERVAL, value: 3s}
+            - {name: MARINA_RUN_LEASE, value: 120s}
+            - {name: MARINA_LEASE_RENEW_BEFORE, value: 60s}
+          startupProbe:
+            httpGet: {scheme: HTTPS}
+          readinessProbe:
+            httpGet: {scheme: HTTPS}
+          livenessProbe:
+            httpGet: {scheme: HTTPS}
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: "2", memory: 1Gi}
+          volumeMounts:
+            - {name: workflow, mountPath: /etc/marina, readOnly: true}
+            - {name: credentials, mountPath: /run/marina-secrets, readOnly: true}
+            - {name: tls, mountPath: /run/marina-tls, readOnly: true}
+            - {name: artifacts, mountPath: /run/artifacts, readOnly: true}
+            - {name: service-ca, mountPath: /run/service-ca, readOnly: true}
+      volumes:
+        - name: workflow
+          configMap: {name: marina-workflow}
+        - name: credentials
+          secret: {secretName: marina-credentials, defaultMode: 288}
+        - name: tls
+          secret: {secretName: marina-worker-tls, defaultMode: 288}
+        - name: artifacts
+          secret: {secretName: marina-artifact-auth, defaultMode: 288}
+        - name: service-ca
+          configMap: {name: marina-worker-ca}

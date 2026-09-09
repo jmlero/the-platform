@@ -1,5 +1,20 @@
 # The Marina Vision
 
+## Current delivery focus
+
+Marina runs on Kubernetes infrastructure controlled by its operator. Ownership,
+sovereignty, privacy, and independence from a mandatory hosted control plane are
+core product requirements. Model inference, source control, artifacts, and network
+egress must have explicit operator-selected data boundaries; Kubernetes hosting
+alone is not a guarantee that code stays private.
+
+The first usable release carries authorized, bounded repository fixes through
+isolated execution, verification, and bounded CI feedback to a pull request ready
+for human review. AppDeck focuses on authorization, decisions, results, and
+exceptions. Additional chat, provider families, and production operations are
+deferred. [Decision 0007](docs/decisions/0007-sovereign-first-usable-release.md)
+governs this focus over the broader destination described below.
+
 ## From coding agent to autonomous software factory
 
 Marina's goal is not to help a developer type code faster. Its goal is to make the software delivery system itself capable of doing useful, governed work continuously—even when no developer has a terminal open, a laptop online, or a hand on the keyboard.
@@ -203,7 +218,7 @@ Codex, Claude Code, a custom agent, an AgentCore harness, or a future runtime sh
 
 The two product modules should have distinct responsibilities.
 
-**AppDeck is the agent-native work and conversation plane.** It should make structured work tracking feel closer to a better Linear than to a traditional Jira installation: fast task capture, clear outcomes, priorities, plans, decisions, live state, artifacts, budgets, and completion evidence. It should also provide Slack-like channels where humans and agents collaborate naturally around a project, repository, service, incident, or topic.
+**AppDeck is the operator's authorization, decision, and results surface.** It keeps tasks, plans, budgets, controls, and evidence understandable. Its first usable experience prioritizes work needing a decision, results ready for review, and exceptions requiring intervention. Existing project channels remain available as supporting context; expanding chat or general project management is deferred.
 
 Channels are not a second, disposable chat product. They are a conversational entrance into the same durable work graph:
 

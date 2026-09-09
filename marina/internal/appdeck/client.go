@@ -43,12 +43,23 @@ func (e *APIError) Error() string {
 func (e *APIError) RetryableFailure() bool { return e.Retryable }
 
 type Client struct {
-	baseURL           *url.URL
-	httpClient        *http.Client
-	bearerTokenSource bearerTokenSource
+	baseURL              *url.URL
+	httpClient           *http.Client
+	bearerTokenSource    bearerTokenSource
+	requiredCapabilities []string
 }
 
 type Option func(*Client) error
+
+func WithRequiredCapabilities(required []string) Option {
+	return func(client *Client) error {
+		if len(required) == 0 {
+			return errors.New("enabled capabilities are required")
+		}
+		client.requiredCapabilities = append([]string(nil), required...)
+		return nil
+	}
+}
 
 func WithBearerTokenFile(path string) Option {
 	return func(client *Client) error {
@@ -124,7 +135,11 @@ func loopbackHost(host string) bool {
 }
 
 func (c *Client) Health(ctx context.Context) error {
-	_, err := c.CheckCompatibility(ctx, workcontrol.MilestoneOneCapabilities())
+	required := c.requiredCapabilities
+	if len(required) == 0 {
+		required = workcontrol.MilestoneOneCapabilities()
+	}
+	_, err := c.CheckCompatibility(ctx, required)
 	return err
 }
 
@@ -751,8 +766,8 @@ func newPlanRevisionRequest(submission workcontrol.PlanRevisionSubmission) (plan
 		return planRevisionRequest{}, errors.New("agent ID, expected version, and fence token are required")
 	}
 	if submission.Plan == "" || !sha256Digest(submission.ContextDigest) || submission.VerificationStrategy == "" ||
-		submission.RollbackApproach == "" || !fullCommitRevision(submission.SourceRevision) || submission.PolicyVersion == "" {
-		return planRevisionRequest{}, errors.New("plan, context digest, verification strategy, rollback approach, source revision, and policy version are required")
+		submission.RollbackApproach == "" || (submission.SourceRevision != "" && !fullCommitRevision(submission.SourceRevision)) || submission.PolicyVersion == "" {
+		return planRevisionRequest{}, errors.New("plan, context digest, verification strategy, rollback approach and policy version are required; an optional source revision must be a full commit")
 	}
 	switch submission.RiskClass {
 	case "low", "medium", "high", "critical":
@@ -905,22 +920,42 @@ func (agent agentDTO) toDomain() workcontrol.Agent {
 }
 
 type taskDTO struct {
-	ID                 string `json:"id"`
-	ProjectID          string `json:"project_id"`
-	Title              string `json:"title"`
-	Description        string `json:"description"`
-	AcceptanceCriteria string `json:"acceptance_criteria"`
-	Status             string `json:"status"`
-	Priority           string `json:"priority"`
-	BudgetMinutes      int    `json:"budget_minutes"`
-	Version            int    `json:"version"`
-	CreatedAt          int64  `json:"created_at"`
-	UpdatedAt          int64  `json:"updated_at"`
+	ID                 string    `json:"id"`
+	ProjectID          string    `json:"project_id"`
+	Title              string    `json:"title"`
+	Description        string    `json:"description"`
+	AcceptanceCriteria string    `json:"acceptance_criteria"`
+	Status             string    `json:"status"`
+	Priority           string    `json:"priority"`
+	BudgetMinutes      int       `json:"budget_minutes"`
+	Budget             budgetDTO `json:"budget"`
+	Version            int       `json:"version"`
+	CreatedAt          int64     `json:"created_at"`
+	UpdatedAt          int64     `json:"updated_at"`
+}
+
+type budgetDTO struct {
+	TimeMinutes    int      `json:"time_minutes"`
+	DeadlineAt     *int64   `json:"deadline_at"`
+	MaxAttempts    int      `json:"max_attempts"`
+	MaxTokens      int64    `json:"max_tokens"`
+	MaxCostMinor   int64    `json:"max_cost_minor"`
+	Currency       string   `json:"currency"`
+	MaxConcurrency int      `json:"max_concurrency"`
+	Authority      []string `json:"authority"`
+}
+
+func (budget budgetDTO) toDomain() workcontrol.Budget {
+	return workcontrol.Budget{TimeMinutes: budget.TimeMinutes, DeadlineAt: optionalUnixMilli(budget.DeadlineAt),
+		MaxAttempts: budget.MaxAttempts, MaxTokens: budget.MaxTokens, MaxCostMinor: budget.MaxCostMinor,
+		Currency: budget.Currency, MaxConcurrency: budget.MaxConcurrency, Authority: budget.Authority}
 }
 
 type taskDetailDTO struct {
-	Task taskDTO  `json:"task"`
-	Runs []runDTO `json:"runs"`
+	Task          taskDTO           `json:"task"`
+	Runs          []runDTO          `json:"runs"`
+	PlanRevisions []planRevisionDTO `json:"plan_revisions"`
+	Decisions     []decisionDTO     `json:"decisions"`
 }
 
 func (detail taskDetailDTO) toDomain() workcontrol.WorkDetail {
@@ -928,9 +963,18 @@ func (detail taskDetailDTO) toDomain() workcontrol.WorkDetail {
 	for _, run := range detail.Runs {
 		runs = append(runs, run.toDomain())
 	}
+	plans := make([]workcontrol.PlanRevision, 0, len(detail.PlanRevisions))
+	for _, plan := range detail.PlanRevisions {
+		plans = append(plans, plan.toDomain())
+	}
+	decisions := make([]workcontrol.Decision, 0, len(detail.Decisions))
+	for _, decision := range detail.Decisions {
+		decisions = append(decisions, decision.toDomain())
+	}
 	return workcontrol.WorkDetail{
-		Work: detail.Task.toDomain(),
-		Runs: runs,
+		Work:          detail.Task.toDomain(),
+		Runs:          runs,
+		PlanRevisions: plans, Decisions: decisions,
 	}
 }
 
@@ -944,6 +988,7 @@ func (task taskDTO) toDomain() workcontrol.WorkItem {
 		Status:             workcontrol.WorkStatus(task.Status),
 		Priority:           task.Priority,
 		BudgetMinutes:      task.BudgetMinutes,
+		Budget:             task.Budget.toDomain(),
 		Version:            task.Version,
 		CreatedAt:          fromUnixMilli(task.CreatedAt),
 		UpdatedAt:          fromUnixMilli(task.UpdatedAt),
@@ -960,6 +1005,7 @@ type runDTO struct {
 	AcceptanceCriteriaDigest string `json:"acceptance_criteria_digest"`
 	Status                   string `json:"status"`
 	Plan                     string `json:"plan"`
+	ActivePlanRevisionID     string `json:"active_plan_revision_id"`
 	ResultSummary            string `json:"result_summary"`
 	LeaseExpiresAt           *int64 `json:"lease_expires_at"`
 	StartedAt                int64  `json:"started_at"`
@@ -976,6 +1022,7 @@ func (run runDTO) toDomain() workcontrol.Run {
 		AcceptanceCriteriaDigest: run.AcceptanceCriteriaDigest,
 		Status:                   workcontrol.RunStatus(run.Status),
 		Plan:                     run.Plan,
+		ActivePlanRevisionID:     run.ActivePlanRevisionID,
 		ResultSummary:            run.ResultSummary,
 		LeaseExpiresAt:           optionalUnixMilli(run.LeaseExpiresAt),
 		StartedAt:                fromUnixMilli(run.StartedAt),

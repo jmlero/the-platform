@@ -198,6 +198,18 @@ func (store *Store) LatestCheckpoint(ctx context.Context, executionID string) (e
 	return record, nil
 }
 
+func (store *Store) GetCheckpoint(ctx context.Context, executionID, key string) (execution.Checkpoint, error) {
+	return scanCheckpoint(store.db.QueryRowContext(ctx, `SELECT id, execution_id, checkpoint_key, phase,
+		runtime_handle, source_revision, payload_json, created_at FROM checkpoints
+		WHERE execution_id = ? AND checkpoint_key = ?`, executionID, key))
+}
+
+func (store *Store) LatestPhaseCheckpoint(ctx context.Context, executionID, phase string) (execution.Checkpoint, error) {
+	return scanCheckpoint(store.db.QueryRowContext(ctx, `SELECT id, execution_id, checkpoint_key, phase,
+		runtime_handle, source_revision, payload_json, created_at FROM checkpoints
+		WHERE execution_id = ? AND phase = ? ORDER BY id DESC LIMIT 1`, executionID, phase))
+}
+
 func scanEvidence(source scanner) (execution.Evidence, error) {
 	var record execution.Evidence
 	var observedAt int64

@@ -1,6 +1,9 @@
 # The Marina
 
-The Marina is an installable, Kubernetes-native, and extensible autonomous software-factory layer: durable agents working across the SDLC and DevOps lifecycle while humans steer intent, architecture, policy, and risk.
+Marina runs bounded repository fixes on Kubernetes infrastructure controlled by
+its operator. Its first workflow produces a verified pull request for human
+review, with durable progress, explicit data destinations and limited authority.
+The broader software-factory vision remains the long-term direction.
 
 This project starts from scratch as a new Kubernetes-based concept. Experience from the earlier AWS-native `platform-marina` informs the creator's technical judgment, but Marina inherits neither its architecture nor its code and is not a port or rewrite of it.
 
@@ -43,7 +46,25 @@ The first executable foundation is now present:
 
 On service startup, Marina validates AppDeck's Milestone 1 capabilities, opens the journal, reloads its stable identity and project binding, registers the logical controller, reconciles unresolved acquisitions, and then protects exact run ownership and leases. The same non-overlapping control and lease cycles run periodically. Failed, blocked, and cancelled provider runs converge into guarded local terminal states; budget exhaustion blocks the exact provider run and is classified durably. Provider completion still cannot bypass Marina's verification and evidence gates.
 
-Milestone 1 enables automatic control-plane acquisition for the configured AppDeck project, capped at one active execution by the initial binding. The later local foundations define and test runtime, workspace, policy, planning, context, verification, source-control, and signal behavior, but they are not enabled in the service controller. Marina deliberately does **not** start or resume a runtime, modify source, deliver changes, or create pull requests. Runtime and source-control authority remain represented by explicit `disabled://milestone-one` binding values until an isolated runtime implementation satisfies its deployment-independent and Kubernetes acceptance gates.
+With `--config workflow.json` (or `MARINA_CONFIG_FILE`), the service enables the
+repository workflow: frozen task budget/authority, immutable plan, optional
+approval, Kubernetes coding Job, scoped Git publication, independent verification
+Job, PR/CI observation and structured evidence completion. It supports one active
+task, one implementation and one verification attempt. Failed verification or
+requested changes block the task. Cancellation waits for observed termination.
+
+The worker uses a configured Codex CLI image and an explicit Responses-compatible
+model endpoint. GitHub/GHES is the first source adapter. Workers receive neither
+source-write nor upstream-model credentials. The gateway checks live authority;
+artifacts survive worker cleanup on Marina-owned storage. This workflow uses
+fixed bounded repository rules; the broader policy/context/plugin foundations
+remain available for later workflows.
+
+Without a workflow configuration, the existing Milestone 1 control-only mode
+remains available. Use the [paired installation guide](../deploy/kubernetes/first-release/README.md)
+for an executable configuration, image build, private credential preparation and
+acceptance procedure. Local and real-process tests pass with deterministic
+provider doubles; a real model/cluster acceptance run remains installation-specific.
 
 ## Development
 
@@ -100,7 +121,11 @@ The service listens on `:8090` by default. Liveness is available at `/healthz`; 
 
 ## Kubernetes baseline
 
-The initial Kubernetes base is under [`deploy/kubernetes`](deploy/kubernetes/README.md). It runs one non-root control-service replica with `Recreate` updates and a `ReadWriteOnce` persistent volume, matching the accepted SQLite boundary. It does not deploy an agent harness or agent Job yet.
+The control-only base is under [`deploy/kubernetes`](deploy/kubernetes/README.md).
+The [first-release overlay](../deploy/kubernetes/first-release/README.md) adds
+paired TLS services, separate identities/storage, worker RBAC and network policy,
+artifact access and configured Job execution. Both use single-replica Recreate
+updates and ReadWriteOnce SQLite storage.
 
 Render it locally:
 
@@ -111,6 +136,7 @@ make manifests
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `MARINA_ADDR` | `:8090` | Marina HTTP listen address. |
+| `MARINA_CONFIG_FILE` | unset | Explicit repository workflow configuration; enables worker execution. |
 | `MARINA_APPDECK_URL` | `http://localhost:8080` | AppDeck server root URL. |
 | `MARINA_APPDECK_TOKEN_FILE` | unset | File reference containing the AppDeck service Bearer token. |
 | `MARINA_APPDECK_PROJECT_ID` | `prj_default` | AppDeck project bound to this initial controller. |

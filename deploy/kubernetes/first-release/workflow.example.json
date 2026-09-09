@@ -1,0 +1,43 @@
+{
+  "project_id": "prj_default",
+  "public_url": "https://marina.marina-system.svc:8090",
+  "tls_cert_file": "/run/marina-tls/tls.crt",
+  "tls_key_file": "/run/marina-tls/tls.key",
+  "signing_key_file": "/run/marina-secrets/worker-signing-key",
+  "artifact_directory": "/data/artifacts",
+  "artifact_token_file": "/run/artifacts/token",
+  "kubernetes": {
+    "server_url": "https://kubernetes.default.svc",
+    "namespace": "marina-workers",
+    "token_file": "/var/run/secrets/kubernetes.io/serviceaccount/token",
+    "ca_file": "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt",
+    "image": "YOUR_REGISTRY/marina-worker@sha256:REPLACE_WITH_BUILT_IMAGE_DIGEST",
+    "service_account": "marina-worker",
+    "worker_ca_config_map": "marina-worker-ca"
+  },
+  "git": {
+    "api_url": "https://YOUR_GIT_HOST/api/v3",
+    "repository": "YOUR_OWNER/YOUR_REPOSITORY",
+    "clone_url": "https://YOUR_GIT_HOST/YOUR_OWNER/YOUR_REPOSITORY.git",
+    "token_file": "/run/marina-secrets/git-token",
+    "base_branch": "main",
+    "author_name": "Marina",
+    "author_email": "jmlero@hotmail.com"
+  },
+  "model": {
+    "endpoint": "https://YOUR_MODEL_HOST/v1",
+    "name": "YOUR_CODING_MODEL",
+    "token_file": "/run/marina-secrets/model-token",
+    "max_output_tokens": 8192,
+    "input_micros_per_million": 0,
+    "output_micros_per_million": 0,
+    "currency": "EUR"
+  },
+  "allowed_paths": ["src", "tests"],
+  "checks": [{"id": "regression", "directory": ".", "command": ["go", "test", "./..."]}],
+  "required_ci": ["YOUR_REQUIRED_CI_CHECK_NAME"],
+  "require_approval": true,
+  "max_tokens": 200000,
+  "budget_minutes": 30,
+  "policy_version": "repository-fix-v1"
+}

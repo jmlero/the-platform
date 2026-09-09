@@ -26,6 +26,9 @@ type Server struct {
 	operatorAuthenticator *FileOperatorAuthenticator
 	secureOperatorCookies bool
 	operatorSessionTTL    time.Duration
+	artifactURL           string
+	artifactTokenFile     string
+	artifactCAFile        string
 }
 
 type Option func(*Server)
@@ -133,6 +136,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/events/stream", s.requireService(capabilityEventStream, s.streamEvents))
 
 	mux.HandleFunc("GET /api/v1/operator/tasks/{id}", s.requireOperator(s.getTask))
+	mux.HandleFunc("GET /api/v1/operator/tasks/{id}/artifacts/{digest}", s.requireOperator(s.downloadArtifact))
 	mux.HandleFunc("POST /api/v1/operator/decisions/{id}/answer", s.requireOperator(s.answerDecision))
 	mux.HandleFunc("POST /api/v1/operator/runs/{id}/commands", s.requireOperator(s.createOperatorCommand))
 	mux.HandleFunc("GET /api/v1/operator/events/stream", s.requireOperator(s.streamEvents))

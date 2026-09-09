@@ -1,0 +1,52 @@
+# Restrict control-plane ingress. Label the chosen ingress controller namespace
+# marina.dev/operator-ingress=true to grant it AppDeck access.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: appdeck-ingress}
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: appdeck}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {app.kubernetes.io/name: marina}
+        - namespaceSelector:
+            matchLabels: {marina.dev/operator-ingress: "true"}
+      ports: [{protocol: TCP, port: 8080}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: marina-gateway
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: marina}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: marina-workers}
+          podSelector:
+            matchLabels: {app.kubernetes.io/name: marina-worker}
+        - podSelector:
+            matchLabels: {app.kubernetes.io/name: appdeck}
+      ports: [{protocol: TCP, port: 8090}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: appdeck-egress
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: appdeck}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels: {app.kubernetes.io/name: marina}
+      ports: [{protocol: TCP, port: 8090}]
+    - to:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: kube-system}
+      ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]

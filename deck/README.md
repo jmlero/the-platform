@@ -1,6 +1,14 @@
 # AppDeck
 
-AppDeck is a lightweight, local-first control plane for human-agent work. It combines a backlog and state-machine board with agent leases, plan approval, live activity, human decisions, and evidence-based completion.
+AppDeck is the task authorization, decision and results surface for work carried
+out by Marina. Its default overview separates work needing attention, active
+work and reviewable results. Operators can approve a plan, cancel a run, inspect
+the PR and download verification evidence.
+
+Use the [paired installation guide](../deploy/kubernetes/first-release/README.md)
+for the first repository workflow. It enables authenticated operator sessions,
+TLS, separate service credentials and digest-checked access to Marina's artifact
+store. Channel and operational APIs remain compatible; their expansion is deferred.
 
 This directory contains the first working prototype. Read the root [AppDeck vision](../VISION_DECK.md) for the product direction and [ARCHITECTURE.md](../ARCHITECTURE.md) for its boundary with Marina.
 

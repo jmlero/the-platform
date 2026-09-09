@@ -16,6 +16,10 @@ func (contractStub) WriteChanges(context.Context, WriteRequest) (Revision, error
 func (contractStub) CreatePullRequest(context.Context, PullRequestRequest) (PullRequest, error) {
 	return PullRequest{ID: "pr-1", HeadRevision: "def456"}, nil
 }
+
+func (contractStub) GetPullRequest(context.Context, ObservationRequest) (PullRequest, error) {
+	return PullRequest{}, nil
+}
 func (contractStub) CurrentHead(context.Context, HeadRequest) (Revision, error) {
 	return Revision{Commit: "def456", Ref: "refs/heads/marina/task"}, nil
 }

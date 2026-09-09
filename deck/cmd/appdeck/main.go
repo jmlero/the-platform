@@ -47,6 +47,9 @@ func main() {
 	go reapExpiredLeases(ctx, appStore, logger)
 
 	httpOptions := make([]httpapi.Option, 0, 3)
+	if base := strings.TrimSpace(os.Getenv("APPDECK_ARTIFACT_URL")); base != "" {
+		httpOptions = append(httpOptions, httpapi.WithArtifactStore(base, os.Getenv("APPDECK_ARTIFACT_TOKEN_FILE"), os.Getenv("APPDECK_ARTIFACT_CA_FILE")))
+	}
 	serviceAuthFile := strings.TrimSpace(os.Getenv("APPDECK_SERVICE_AUTH_FILE"))
 	if serviceAuthFile != "" {
 		authorizer, err := httpapi.NewFileServiceAuthorizer(serviceAuthFile)
@@ -95,7 +98,13 @@ func main() {
 			"service_auth", serviceAuthFile != "",
 			"operator_auth", operatorAuthFile != "",
 		)
-		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		var serveErr error
+		if certificate := os.Getenv("APPDECK_TLS_CERT_FILE"); certificate != "" {
+			serveErr = server.ListenAndServeTLS(certificate, os.Getenv("APPDECK_TLS_KEY_FILE"))
+		} else {
+			serveErr = server.ListenAndServe()
+		}
+		if err := serveErr; err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Error("serve AppDeck", "error", err)
 			stop()
 		}

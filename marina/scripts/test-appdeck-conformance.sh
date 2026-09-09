@@ -55,6 +55,7 @@ cat >"${service_auth_file}" <<EOF
         "event.append",
         "event.list",
         "event.stream",
+        "evidence.record",
         "provider.info",
         "run.assigned.list",
         "run.block",
@@ -95,7 +96,7 @@ if ! APPDECK_CONFORMANCE_URL="${conformance_url}" \
   APPDECK_CONFORMANCE_TOKEN_FILE="${service_token_file}" \
   APPDECK_FIXTURES_DIR="${appdeck_repository}/api/fixtures/v1" \
   GOCACHE="${temporary_directory}/go-cache" \
-  go test ./internal/appdeck -run '^TestRealAppDeckConformance$' -count=1 -v; then
+  go test ./internal/appdeck -run '^TestReal(AppDeckConformance|RepositoryWorkflow)$' -count=1 -v; then
   echo "AppDeck process log:" >&2
   sed -n '1,240p' "${appdeck_log}" >&2
   exit 1

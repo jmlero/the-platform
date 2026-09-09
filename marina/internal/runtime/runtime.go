@@ -56,9 +56,9 @@ func (state State) CanObserve(target State) bool {
 	}
 	switch state {
 	case StatePending:
-		return target == StateStarting || target == StateRunning || target == StateFailed || target == StateCancelled
+		return target == StateStarting || target == StateRunning || target.Terminal()
 	case StateStarting:
-		return target == StateRunning || target == StateFailed || target == StateCancelled || target == StateTimedOut
+		return target == StateRunning || target.Terminal()
 	case StateRunning:
 		return target == StatePaused || target.Terminal()
 	case StatePaused:

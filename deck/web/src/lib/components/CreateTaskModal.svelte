@@ -10,12 +10,13 @@
   let acceptanceCriteria = '';
   let priority: Priority = 'medium';
   let budgetMinutes = 30;
-  let maxAttempts = 1;
-  let maxTokens = 0;
+  let maxAttempts = 2;
+  let maxTokens = 200000;
   let maxCostMinor = 0;
-  let currency = 'USD';
+  let currency = 'EUR';
   let maxConcurrency = 1;
   let authority = 'source.read';
+  let allowPullRequest = false;
   let deadline = '';
   let status: 'backlog' | 'ready' = 'backlog';
   let submitting = false;
@@ -43,7 +44,7 @@
           max_cost_minor: Number(maxCostMinor),
           currency: currency.trim().toUpperCase(),
           max_concurrency: Number(maxConcurrency),
-          authority: authority.split(',').map((item) => item.trim()).filter(Boolean)
+          authority: [...new Set([...authority.split(',').map((item) => item.trim()).filter(Boolean), ...(allowPullRequest ? ['source.read', 'source.write', 'pull_request.create'] : [])])]
         },
         status
       });
@@ -118,6 +119,11 @@
         </label>
       </div>
 
+      <label class="permission">
+        <input type="checkbox" bind:checked={allowPullRequest} />
+        <span>Allow Marina to change the configured repository and open a PR.<small>Stops for human review. Two attempts cover implementation and independent verification.</small></span>
+      </label>
+
       <details class="budget-details">
         <summary>Structured limits</summary>
         <div class="budget-grid">
@@ -190,6 +196,9 @@
 </div>
 
 <style>
+  .permission { display:flex; gap:12px; align-items:flex-start; padding:14px; border:1px solid var(--line); border-radius:10px; font-size:.78rem; }
+  .permission input { width:auto; margin-top:3px; }
+  .permission small { display:block; margin-top:6px; color:var(--subtle); line-height:1.5; }
   .modal-backdrop {
     position: fixed;
     z-index: 80;

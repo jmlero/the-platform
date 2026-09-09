@@ -46,6 +46,27 @@ tags:
   - name: Operations
 
 paths:
+  /operator/tasks/{id}/artifacts/{digest}:
+    get:
+      tags: [Tasks]
+      operationId: downloadOperatorEvidenceArtifact
+      summary: Download registered verification bytes through the operator session
+      description: Verifies the task ledger reference, configured artifact origin and SHA-256 digest before returning bytes. Requires an operator session when operator authentication is configured.
+      security:
+        - operatorSession: []
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+        - {name: digest, in: path, required: true, schema: {type: string, pattern: '^sha256:[a-f0-9]{64}$'}}
+      responses:
+        "200":
+          description: Integrity-checked verification result, maximum 4 MiB
+          content:
+            application/json:
+              schema: {type: object}
+        "401": {description: Operator authentication required}
+        "404": {description: No registered downloadable artifact}
+        "502": {description: Artifact unavailable or failed integrity verification}
+        "503": {description: Artifact credentials or trust configuration unavailable}
   /provider:
     get:
       tags: [Provider]
@@ -437,7 +458,9 @@ paths:
                   type: array
                   items: { type: string }
                 rollback_approach: { type: string }
-                source_revision: { type: string }
+                source_revision:
+                  type: string
+                  description: Optional fixed output revision for the evidence gate. For source-changing work whose output does not exist yet, omit it and bind the base revision in context; the execution provider must verify the current published head before completion.
                 policy_version: { type: string }
                 require_approval:
                   type: boolean
@@ -1057,6 +1080,10 @@ paths:
 
 components:
   securitySchemes:
+    operatorSession:
+      type: apiKey
+      in: cookie
+      name: appdeck_operator_session
     serviceBearer:
       type: http
       scheme: bearer

@@ -1,5 +1,28 @@
 # The Platform Build TODO
 
+## Current release focus — authorized repository fixes on infrastructure you control
+
+[Decision 0007](docs/decisions/0007-sovereign-first-usable-release.md) narrows the
+active work to one usable Kubernetes workflow: task authorization → isolated
+worker → verified result → PR and required CI → human review. Sovereignty and
+explicit data boundaries are requirements. Existing milestone checkmarks below
+remain historical evidence; they do not imply that the complete workflow runs.
+
+- [x] Preserve the full frozen task budget and authority through Marina intake.
+- [x] Connect one configured coding harness to a restart-safe Kubernetes worker (implementation and deterministic adapter tests).
+- [x] Return durable artifacts and independently produced verification evidence (real AppDeck protocol proof with deterministic workers).
+- [x] Publish one pull request and check its head, state and required CI within bounded authority; failed checks/review changes require a follow-up task.
+- [x] Focus AppDeck on decisions, reviewable results, and exceptions.
+- [x] Supply a paired installation, explicit model/egress configuration, and a repeatable acceptance procedure.
+- [ ] Verify the real workflow, cancellation, and recovery on a selected installation.
+
+The checked implementation items are not a claim of a completed cluster/model
+acceptance run. Follow [the installation guide](deploy/kubernetes/first-release/README.md)
+for that remaining gate. Automatic CI/review revision loops are deferred.
+
+New chat features, production operations, additional provider families, and
+multi-tenancy are deferred until this release is useful in real repositories.
+
 This is the prioritized implementation backlog for the first laptop-off vertical slice. It records build order, not a permanent architecture. Product direction remains in the [AppDeck vision](VISION_DECK.md) and [Marina vision](VISION.md); cross-product boundaries, protocols, and failure semantics are defined in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 Work is tagged by its primary product module or ownership boundary:
@@ -12,7 +35,9 @@ Work is tagged by its primary product module or ownership boundary:
 
 A joint item is not complete when only mocks pass. It requires compatible contracts, deterministic tests in each product, and at least one paired test using real AppDeck and Marina behavior over their public protocol. Recovery behavior and truthful operator-visible state are part of the acceptance criteria, not follow-up polish.
 
-The Milestone 1 safety gate is complete. Marina may automatically claim control-only work through its durable handoff, but no runtime or source-control mutation is enabled.
+The historical Milestone 1 safety gate is complete. The first-release workflow
+now enables runtime/source mutations only with an explicit installation config
+and task authority; control-only mode remains available without that config.
 
 ## Now — establish the executable foundation
 

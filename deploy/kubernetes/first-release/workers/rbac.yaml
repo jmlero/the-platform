@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata: {name: marina-worker}
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata: {name: marina-job-controller}
+rules:
+  - apiGroups: [batch]
+    resources: [jobs]
+    verbs: [get, create, delete]
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [create, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: {name: marina-job-controller}
+subjects:
+  - kind: ServiceAccount
+    name: marina
+    namespace: marina-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: marina-job-controller

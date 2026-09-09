@@ -17,6 +17,7 @@
     X
   } from '@lucide/svelte';
   import { eventLabel, formatDate, initials, timeAgo } from '$lib/format';
+  import { api } from '$lib/api';
   import type {
     Agent,
     Decision,
@@ -53,8 +54,18 @@
   let authority = '';
   let deadline = '';
 
+  async function cancelRun() {
+    if (!run) return;
+    busy = true; error = '';
+    try { await api.cancelRun(run.id); await onrefresh(); }
+    catch (caught) { error = caught instanceof Error ? caught.message : 'Cancellation failed'; }
+    finally { busy = false; }
+  }
+
   $: task = detail.task;
   $: run = detail.runs[0];
+  $: resultURL = run?.result_summary.match(/https:\/\/[^\s)]+/)?.[0];
+  $: usageEvent = detail.events.find((event) => typeof event.payload?.reported_tokens === 'number');
   $: agent = agents.find((candidate) => candidate.id === (run?.agent_id ?? task.assigned_agent_id));
   $: pendingDecision = detail.decisions.find((decision) => decision.status === 'pending');
   $: progressEvent = detail.events.find(
@@ -221,7 +232,7 @@
         {/if}
       </section>
 
-      {#if run && ['running', 'verifying', 'done'].includes(task.status)}
+      {#if run && ['running', 'verifying', 'done'].includes(task.status) && (progressEvent || task.status === 'done')}
         <section class="run-progress">
           <div class="progress-copy">
             <span>{task.status === 'done' ? 'Completed' : task.status === 'verifying' ? 'Verifying' : 'Executing approved plan'}</span>
@@ -268,6 +279,15 @@
       {/if}
 
       {#if error}<p class="drawer-error">{error}</p>{/if}
+      {#if run && ['planning','waiting_decision','running','verifying'].includes(run.status)}
+        <button class="cancel-run" type="button" disabled={busy || detail.commands.some((command) => command.type === 'cancel' && ['pending','acknowledged'].includes(command.status))} on:click={cancelRun}>Cancel run</button>
+      {/if}
+      {#each detail.commands as command (command.id)}
+        <p class="command-status">{command.type}: {command.status}{command.result ? ` · ${command.result}` : ''}</p>
+      {/each}
+      {#if usageEvent?.payload}
+        <p class="command-status">Reported model usage: {Number(usageEvent.payload.reported_tokens).toLocaleString()} tokens · {(Number(usageEvent.payload.reported_cost_micros) / 1000000).toFixed(4)} {String(usageEvent.payload.currency ?? '')}</p>
+      {/if}
 
       <nav class="tabs" aria-label="Task detail sections">
         <button class:active={tab === 'overview'} type="button" on:click={() => (tab = 'overview')}>
@@ -367,6 +387,7 @@
                     <CheckCircle2 size={15} />
                     {run.result_summary}
                   </div>
+                  {#if resultURL}<a href={resultURL} target="_blank" rel="noopener noreferrer">Review pull request</a>{/if}
                 {/if}
               </div>
             </section>
@@ -435,6 +456,7 @@
                 <div><dt>Artifact</dt><dd>{evidence.artifact_digest}</dd></div>
                 <div><dt>Source</dt><dd>{evidence.source_revision}</dd></div>
               </dl>
+              <a href={`/api/v1/operator/tasks/${encodeURIComponent(task.id)}/artifacts/${encodeURIComponent(evidence.artifact_digest)}`}>Download verification result</a>
             </article>
           {/each}
           {#each detail.artifacts as artifact (artifact.id)}
@@ -472,6 +494,8 @@
 </div>
 
 <style>
+  .cancel-run { margin:12px 24px; padding:8px 12px; border:1px solid var(--line); border-radius:8px; color:var(--text); background:transparent; }
+  .command-status { margin:8px 24px; color:var(--subtle); font-size:.75rem; }
   .drawer-backdrop {
     position: fixed;
     z-index: 70;

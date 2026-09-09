@@ -1,0 +1,21 @@
+FROM golang:1.26.5-bookworm AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -buildvcs=false -trimpath -o /out/marina ./cmd/marina
+
+FROM node:22-bookworm-slim
+ARG CODEX_VERSION
+RUN test -n "$CODEX_VERSION" && \
+    apt-get update && apt-get install -y --no-install-recommends git ca-certificates && \
+    rm -rf /var/lib/apt/lists/* && \
+    npm install --global "@openai/codex@${CODEX_VERSION}" && \
+    npm cache clean --force && \
+    mkdir -p /work /opt/marina-cache/go && chown 65532:65532 /work
+COPY --from=build /usr/local/go /usr/local/go
+COPY --from=build /out/marina /marina
+ENV PATH="/usr/local/go/bin:${PATH}"
+USER 65532:65532
+WORKDIR /work
+ENTRYPOINT ["/marina", "worker"]

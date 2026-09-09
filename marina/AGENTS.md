@@ -181,7 +181,7 @@ Prefer one working vertical slice over broad scaffolding for later maturity stag
 
 The following remain deliberately unresolved. Keep choices local and reversible until the user decides them:
 
-- Where and how the first always-on installation will run.
+- Which operator-owned Kubernetes installation validates the first release.
 - Which runtime will validate portability after the first Kubernetes-hosted harness.
 - Which production feedback source will close the first operational loop.
 - Which actions must always require a human decision.

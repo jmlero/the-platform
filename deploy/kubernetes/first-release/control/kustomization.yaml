@@ -1,0 +1,10 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: marina-system
+resources:
+  - ../../../../deck/deploy/kubernetes/base
+  - ../../../../marina/deploy/kubernetes/base
+  - networkpolicy.yaml
+patches:
+  - path: appdeck.yaml
+  - path: marina.yaml

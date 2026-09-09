@@ -18,10 +18,12 @@ import (
 
 	"github.com/jmlero/the-platform/marina/internal/appdeck"
 	"github.com/jmlero/the-platform/marina/internal/execution"
+	"github.com/jmlero/the-platform/marina/internal/flow"
 	"github.com/jmlero/the-platform/marina/internal/httpserver"
 	"github.com/jmlero/the-platform/marina/internal/journal/sqlite"
 	"github.com/jmlero/the-platform/marina/internal/reconcile"
 	"github.com/jmlero/the-platform/marina/internal/workcontrol"
+	"github.com/jmlero/the-platform/marina/internal/worker"
 )
 
 var version = "dev"
@@ -37,6 +39,14 @@ func run(arguments []string, stdout io.Writer, stderr io.Writer) int {
 	}
 
 	switch arguments[0] {
+	case "worker":
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		if err := worker.RunRemote(ctx); err != nil {
+			_, _ = fmt.Fprintln(stderr, "worker failed:", err)
+			return 1
+		}
+		return 0
 	case "diagnostics":
 		return runDiagnostics(arguments[1:], stdout, stderr)
 	case "doctor":
@@ -139,6 +149,7 @@ func runServe(arguments []string, stderr io.Writer) int {
 		return 2
 	}
 	address := flags.String("addr", envOrDefault("MARINA_ADDR", ":8090"), "HTTP listen address")
+	configPath := flags.String("config", envOrDefault("MARINA_CONFIG_FILE", ""), "repository workflow configuration file; absent selects control-only mode")
 	serverURL := flags.String("appdeck-url", envOrDefault("MARINA_APPDECK_URL", "http://localhost:8080"), "AppDeck server URL")
 	tokenFile := flags.String(
 		"appdeck-token-file",
@@ -169,18 +180,27 @@ func runServe(arguments []string, stderr io.Writer) int {
 		return 2
 	}
 
-	client, err := newAppDeckClient(*serverURL, *tokenFile, &http.Client{Timeout: 5 * time.Second})
+	logger := slog.New(slog.NewJSONHandler(stderr, nil))
+	var workflowConfig flow.Config
+	requiredCapabilities := workcontrol.MilestoneOneCapabilities()
+	if *configPath != "" {
+		workflowConfig, err = flow.Load(*configPath)
+		if err != nil {
+			logger.Error("load workflow configuration", "error", err)
+			return 1
+		}
+		requiredCapabilities = workcontrol.WorkerCapabilities()
+	}
+	client, err := newAppDeckClient(*serverURL, *tokenFile, &http.Client{Timeout: 5 * time.Second}, appdeck.WithRequiredCapabilities(requiredCapabilities))
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "configure AppDeck: %v\n", err)
+		logger.Error("configure AppDeck", "error", err)
 		return 1
 	}
-
-	logger := slog.New(slog.NewJSONHandler(stderr, nil))
 	startupCtx, cancelStartup := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancelStartup()
 	providerInfo, compatibilityErr := client.CheckCompatibility(
 		startupCtx,
-		workcontrol.MilestoneOneCapabilities(),
+		requiredCapabilities,
 	)
 	if compatibilityErr != nil {
 		logger.Warn(
@@ -210,13 +230,24 @@ func runServe(arguments []string, stderr io.Writer) int {
 		logger.Error("persist stable Marina identity", "error", err)
 		return 1
 	}
-	binding, err := journal.EnsureProjectBinding(startupCtx, execution.ProjectBinding{
+	bindingInput := execution.ProjectBinding{
 		ProjectID: envOrDefault("MARINA_APPDECK_PROJECT_ID", "prj_default"), Provider: "appdeck",
 		Repository: envOrDefault("MARINA_REPOSITORY", "disabled://milestone-one"), Runtime: "disabled:milestone-one",
 		PolicyVersion: envOrDefault("MARINA_POLICY_VERSION", "milestone-one"), ContextConfig: "disabled:milestone-one",
 		ArtifactConfig: "disabled:milestone-one", DeliveryConfig: "disabled:milestone-one",
 		BudgetMinutes: 30, MaxConcurrency: 1,
-	})
+	}
+	if *configPath != "" {
+		bindingInput.ProjectID = workflowConfig.ProjectID
+		bindingInput.Repository = workflowConfig.Git.CloneURL
+		bindingInput.Runtime = "kubernetes:" + workflowConfig.Kubernetes.Namespace
+		bindingInput.PolicyVersion = workflowConfig.PolicyVersion
+		bindingInput.ContextConfig = workflowConfig.Digest()
+		bindingInput.ArtifactConfig = workflowConfig.ArtifactDirectory
+		bindingInput.DeliveryConfig = workflowConfig.Git.APIURL
+		bindingInput.BudgetMinutes = workflowConfig.BudgetMinutes
+	}
+	binding, err := journal.EnsureProjectBinding(startupCtx, bindingInput)
 	if err != nil {
 		logger.Error("persist project binding", "error", err)
 		return 1
@@ -260,6 +291,16 @@ func runServe(arguments []string, stderr io.Writer) int {
 		logger.Error("configure milestone-one control controller", "error", err)
 		return 1
 	}
+	var workflow *flow.Controller
+	var workerHandler http.Handler
+	if *configPath != "" {
+		workflow, workerHandler, err = configureWorkers(workflowConfig, journal, client)
+		if err != nil {
+			logger.Error("configure repository workflow", "error", err)
+			return 1
+		}
+		controlController.WithExecutionLimits(2, workflowConfig.MaxTokens).WithCommandHandler(workflow.Command)
+	}
 	if controllerEnabled {
 		startupControl := controlController.Cycle(startupCtx)
 		logControlCycle(logger, startupControl, "startup")
@@ -270,12 +311,16 @@ func runServe(arguments []string, stderr io.Writer) int {
 		}
 	}
 
+	healthHandler := httpserver.New(httpserver.Dependencies{WorkControl: client, Journal: journal})
+	mux := http.NewServeMux()
+	mux.Handle("/", healthHandler)
+	if workerHandler != nil {
+		mux.Handle("/workers/", workerHandler)
+		mux.Handle("/artifacts/", workerHandler)
+	}
 	server := &http.Server{
-		Addr: *address,
-		Handler: httpserver.New(httpserver.Dependencies{
-			WorkControl: client,
-			Journal:     journal,
-		}),
+		Addr:              *address,
+		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
@@ -294,7 +339,7 @@ func runServe(arguments []string, stderr io.Writer) int {
 			case <-ticker.C:
 				if !controllerEnabled {
 					operationCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-					_, compatibilityErr := client.CheckCompatibility(operationCtx, workcontrol.MilestoneOneCapabilities())
+					_, compatibilityErr := client.CheckCompatibility(operationCtx, requiredCapabilities)
 					if compatibilityErr == nil {
 						_, compatibilityErr = client.RegisterAgent(operationCtx, registration)
 					}
@@ -308,6 +353,11 @@ func runServe(arguments []string, stderr io.Writer) int {
 				}
 				logControlCycle(logger, controlController.Cycle(ctx), "scheduled")
 				logLeaseCycle(logger, leaseManager.Cycle(ctx), "scheduled")
+				if workflow != nil {
+					for _, err := range workflow.Cycle(ctx) {
+						logger.Warn("repository workflow deferred", "error", err)
+					}
+				}
 			}
 		}
 	}()
@@ -325,7 +375,11 @@ func runServe(arguments []string, stderr io.Writer) int {
 			"journal_path", *journalPath,
 			"reconcile_interval", reconcileInterval.String(),
 		)
-		result <- server.ListenAndServe()
+		if workflow != nil && workflowConfig.TLSCertFile != "" {
+			result <- server.ListenAndServeTLS(workflowConfig.TLSCertFile, workflowConfig.TLSKeyFile)
+		} else {
+			result <- server.ListenAndServe()
+		}
 	}()
 
 	select {
@@ -422,8 +476,8 @@ func envOrDefault(name string, fallback string) string {
 	return fallback
 }
 
-func newAppDeckClient(serverURL string, tokenFile string, httpClient *http.Client) (*appdeck.Client, error) {
-	options := make([]appdeck.Option, 0, 1)
+func newAppDeckClient(serverURL string, tokenFile string, httpClient *http.Client, additional ...appdeck.Option) (*appdeck.Client, error) {
+	options := append([]appdeck.Option(nil), additional...)
 	if strings.TrimSpace(tokenFile) != "" {
 		options = append(options, appdeck.WithBearerTokenFile(tokenFile))
 	}

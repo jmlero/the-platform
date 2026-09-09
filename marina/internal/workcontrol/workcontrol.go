@@ -75,9 +75,23 @@ type WorkItem struct {
 	Status             WorkStatus
 	Priority           string
 	BudgetMinutes      int
+	Budget             Budget
 	Version            int
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
+}
+
+// Budget is the operator's authorization, preserved without changing currency
+// or interpreting a missing limit as permission to exceed a project ceiling.
+type Budget struct {
+	TimeMinutes    int
+	DeadlineAt     *time.Time
+	MaxAttempts    int
+	MaxTokens      int64
+	MaxCostMinor   int64
+	Currency       string
+	MaxConcurrency int
+	Authority      []string
 }
 
 type RunStatus string
@@ -258,6 +272,7 @@ type Run struct {
 	AcceptanceCriteriaDigest string
 	Status                   RunStatus
 	Plan                     string
+	ActivePlanRevisionID     string
 	ResultSummary            string
 	LeaseExpiresAt           *time.Time
 	StartedAt                time.Time
@@ -315,8 +330,10 @@ type ProjectedEvent struct {
 }
 
 type WorkDetail struct {
-	Work WorkItem
-	Runs []Run
+	Work          WorkItem
+	Runs          []Run
+	PlanRevisions []PlanRevision
+	Decisions     []Decision
 }
 
 // HealthChecker reports whether the provider can safely support the

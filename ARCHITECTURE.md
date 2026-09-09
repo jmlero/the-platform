@@ -27,11 +27,35 @@ The two products form a control system with two deliberately different kinds of 
 
 The integration is a reconciliation protocol, not a distributed transaction. Calls can time out after succeeding, events can be delivered more than once, and either service can restart between any two steps. Correctness therefore comes from durable intent, idempotency, version checks, lease fencing, replay, and evidence—not from assuming exactly-once delivery.
 
-## Current baseline
+## Current repository workflow
 
-The existing code is a useful foundation, but not yet the full architecture.
+An explicit workflow configuration now enables the bounded first-release path:
+task snapshot and authority → immutable plan/approval → coding Job → scoped
+branch/commit → separate verification Job at the published revision → PR →
+required CI and current-head checks → structured evidence and completion.
+Failed verification, closed/changed PRs and requested changes produce a blocker.
+One implementation and one verification attempt are supported; cancellation
+waits for observed Job termination. Automatic revision loops are deferred.
 
-| Area | Implemented now | Gap before real unattended work |
+The fixed workflow is under `marina/internal/flow/`; its Kubernetes, GitHub/GHES,
+worker, model/source gateway and content-addressed artifact implementations remain
+inside Marina. AppDeck owns only ledger facts and an authenticated proxy for
+registered artifact downloads. Both products keep separate storage and identity.
+The [paired installation](deploy/kubernetes/first-release/README.md) supplies TLS,
+worker isolation, RBAC and an acceptance procedure. The selected installation's
+model compatibility, CNI isolation and recovery still require a real cluster test.
+
+`make conformance` now verifies the complete controller workflow over real AppDeck
+HTTP with separate persistence, restarting Marina's journal between boundaries.
+Git/runtime doubles make this a deterministic protocol and recovery proof; it is
+not evidence of a completed external model, Git or Kubernetes acceptance run.
+
+## Earlier foundation snapshot
+
+The following table records the earlier control-only gate. Its gaps motivated
+the current workflow above; the rest of this document also describes later targets.
+
+| Area | Implemented at the earlier gate | Gap identified at that gate |
 | --- | --- | --- |
 | AppDeck work model | Projects, structured task budgets, versioned/fenced runs, immutable plan revisions, revision-bound decisions, durable commands, structured evidence, channels, provider-neutral operational state, projected events, artifacts, and operator sessions in SQLite | Multi-user permissions and external artifact-byte storage |
 | AppDeck API | Authenticated operator sessions, capability-scoped service protocol discovery, ready work, atomic/versioned claim, claim recovery, assigned-run pagination, guarded lifecycle mutation, immutable planning, structured evidence completion, channels, operational projections, deterministic export/import, stable errors, and SSE | Federated human identity and a future incompatible protocol major only when additive version 1 can no longer preserve semantics |
@@ -41,7 +65,9 @@ The existing code is a useful foundation, but not yet the full architecture.
 | Always-on deployment | Separate single-replica Kubernetes bases for AppDeck and Marina with `Recreate` updates and `ReadWriteOnce` SQLite storage; AppDeck has an optional file-configured operator-session boundary | Paired overlay, secret distribution, encrypted service transport, network policy, artifact storage, backups, and the agent Job runtime |
 | End-to-end outcome | Real-process proof of lossless handoff, restart recovery, fencing, budget stop, projection deduplication, and cancellation convergence | A bounded task becoming a merge-ready pull request while the operator is offline |
 
-The lossless-handoff gate is complete, so Marina may automatically claim work only into its durable control ledger. Provider-neutral runtime, policy, context, workspace, verification, source-control, and signal foundations now have local deterministic tests, but runtime, source-control, artifact, and delivery mutation remain disabled until their later gates are implemented.
+At that gate, work was claimed only into the durable control ledger. That mode
+remains available without workflow configuration; configured installations now
+enable the narrower repository workflow described above.
 
 ## Non-negotiable invariants
 

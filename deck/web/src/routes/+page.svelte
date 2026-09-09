@@ -1,10 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import {
-    Activity,
     ArrowRight,
     Blocks,
-    Bot,
     Boxes,
     CheckCircle2,
     ChevronDown,
@@ -21,7 +19,6 @@
     Menu,
     Plus,
     Search,
-    Settings2,
     Sparkles,
     Wifi,
     WifiOff,
@@ -34,6 +31,8 @@
   import ChannelsView from '$lib/components/ChannelsView.svelte';
   import TaskCard from '$lib/components/TaskCard.svelte';
   import TaskDrawer from '$lib/components/TaskDrawer.svelte';
+  import WorkOverview from '$lib/components/WorkOverview.svelte';
+  import { workQueues } from '$lib/work-queues';
   import { api, subscribeToEvents } from '$lib/api';
 	import type { OperatorSession } from '$lib/api';
   import { formatDate } from '$lib/format';
@@ -50,7 +49,7 @@
     ProviderStatus
   } from '$lib/types';
 
-  type View = 'factory' | 'backlog' | 'decisions' | 'channels';
+  type View = 'overview' | 'factory' | 'backlog' | 'decisions' | 'channels';
 
   const boardColumns: Array<{
     status: TaskStatus;
@@ -62,11 +61,11 @@
     { status: 'waiting_decision', label: 'Decision', note: 'Human input needed' },
     { status: 'running', label: 'Running', note: 'Agent executing' },
     { status: 'verifying', label: 'Verifying', note: 'Checking evidence' },
-    { status: 'done', label: 'Done', note: 'Outcome verified' },
+    { status: 'done', label: 'Results', note: 'Inspect outcome and evidence' },
     { status: 'blocked', label: 'Attention', note: 'Needs intervention' }
   ];
 
-  let activeView: View = 'factory';
+  let activeView: View = 'overview';
   let tasks: Task[] = [];
   let agents: Agent[] = [];
   let decisions: Decision[] = [];
@@ -106,7 +105,7 @@
   $: activeTasks = tasks.filter((task) =>
     ['planning', 'waiting_decision', 'running', 'verifying'].includes(task.status)
   );
-  $: completedTasks = tasks.filter((task) => task.status === 'done');
+  $: queues = workQueues(tasks);
 
   onMount(() => {
 		const handleUnauthenticated = () => resetAuthenticatedWorkspace();
@@ -359,10 +358,14 @@
     </button>
 
     <nav aria-label="Workspace navigation">
-      <span class="nav-label">Workspace</span>
+      <span class="nav-label">Work</span>
+      <button class:active={activeView === 'overview'} type="button" on:click={() => selectView('overview')}>
+        <CircleGauge size={17} /><span>Overview</span>
+        {#if queues.attention.length}<em class="attention-count">{queues.attention.length}</em>{/if}
+      </button>
       <button class:active={activeView === 'factory'} type="button" on:click={() => selectView('factory')}>
         <Boxes size={17} />
-        <span>Agent factory</span>
+        <span>Task board</span>
         {#if activeTasks.length}<em>{activeTasks.length}</em>{/if}
       </button>
       <button class:active={activeView === 'backlog'} type="button" on:click={() => selectView('backlog')}>
@@ -377,20 +380,12 @@
         <span>Decisions</span>
         {#if decisions.length}<em class="attention-count">{decisions.length}</em>{/if}
       </button>
+      <span class="nav-label secondary-label">Supporting context</span>
       <button class:active={activeView === 'channels'} type="button" on:click={() => selectView('channels')}>
         <MessageSquare size={17} />
         <span>Channels</span>
         {#if channels.length}<em>{channels.length}</em>{/if}
       </button>
-
-      <span class="nav-label secondary-label">System</span>
-      <button type="button" disabled>
-        <Bot size={17} />
-        <span>Agents</span>
-        <em>{agents.length}</em>
-      </button>
-      <button type="button" disabled><Activity size={17} /><span>Run history</span></button>
-      <button type="button" disabled><Settings2 size={17} /><span>Settings</span></button>
     </nav>
 
     <div class="sidebar-bottom">
@@ -417,7 +412,7 @@
         <Menu size={18} />
       </button>
       <div class="location">
-        <span>AppDeck</span><span>/</span><strong>{activeView === 'factory' ? 'Agent factory' : activeView}</strong>
+        <span>AppDeck</span><span>/</span><strong>{activeView === 'factory' ? 'Task board' : activeView}</strong>
       </div>
       <div class="topbar-actions">
         <label class="search-box">
@@ -450,25 +445,25 @@
       <header class="page-heading">
         <div>
           <span class="eyebrow">
-            {activeView === 'factory' ? 'Operations overview' : activeView === 'backlog' ? 'Work inventory' : activeView === 'channels' ? 'Project conversation' : 'Human attention'}
+            {activeView === 'overview' ? 'Your work' : activeView === 'factory' ? 'Work status' : activeView === 'backlog' ? 'Work inventory' : activeView === 'channels' ? 'Project conversation' : 'Human attention'}
           </span>
           <h1>
-            {activeView === 'factory' ? 'Agent factory' : activeView === 'backlog' ? 'Backlog' : activeView === 'channels' ? 'Channels' : 'Decision inbox'}
+            {activeView === 'overview' ? 'Decisions and results' : activeView === 'factory' ? 'Task board' : activeView === 'backlog' ? 'Backlog' : activeView === 'channels' ? 'Channels' : 'Decision inbox'}
           </h1>
           <p>
-            {activeView === 'factory'
+            {activeView === 'overview' ? 'Authorize bounded work, resolve exceptions, and inspect what changed.' : activeView === 'factory'
               ? 'Observe, steer, and verify every active unit of work.'
               : activeView === 'backlog'
-                ? 'Shape outcomes before releasing them to the agent floor.'
+                ? 'Define an outcome and its limits before authorizing execution.'
                 : activeView === 'channels'
                   ? 'Converse with agents, cite canonical records, and promote messages into bounded work.'
                   : 'Resolve the questions currently blocking execution.'}
           </p>
         </div>
         <div class="headline-stats">
-          <div><span>In motion</span><strong>{activeTasks.length}</strong></div>
-          <div><span>Needs you</span><strong class:has-attention={decisions.length > 0}>{decisions.length}</strong></div>
-          <div><span>Verified</span><strong>{completedTasks.length}</strong></div>
+          <div><span>In progress</span><strong>{queues.active.length}</strong></div>
+          <div><span>Needs you</span><strong class:has-attention={queues.attention.length > 0}>{queues.attention.length}</strong></div>
+          <div><span>Results</span><strong>{queues.results.length}</strong></div>
         </div>
       </header>
 
@@ -486,6 +481,8 @@
             {#each Array(4) as _}<div class="skeleton"></div>{/each}
           </div>
         </div>
+      {:else if activeView === 'overview'}
+        <WorkOverview tasks={filteredTasks} {agents} onselect={openTask} />
       {:else if activeView === 'factory'}
         <div class="factory-stack">
           <AgentStrip {agents} {tasks} onselect={openTask} />
