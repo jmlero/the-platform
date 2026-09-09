@@ -8,6 +8,7 @@
 !**/.env.example
 
 **/coverage.out
+**/__pycache__/
 **/*.db
 **/*.db-shm
 **/*.db-wal

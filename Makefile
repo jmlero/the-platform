@@ -1,16 +1,19 @@
 APPDECK_REPO ?= $(CURDIR)/deck
 
-.PHONY: build check conformance fmt test vet
+.PHONY: build check check-installation conformance fmt test vet
 
 build:
 	$(MAKE) -C cli build
 	$(MAKE) -C deck build
 	$(MAKE) -C marina build
 
-check:
+check: check-installation
 	$(MAKE) -C cli check
 	$(MAKE) -C deck test check
 	$(MAKE) -C marina check
+
+check-installation:
+	python3 -m unittest discover -s scripts -p 'test_*.py'
 
 conformance:
 	$(MAKE) -C marina conformance-appdeck APPDECK_REPO="$(APPDECK_REPO)"

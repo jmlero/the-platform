@@ -1,0 +1,16 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: marina
+  namespace: marina-system
+spec:
+  template:
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: marina
+          args: [serve, --intake-enabled=false]
+          env:
+            - {name: MARINA_CONFIG_FILE, value: ""}
+            - {name: MARINA_TLS_CERT_FILE, value: /run/marina-tls/tls.crt}
+            - {name: MARINA_TLS_KEY_FILE, value: /run/marina-tls/tls.key}

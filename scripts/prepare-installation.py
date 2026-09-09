@@ -12,6 +12,7 @@ import subprocess
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("directory", type=Path, help="new private directory outside the repository")
+    parser.add_argument("--local-podman", action="store_true", help="local images and TLS services with new work intake disabled")
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     output = args.directory.expanduser().resolve()
@@ -48,14 +49,18 @@ def main():
         subprocess.run(["openssl", *arguments], cwd=output, check=True, capture_output=True)
 
     openssl("req", "-x509", "-newkey", "rsa:3072", "-nodes", "-days", "365", "-keyout", "ca.key",
-            "-out", "ca.crt", "-subj", "/CN=Marina installation CA", "-addext", "basicConstraints=critical,CA:TRUE")
+            "-out", "ca.crt", "-subj", "/CN=Marina installation CA", "-addext", "basicConstraints=critical,CA:TRUE",
+            "-addext", "keyUsage=critical,keyCertSign,cRLSign")
     for service, port in (("marina", 8090), ("appdeck", 8080)):
         name = f"{service}.marina-system.svc"
         openssl("req", "-newkey", "rsa:3072", "-nodes", "-keyout", f"{service}.key", "-out", f"{service}.csr", "-subj", f"/CN={name}")
         write(f"{service}.ext", f"subjectAltName=DNS:{name},DNS:{name}.cluster.local,DNS:localhost,IP:127.0.0.1\nextendedKeyUsage=serverAuth\n")
         openssl("x509", "-req", "-in", f"{service}.csr", "-CA", "ca.crt", "-CAkey", "ca.key", "-CAcreateserial",
                 "-out", f"{service}.crt", "-days", "90", "-sha256", "-extfile", f"{service}.ext")
-    base = json.dumps(os.path.relpath(root / "deploy/kubernetes/first-release", output))
+    profile = "local-podman" if args.local_podman else "first-release"
+    base = json.dumps(os.path.relpath(root / "deploy/kubernetes" / profile, output))
+    registry = "localhost/the-platform" if args.local_podman else "YOUR_REGISTRY"
+    tag = "local" if args.local_podman else "YOUR_RELEASE"
     write("kustomization.yaml", f"""apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources: [{base}]
@@ -92,13 +97,17 @@ secretGenerator:
 # Set the AppDeck and Marina images you built. Use immutable digests for releases.
 images:
   - name: ghcr.io/jmlero/the-platform-appdeck
-    newName: YOUR_REGISTRY/appdeck
-    newTag: YOUR_RELEASE
+    newName: {registry}/appdeck
+    newTag: {tag}
   - name: ghcr.io/jmlero/the-platform-marina
-    newName: YOUR_REGISTRY/marina
-    newTag: YOUR_RELEASE
+    newName: {registry}/marina
+    newTag: {tag}
 """)
-    print(f"Prepared private installation files in {output}. Edit workflow.json, image references and provider token files before installation.")
+    print(f"Prepared private installation files in {output}.")
+    if args.local_podman:
+        print("Local services use TLS with new work intake disabled. workflow.json is a pending template until repository/model setup is complete.")
+    else:
+        print("Edit workflow.json, image references and provider token files before installation.")
     print("Operator login credential: operator-token. No cluster or provider was contacted.")
 
 

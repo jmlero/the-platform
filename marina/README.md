@@ -66,6 +66,14 @@ for an executable configuration, image build, private credential preparation and
 acceptance procedure. Local and real-process tests pass with deterministic
 provider doubles; a real model/cluster acceptance run remains installation-specific.
 
+For installation before a repository/model is selected, run `serve --intake-enabled=false`.
+This skips new work discovery while continuing recovery, commands and projection
+for already journaled work. It does not pause active executions. Server TLS can
+be configured independently of the workflow using `--tls-cert-file` and
+`--tls-key-file` (or `MARINA_TLS_CERT_FILE` / `MARINA_TLS_KEY_FILE`). Conflicting
+workflow and flag certificate paths, or an unreadable key pair, fail startup
+before work-control calls. See the [local Podman profile](../deploy/kubernetes/local-podman/README.md).
+
 ## Development
 
 Requirements:

@@ -14,6 +14,7 @@ remain historical evidence; they do not imply that the complete workflow runs.
 - [x] Publish one pull request and check its head, state and required CI within bounded authority; failed checks/review changes require a follow-up task.
 - [x] Focus AppDeck on decisions, reviewable results, and exceptions.
 - [x] Supply a paired installation, explicit model/egress configuration, and a repeatable acceptance procedure.
+- [x] Run the local Podman/Kind development installation with authenticated TLS, separate persistent volumes, worker network isolation and service restart checks; repository/model execution stays disabled until configured.
 - [ ] Verify the real workflow, cancellation, and recovery on a selected installation.
 
 The checked implementation items are not a claim of a completed cluster/model

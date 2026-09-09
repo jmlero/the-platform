@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"flag"
 	"fmt"
@@ -150,6 +151,9 @@ func runServe(arguments []string, stderr io.Writer) int {
 	}
 	address := flags.String("addr", envOrDefault("MARINA_ADDR", ":8090"), "HTTP listen address")
 	configPath := flags.String("config", envOrDefault("MARINA_CONFIG_FILE", ""), "repository workflow configuration file; absent selects control-only mode")
+	intakeEnabled := flags.Bool("intake-enabled", true, "discover new work; disabling preserves reconciliation of journaled work")
+	tlsCertFile := flags.String("tls-cert-file", envOrDefault("MARINA_TLS_CERT_FILE", ""), "server TLS certificate; also available without a workflow")
+	tlsKeyFile := flags.String("tls-key-file", envOrDefault("MARINA_TLS_KEY_FILE", ""), "server TLS private key")
 	serverURL := flags.String("appdeck-url", envOrDefault("MARINA_APPDECK_URL", "http://localhost:8080"), "AppDeck server URL")
 	tokenFile := flags.String(
 		"appdeck-token-file",
@@ -190,6 +194,20 @@ func runServe(arguments []string, stderr io.Writer) int {
 			return 1
 		}
 		requiredCapabilities = workcontrol.WorkerCapabilities()
+	}
+	if workflowConfig.TLSCertFile != "" {
+		if (*tlsCertFile != "" && *tlsCertFile != workflowConfig.TLSCertFile) ||
+			(*tlsKeyFile != "" && *tlsKeyFile != workflowConfig.TLSKeyFile) {
+			logger.Error("configure server TLS: flags and workflow specify different certificates")
+			return 2
+		}
+		*tlsCertFile, *tlsKeyFile = workflowConfig.TLSCertFile, workflowConfig.TLSKeyFile
+	}
+	if *tlsCertFile != "" || *tlsKeyFile != "" {
+		if _, err := tls.LoadX509KeyPair(*tlsCertFile, *tlsKeyFile); err != nil {
+			logger.Error("configure server TLS", "error", err)
+			return 2
+		}
 	}
 	client, err := newAppDeckClient(*serverURL, *tokenFile, &http.Client{Timeout: 5 * time.Second}, appdeck.WithRequiredCapabilities(requiredCapabilities))
 	if err != nil {
@@ -291,6 +309,10 @@ func runServe(arguments []string, stderr io.Writer) int {
 		logger.Error("configure milestone-one control controller", "error", err)
 		return 1
 	}
+	controlController.WithIntakeEnabled(*intakeEnabled)
+	if !*intakeEnabled {
+		logger.Info("new work intake disabled; journaled work continues to reconcile")
+	}
 	var workflow *flow.Controller
 	var workerHandler http.Handler
 	if *configPath != "" {
@@ -375,8 +397,8 @@ func runServe(arguments []string, stderr io.Writer) int {
 			"journal_path", *journalPath,
 			"reconcile_interval", reconcileInterval.String(),
 		)
-		if workflow != nil && workflowConfig.TLSCertFile != "" {
-			result <- server.ListenAndServeTLS(workflowConfig.TLSCertFile, workflowConfig.TLSKeyFile)
+		if *tlsCertFile != "" {
+			result <- server.ListenAndServeTLS(*tlsCertFile, *tlsKeyFile)
 		} else {
 			result <- server.ListenAndServe()
 		}

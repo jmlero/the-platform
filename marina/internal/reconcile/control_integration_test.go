@@ -17,6 +17,7 @@ import (
 )
 
 type controlProviderStub struct {
+	listReadyCalls    int
 	work              workcontrol.WorkItem
 	run               workcontrol.Run
 	claimCalls        int
@@ -32,6 +33,7 @@ type controlProviderStub struct {
 
 func (provider *controlProviderStub) Health(context.Context) error { return nil }
 func (provider *controlProviderStub) ListReadyWork(context.Context) ([]workcontrol.WorkItem, error) {
+	provider.listReadyCalls++
 	if provider.listReadyStarted != nil {
 		provider.listReadyOnce.Do(func() { close(provider.listReadyStarted) })
 		<-provider.listReadyRelease
@@ -40,6 +42,47 @@ func (provider *controlProviderStub) ListReadyWork(context.Context) ([]workcontr
 		return []workcontrol.WorkItem{provider.work}, nil
 	}
 	return []workcontrol.WorkItem{}, nil
+}
+
+func TestDisabledIntakeLeavesReadyWorkUnclaimed(t *testing.T) {
+	ctx := context.Background()
+	journal, err := sqlite.Open(ctx, filepath.Join(t.TempDir(), "intake.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer journal.Close()
+	identity, err := journal.EnsureInstallationIdentity(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding, err := journal.EnsureProjectBinding(ctx, execution.ProjectBinding{ProjectID: "project-1", Provider: "appdeck",
+		Repository: "disabled://m1", Runtime: "disabled:m1", PolicyVersion: "m1", ContextConfig: "disabled:m1",
+		ArtifactConfig: "disabled:m1", DeliveryConfig: "disabled:m1", BudgetMinutes: 20, MaxConcurrency: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider := &controlProviderStub{work: workcontrol.WorkItem{ID: "task-1", ProjectID: "project-1",
+		Title: "Wait for configuration", AcceptanceCriteria: "No claim", Status: workcontrol.WorkReady,
+		BudgetMinutes: 10, Version: 1}, events: map[string]workcontrol.ProjectedEvent{}}
+	controller, err := reconcile.NewControlController(provider, journal, binding, identity, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	controller.WithIntakeEnabled(false)
+	for range 2 {
+		cycle := controller.Cycle(ctx)
+		if len(cycle.Errors) != 0 || cycle.Acquisitions != 0 {
+			t.Fatalf("disabled cycle = %#v", cycle)
+		}
+	}
+	if provider.listReadyCalls != 0 || provider.claimCalls != 0 {
+		t.Fatalf("disabled intake discovered %d times and claimed %d times", provider.listReadyCalls, provider.claimCalls)
+	}
+	controller.WithIntakeEnabled(true)
+	cycle := controller.Cycle(ctx)
+	if len(cycle.Errors) != 0 || cycle.Acquisitions != 1 || provider.claimCalls != 1 {
+		t.Fatalf("enabled cycle = %#v, claims = %d", cycle, provider.claimCalls)
+	}
 }
 func (provider *controlProviderStub) GetWork(context.Context, string) (workcontrol.WorkDetail, error) {
 	runs := []workcontrol.Run{}
@@ -172,6 +215,7 @@ func TestControlCycleRecoversLostClaimPublishesOutboxAndConvergesCancellation(t 
 	if err != nil {
 		t.Fatal(err)
 	}
+	controller.WithIntakeEnabled(false)
 	second := controller.Cycle(ctx)
 	if provider.claimCalls != 1 || second.Acquisitions != 1 || len(second.Errors) == 0 {
 		t.Fatalf("recovery cycle = %#v, claims=%d", second, provider.claimCalls)

@@ -15,6 +15,10 @@ one coding Job and a separate verification Job, with explicit Git/model endpoint
 durable artifacts and bounded authority. See the [paired installation and
 acceptance guide](deploy/kubernetes/first-release/README.md).
 
+For a Mac development installation, use the [local Podman profile](deploy/kubernetes/local-podman/README.md).
+It runs both services with TLS and persistent storage before repository/model
+configuration, with new task intake explicitly disabled.
+
 Read the [Marina vision](VISION.md), [AppDeck vision](VISION_DECK.md), and [dark-factory definition](DARK_FACTORY.md) for product direction; [ARCHITECTURE.md](ARCHITECTURE.md) for joint boundaries and failure semantics; and [TODO.md](TODO.md) for the ordered implementation backlog. Consequential cross-product choices are recorded in the [monorepo decision](docs/decisions/0001-product-boundary-monorepo.md), [operator CLI decision](docs/decisions/0002-standalone-operator-cli.md), [service-authentication decision](docs/decisions/0003-service-authentication.md), [Milestone 1 safety decision](docs/decisions/0004-milestone-one-work-control-safety.md), [operator-authentication decision](docs/decisions/0005-operator-authentication.md), and [versioned AppDeck-ledger decision](docs/decisions/0006-versioned-appdeck-ledger.md).
 
 An illustrative pre-monorepo architecture export is preserved under [docs/architecture/](docs/architecture/); [ARCHITECTURE.md](ARCHITECTURE.md) is authoritative for current packaging and boundaries.
@@ -26,6 +30,7 @@ Requirements:
 - Go 1.26+
 - Node.js 24+
 - npm 11+
+- Python 3 and OpenSSL (installation configuration checks)
 
 Run the complete deterministic checks from the repository root:
 

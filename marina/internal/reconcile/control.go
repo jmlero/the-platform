@@ -66,7 +66,16 @@ type ControlController struct {
 	cycleMu           sync.Mutex
 	executionTokens   int64
 	executionAttempts int
+	intakeDisabled    bool
 	commandHandler    func(context.Context, execution.Execution, workcontrol.Command) (string, string, error)
+}
+
+// WithIntakeEnabled controls only new discovery. Already journaled acquisition
+// intents, commands and progress still reconcile when intake is disabled.
+// Configure this before starting controller cycles.
+func (controller *ControlController) WithIntakeEnabled(enabled bool) *ControlController {
+	controller.intakeDisabled = !enabled
+	return controller
 }
 
 func (controller *ControlController) WithExecutionLimits(attempts int, tokens int64) *ControlController {
@@ -102,7 +111,9 @@ func (controller *ControlController) Cycle(ctx context.Context) ControlCycle {
 	}
 	defer controller.cycleMu.Unlock()
 	controller.recoverAcquisitions(ctx, &cycle)
-	controller.intake(ctx, &cycle)
+	if !controller.intakeDisabled {
+		controller.intake(ctx, &cycle)
+	}
 	controller.consumeCommands(ctx, &cycle)
 	controller.publishOutbox(ctx, &cycle)
 	return cycle

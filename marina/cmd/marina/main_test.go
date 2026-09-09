@@ -129,3 +129,18 @@ func TestEnvironmentDurationIsValidated(t *testing.T) {
 		t.Fatalf("duration = %s, want 45s", value)
 	}
 }
+
+func TestServeRejectsIncompleteOrUnreadableTLSBeforeContactingAppDeck(t *testing.T) {
+	for _, arguments := range [][]string{
+		{"--tls-cert-file", "missing.crt"},
+		{"--tls-key-file", "missing.key"},
+		{"--tls-cert-file", "missing.crt", "--tls-key-file", "missing.key"},
+	} {
+		t.Run(strings.Join(arguments, " "), func(t *testing.T) {
+			var stderr bytes.Buffer
+			if code := runServe(arguments, &stderr); code != 2 || !strings.Contains(stderr.String(), "configure server TLS") {
+				t.Fatalf("exit code = %d, stderr = %q", code, stderr.String())
+			}
+		})
+	}
+}
