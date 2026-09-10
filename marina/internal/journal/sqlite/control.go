@@ -95,10 +95,6 @@ func (store *Store) EnsureProjectBinding(ctx context.Context, input execution.Pr
 	return scanBinding(store.db.QueryRowContext(ctx, "SELECT "+bindingColumns+" FROM project_bindings WHERE project_id = ?", validated.ProjectID))
 }
 
-func (store *Store) GetProjectBinding(ctx context.Context, projectID string) (execution.ProjectBinding, error) {
-	return scanBinding(store.db.QueryRowContext(ctx, "SELECT "+bindingColumns+" FROM project_bindings WHERE project_id = ?", projectID))
-}
-
 const acquisitionColumns = `task_snapshot, id, project_id, work_id, task_version, task_digest, acceptance_criteria_digest, claim_key, agent_id,
 	lease_seconds, budget_minutes, status, external_run_id, external_version, fence_token, lease_expires_at,
 	retry_attempt, next_eligible_at, last_error_class, exhaustion_reason, created_at, updated_at`

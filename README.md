@@ -8,6 +8,8 @@ The Platform is the monorepo for AppDeck and Marina, two independently deployabl
 
 They evolve together through a versioned HTTP/JSON contract while retaining separate binaries, Go modules, container images, databases, service identities, deployment lifecycles, and product responsibilities. Neither product imports the other's internal packages.
 
+Open the [HTML project summary](docs/project-summary.html) in a browser for diagrams of the two components, their workflow, technology, and current focus.
+
 The current release focuses on one outcome: an authorized repository fix becomes
 a verified pull request for human review, running on Kubernetes infrastructure
 you control. AppDeck opens with attention, active work and results. Marina runs

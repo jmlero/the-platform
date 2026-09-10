@@ -98,6 +98,19 @@ func (s *Store) ExportProject(ctx context.Context, projectID string) ([]byte, er
 	return append(encoded, '\n'), nil
 }
 
+func collectExportRows[T any](rows *sql.Rows, scan func(interface{ Scan(...any) error }) (T, error)) ([]T, error) {
+	defer rows.Close()
+	items := make([]T, 0)
+	for rows.Next() {
+		item, err := scan(rows)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
 func (s *Store) exportAgents(ctx context.Context, projectID string) ([]domain.Agent, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT DISTINCT a.id, a.installation_id, a.name, a.kind, a.status,
@@ -110,16 +123,7 @@ func (s *Store) exportAgents(ctx context.Context, projectID string) ([]domain.Ag
 	if err != nil {
 		return nil, fmt.Errorf("export agents: %w", err)
 	}
-	defer rows.Close()
-	items := make([]domain.Agent, 0)
-	for rows.Next() {
-		item, scanErr := scanAgent(rows)
-		if scanErr != nil {
-			return nil, scanErr
-		}
-		items = append(items, item)
-	}
-	return items, rows.Err()
+	return collectExportRows(rows, scanAgent)
 }
 
 func (s *Store) exportTasks(ctx context.Context, projectID string) ([]portableTask, error) {
@@ -173,16 +177,7 @@ func (s *Store) exportRuns(ctx context.Context, projectID string) ([]domain.Run,
 	if err != nil {
 		return nil, fmt.Errorf("export runs: %w", err)
 	}
-	defer rows.Close()
-	items := make([]domain.Run, 0)
-	for rows.Next() {
-		item, scanErr := scanRun(rows)
-		if scanErr != nil {
-			return nil, scanErr
-		}
-		items = append(items, item)
-	}
-	return items, rows.Err()
+	return collectExportRows(rows, scanRun)
 }
 
 func (s *Store) exportPlans(ctx context.Context, projectID string) ([]domain.PlanRevision, error) {
@@ -196,16 +191,7 @@ func (s *Store) exportPlans(ctx context.Context, projectID string) ([]domain.Pla
 	if err != nil {
 		return nil, fmt.Errorf("export plans: %w", err)
 	}
-	defer rows.Close()
-	items := make([]domain.PlanRevision, 0)
-	for rows.Next() {
-		item, scanErr := scanPlanRevision(rows)
-		if scanErr != nil {
-			return nil, scanErr
-		}
-		items = append(items, item)
-	}
-	return items, rows.Err()
+	return collectExportRows(rows, scanPlanRevision)
 }
 
 func (s *Store) exportDecisions(ctx context.Context, projectID string) ([]domain.Decision, error) {
@@ -220,16 +206,7 @@ func (s *Store) exportDecisions(ctx context.Context, projectID string) ([]domain
 	if err != nil {
 		return nil, fmt.Errorf("export decisions: %w", err)
 	}
-	defer rows.Close()
-	items := make([]domain.Decision, 0)
-	for rows.Next() {
-		item, scanErr := scanDecision(rows)
-		if scanErr != nil {
-			return nil, scanErr
-		}
-		items = append(items, item)
-	}
-	return items, rows.Err()
+	return collectExportRows(rows, scanDecision)
 }
 
 func (s *Store) exportCommands(ctx context.Context, projectID string) ([]domain.Command, error) {
@@ -242,16 +219,7 @@ func (s *Store) exportCommands(ctx context.Context, projectID string) ([]domain.
 	if err != nil {
 		return nil, fmt.Errorf("export commands: %w", err)
 	}
-	defer rows.Close()
-	items := make([]domain.Command, 0)
-	for rows.Next() {
-		item, scanErr := scanCommand(rows)
-		if scanErr != nil {
-			return nil, scanErr
-		}
-		items = append(items, item)
-	}
-	return items, rows.Err()
+	return collectExportRows(rows, scanCommand)
 }
 
 func (s *Store) exportEvents(ctx context.Context, projectID string) ([]domain.Event, error) {
@@ -263,16 +231,7 @@ func (s *Store) exportEvents(ctx context.Context, projectID string) ([]domain.Ev
 	if err != nil {
 		return nil, fmt.Errorf("export events: %w", err)
 	}
-	defer rows.Close()
-	items := make([]domain.Event, 0)
-	for rows.Next() {
-		item, scanErr := eventFromRow(rows)
-		if scanErr != nil {
-			return nil, scanErr
-		}
-		items = append(items, item)
-	}
-	return items, rows.Err()
+	return collectExportRows(rows, eventFromRow)
 }
 
 func (s *Store) exportArtifacts(ctx context.Context, projectID string) ([]portableArtifact, error) {
@@ -309,16 +268,7 @@ func (s *Store) exportEvidence(ctx context.Context, projectID string) ([]domain.
 	if err != nil {
 		return nil, fmt.Errorf("export evidence: %w", err)
 	}
-	defer rows.Close()
-	items := make([]domain.EvidenceRecord, 0)
-	for rows.Next() {
-		item, scanErr := scanEvidence(rows)
-		if scanErr != nil {
-			return nil, scanErr
-		}
-		items = append(items, item)
-	}
-	return items, rows.Err()
+	return collectExportRows(rows, scanEvidence)
 }
 
 func (s *Store) exportChannelMessages(ctx context.Context, projectID string) ([]domain.ChannelMessage, error) {
@@ -330,16 +280,7 @@ func (s *Store) exportChannelMessages(ctx context.Context, projectID string) ([]
 	if err != nil {
 		return nil, fmt.Errorf("export channel messages: %w", err)
 	}
-	defer rows.Close()
-	items := make([]domain.ChannelMessage, 0)
-	for rows.Next() {
-		item, scanErr := scanChannelMessage(rows)
-		if scanErr != nil {
-			return nil, scanErr
-		}
-		items = append(items, item)
-	}
-	return items, rows.Err()
+	return collectExportRows(rows, scanChannelMessage)
 }
 
 func (s *Store) exportOperationalStates(ctx context.Context, projectID string) ([]domain.OperationalState, error) {
@@ -349,16 +290,7 @@ func (s *Store) exportOperationalStates(ctx context.Context, projectID string) (
 	if err != nil {
 		return nil, fmt.Errorf("export operational states: %w", err)
 	}
-	defer rows.Close()
-	items := make([]domain.OperationalState, 0)
-	for rows.Next() {
-		item, scanErr := scanOperationalState(rows)
-		if scanErr != nil {
-			return nil, scanErr
-		}
-		items = append(items, item)
-	}
-	return items, rows.Err()
+	return collectExportRows(rows, scanOperationalState)
 }
 
 func (s *Store) ImportProject(ctx context.Context, encoded []byte) error {

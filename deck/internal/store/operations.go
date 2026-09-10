@@ -37,15 +37,7 @@ func scanOperationalState(scanner interface{ Scan(...any) error }) (domain.Opera
 	return state, nil
 }
 
-func (s *Store) RecordOperationalState(ctx context.Context, input domain.OperationalStateInput) (domain.OperationalState, error) {
-	return s.recordOperationalState(ctx, nil, input)
-}
-
 func (s *Store) RecordOperationalStateGuarded(ctx context.Context, mutation Mutation, input domain.OperationalStateInput) (domain.OperationalState, error) {
-	return s.recordOperationalState(ctx, &mutation, input)
-}
-
-func (s *Store) recordOperationalState(ctx context.Context, mutation *Mutation, input domain.OperationalStateInput) (domain.OperationalState, error) {
 	input.RunID = strings.TrimSpace(input.RunID)
 	input.Environment = strings.TrimSpace(input.Environment)
 	input.RolloutState = strings.TrimSpace(input.RolloutState)
@@ -73,30 +65,25 @@ func (s *Store) recordOperationalState(ctx context.Context, mutation *Mutation, 
 	if err != nil {
 		return domain.OperationalState{}, err
 	}
-	var attempt idempotencyAttempt
-	if mutation != nil {
-		if err := validateRunGuard(run, mutation.Guard); err != nil {
+	if err := validateRunGuard(run, mutation.Guard); err != nil {
+		return domain.OperationalState{}, err
+	}
+	attempt, replayResult, replayed, err := beginIdempotentMutation(
+		ctx, tx, mutation, task.ProjectID, operationReportOperational, run.ID+":"+input.Environment,
+		struct {
+			Input domain.OperationalStateInput `json:"input"`
+			Guard *RunGuard                    `json:"guard,omitempty"`
+		}{input, mutation.Guard},
+	)
+	if err != nil {
+		return domain.OperationalState{}, err
+	}
+	if replayed {
+		var original domain.OperationalState
+		if err := decodeIdempotencyResult(replayResult, &original); err != nil {
 			return domain.OperationalState{}, err
 		}
-		var replayResult []byte
-		var replayed bool
-		attempt, replayResult, replayed, err = beginIdempotentMutation(
-			ctx, tx, *mutation, task.ProjectID, operationReportOperational, run.ID+":"+input.Environment,
-			struct {
-				Input domain.OperationalStateInput `json:"input"`
-				Guard *RunGuard                    `json:"guard,omitempty"`
-			}{input, mutation.Guard},
-		)
-		if err != nil {
-			return domain.OperationalState{}, err
-		}
-		if replayed {
-			var original domain.OperationalState
-			if err := decodeIdempotencyResult(replayResult, &original); err != nil {
-				return domain.OperationalState{}, err
-			}
-			return original, nil
-		}
+		return original, nil
 	}
 	now := nowMillis()
 	state := domain.OperationalState{
@@ -133,10 +120,8 @@ func (s *Store) recordOperationalState(ctx context.Context, mutation *Mutation, 
 	if err != nil {
 		return domain.OperationalState{}, fmt.Errorf("load operational state: %w", err)
 	}
-	if mutation != nil {
-		if err := finishIdempotentMutation(ctx, tx, attempt, loaded); err != nil {
-			return domain.OperationalState{}, err
-		}
+	if err := finishIdempotentMutation(ctx, tx, attempt, loaded); err != nil {
+		return domain.OperationalState{}, err
 	}
 	event, err := insertEventTx(ctx, tx, &task.ID, &run.ID, &run.AgentID,
 		"operation.state.recorded", "Operational state updated for "+state.Environment,

@@ -335,7 +335,7 @@ func TestTaskDetailShowsTruthfulDisplayStateAndContinuousTrail(t *testing.T) {
 	if err != nil {
 		t.Fatalf("submit plan: %v", err)
 	}
-	state, err := appStore.RecordOperationalState(ctx, domain.OperationalStateInput{
+	state, err := appStore.RecordOperationalStateGuarded(ctx, testMutation("trail-operation"), domain.OperationalStateInput{
 		RunID: run.ID, Environment: "production", RolloutState: "canary",
 		ObservationStartedAt: int64Ptr(time.Now().UTC().UnixMilli()),
 		ObservationEndsAt:    int64Ptr(time.Now().UTC().Add(30 * time.Minute).UnixMilli()),

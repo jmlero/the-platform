@@ -1,13 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { eventLabel, initials, statusLabels, timeAgo } from './format';
+import { eventLabel, initials, timeAgo } from './format';
 
 describe('format helpers', () => {
   afterEach(() => vi.useRealTimers());
-
-  it('uses operator-friendly status labels', () => {
-    expect(statusLabels.waiting_decision).toBe('Decision');
-    expect(statusLabels.verifying).toBe('Verifying');
-  });
 
   it('formats recent activity relative to now', () => {
     vi.useFakeTimers();

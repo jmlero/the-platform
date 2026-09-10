@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -19,6 +20,33 @@ import (
 	"github.com/jmlero/the-platform/deck/internal/domain"
 	"github.com/jmlero/the-platform/deck/internal/store"
 )
+
+func TestRequestBodyValidation(t *testing.T) {
+	const prefix = `{"value":"`
+	const suffix = `"}`
+	atLimit := prefix + strings.Repeat("x", (1<<20)-len(prefix)-len(suffix)) + suffix
+	for _, test := range []struct {
+		name    string
+		body    string
+		invalid bool
+	}{
+		{"valid", `{"value":"ok"}`, false},
+		{"at size limit", atLimit, false},
+		{"over size limit", prefix + strings.Repeat("x", 1<<20) + suffix, true},
+		{"unknown field", `{"unexpected":true}`, true},
+		{"malformed JSON", `{"value":`, true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var input struct {
+				Value string `json:"value"`
+			}
+			err := readJSON(httptest.NewRequest(http.MethodPost, "/", strings.NewReader(test.body)), &input)
+			if test.invalid && !errors.Is(err, domain.ErrInvalidInput) || !test.invalid && err != nil {
+				t.Fatalf("readJSON error = %v, invalid = %t", err, test.invalid)
+			}
+		})
+	}
+}
 
 func TestProviderInfoAdvertisesDeterministicContract(t *testing.T) {
 	handler := newTestHandler(t)

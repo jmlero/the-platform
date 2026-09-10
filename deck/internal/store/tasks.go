@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -649,8 +648,4 @@ func (s *Store) SeedDemo(ctx context.Context) error {
 		}
 	}
 	return nil
-}
-
-func isNotFound(err error) bool {
-	return errors.Is(err, domain.ErrNotFound)
 }

@@ -1,18 +1,3 @@
-import type { TaskStatus } from './types';
-
-export const statusLabels: Record<TaskStatus, string> = {
-  backlog: 'Backlog',
-  ready: 'Ready',
-  planning: 'Planning',
-  waiting_decision: 'Decision',
-  running: 'Running',
-  verifying: 'Verifying',
-  done: 'Done',
-  blocked: 'Blocked',
-  failed: 'Failed',
-  cancelled: 'Cancelled'
-};
-
 export function timeAgo(timestamp: number): string {
   const seconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
   if (seconds < 10) return 'now';

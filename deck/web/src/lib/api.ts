@@ -1,5 +1,4 @@
 import type {
-  Agent,
   AppEvent,
   Bootstrap,
   Channel,
@@ -82,14 +81,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ status })
     }),
-  agents: () => request<Agent[]>('/api/v1/agents'),
   answerDecision: (id: string, answer: string) =>
     request<Decision>(`/api/v1/operator/decisions/${id}/answer`, {
       method: 'POST',
       body: JSON.stringify({ answer })
     }),
-  channels: (projectID = 'prj_default') =>
-    request<{ items: Channel[] }>(`/api/v1/operator/channels?project_id=${encodeURIComponent(projectID)}`),
   createChannel: (name: string, projectID = 'prj_default') =>
     request<Channel>('/api/v1/operator/channels', {
       method: 'POST',

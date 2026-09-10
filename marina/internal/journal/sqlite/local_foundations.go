@@ -60,29 +60,6 @@ func (store *Store) GetContextPackage(ctx context.Context, digest string) (conte
 	return manifest, nil
 }
 
-func (store *Store) ListContextPackages(ctx context.Context, executionID string) ([]contextpack.Package, error) {
-	rows, err := store.db.QueryContext(ctx, `
-		SELECT manifest_json FROM context_packages WHERE execution_id = ? ORDER BY created_at, digest
-	`, executionID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := make([]contextpack.Package, 0)
-	for rows.Next() {
-		var encoded string
-		if err := rows.Scan(&encoded); err != nil {
-			return nil, err
-		}
-		var manifest contextpack.Package
-		if err := json.Unmarshal([]byte(encoded), &manifest); err != nil {
-			return nil, err
-		}
-		items = append(items, manifest)
-	}
-	return items, rows.Err()
-}
-
 func (store *Store) RecordPolicySnapshot(ctx context.Context, snapshot policy.Policy) (policy.Policy, bool, error) {
 	if err := snapshot.Validate(); err != nil {
 		return policy.Policy{}, false, err

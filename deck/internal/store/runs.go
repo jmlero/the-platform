@@ -840,7 +840,7 @@ func (s *Store) CountRunEvents(ctx context.Context, runID, eventType string) (in
 	return count, nil
 }
 
-func (s *Store) getRun(ctx context.Context, id string) (domain.Run, error) {
+func (s *Store) GetRun(ctx context.Context, id string) (domain.Run, error) {
 	run, err := scanRun(s.db.QueryRowContext(ctx,
 		"SELECT "+runColumns+" FROM runs WHERE id = ?", id,
 	))
@@ -848,10 +848,6 @@ func (s *Store) getRun(ctx context.Context, id string) (domain.Run, error) {
 		return domain.Run{}, normalizeStoreError(err)
 	}
 	return run, nil
-}
-
-func (s *Store) GetRun(ctx context.Context, id string) (domain.Run, error) {
-	return s.getRun(ctx, id)
 }
 
 func getRunTx(ctx context.Context, tx *sql.Tx, id string) (domain.Run, error) {
@@ -963,7 +959,7 @@ func (s *Store) ExpireLeases(ctx context.Context) (int, error) {
 }
 
 func (s *Store) failExpiredRun(ctx context.Context, runID string) (bool, error) {
-	run, err := s.getRun(ctx, runID)
+	run, err := s.GetRun(ctx, runID)
 	if err != nil {
 		return false, err
 	}

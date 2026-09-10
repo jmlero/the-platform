@@ -115,9 +115,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/agents", s.requireService(capabilityAgentRegister, s.registerAgent))
 	mux.HandleFunc("POST /api/v1/runs/{id}/heartbeat", s.requireService(capabilityLeaseRenew, s.heartbeatRun))
 	mux.HandleFunc("POST /api/v1/runs/{id}/plan", s.requireService(capabilityPlanSubmit, s.submitPlan))
-	mux.HandleFunc("POST /api/v1/runs/{id}/start", s.requireService(capabilityRunStart, s.startRun))
+	mux.HandleFunc("POST /api/v1/runs/{id}/start", s.requireService(capabilityRunStart, s.runTransition(s.store.StartRun)))
 	mux.HandleFunc("POST /api/v1/runs/{id}/progress", s.requireService(capabilityProgressAppend, s.reportProgress))
-	mux.HandleFunc("POST /api/v1/runs/{id}/verify", s.requireService(capabilityRunVerify, s.beginVerification))
+	mux.HandleFunc("POST /api/v1/runs/{id}/verify", s.requireService(capabilityRunVerify, s.runTransition(s.store.BeginVerification)))
 	mux.HandleFunc("POST /api/v1/runs/{id}/complete", s.requireService(capabilityRunComplete, s.completeRun))
 	mux.HandleFunc("POST /api/v1/runs/{id}/block", s.requireService(capabilityRunBlock, s.blockRun))
 	mux.HandleFunc("GET /api/v1/runs", s.requireService(capabilityAssignedRuns, s.listAssignedRuns))
@@ -319,11 +319,9 @@ func (s *Server) acknowledgeCommand(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input struct {
-		AgentID         string `json:"agent_id"`
-		ExpectedVersion int64  `json:"expected_version"`
-		FenceToken      int64  `json:"fence_token"`
-		Status          string `json:"status"`
-		Result          string `json:"result"`
+		store.RunGuard
+		Status string `json:"status"`
+		Result string `json:"result"`
 	}
 	if err := readJSON(r, &input); err != nil {
 		s.writeError(w, err)
@@ -334,7 +332,7 @@ func (s *Server) acknowledgeCommand(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, err)
 		return
 	}
-	mutation.Guard = &store.RunGuard{AgentID: input.AgentID, ExpectedVersion: input.ExpectedVersion, FenceToken: input.FenceToken}
+	mutation.Guard = &input.RunGuard
 	if err := s.store.AcknowledgeCommand(r.Context(), mutation, r.PathValue("id"), r.PathValue("commandId"), input.Status, input.Result); err != nil {
 		s.writeError(w, err)
 		return
@@ -347,9 +345,7 @@ func (s *Server) appendProjectedEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input struct {
-		AgentID         string         `json:"agent_id"`
-		ExpectedVersion int64          `json:"expected_version"`
-		FenceToken      int64          `json:"fence_token"`
+		store.RunGuard
 		Producer        string         `json:"producer"`
 		ProducerEventID string         `json:"producer_event_id"`
 		ExecutionID     string         `json:"execution_id"`
@@ -368,7 +364,7 @@ func (s *Server) appendProjectedEvent(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, err)
 		return
 	}
-	mutation.Guard = &store.RunGuard{AgentID: input.AgentID, ExpectedVersion: input.ExpectedVersion, FenceToken: input.FenceToken}
+	mutation.Guard = &input.RunGuard
 	projected := domain.ProjectedEvent{Producer: input.Producer, ProducerEventID: input.ProducerEventID,
 		ExecutionID: input.ExecutionID, Sequence: input.Sequence, Type: input.Type, Message: input.Message,
 		Payload: input.Payload, OccurredAt: input.OccurredAt}
@@ -388,9 +384,7 @@ func (s *Server) recordEvidence(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input struct {
-		AgentID         string `json:"agent_id"`
-		ExpectedVersion int64  `json:"expected_version"`
-		FenceToken      int64  `json:"fence_token"`
+		store.RunGuard
 		domain.EvidenceInput
 	}
 	if err := readJSON(r, &input); err != nil {
@@ -402,7 +396,7 @@ func (s *Server) recordEvidence(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, err)
 		return
 	}
-	mutation.Guard = &store.RunGuard{AgentID: input.AgentID, ExpectedVersion: input.ExpectedVersion, FenceToken: input.FenceToken}
+	mutation.Guard = &input.RunGuard
 	input.RunID = r.PathValue("id")
 	evidence, err := s.store.RecordEvidenceGuarded(r.Context(), mutation, input.EvidenceInput)
 	if err != nil {
@@ -417,9 +411,7 @@ func (s *Server) reportOperationalState(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	var input struct {
-		AgentID              string `json:"agent_id"`
-		ExpectedVersion      int64  `json:"expected_version"`
-		FenceToken           int64  `json:"fence_token"`
+		store.RunGuard
 		Environment          string `json:"environment"`
 		RolloutState         string `json:"rollout_state"`
 		ObservationStartedAt *int64 `json:"observation_started_at"`
@@ -433,20 +425,14 @@ func (s *Server) reportOperationalState(w http.ResponseWriter, r *http.Request) 
 		s.writeError(w, err)
 		return
 	}
-	run, err := s.store.GetRun(r.Context(), r.PathValue("id"))
-	if err != nil {
-		s.writeError(w, err)
-		return
-	}
-	guard := &store.RunGuard{AgentID: input.AgentID, ExpectedVersion: input.ExpectedVersion, FenceToken: input.FenceToken}
 	mutation, err := mutationFromRequest(r)
 	if err != nil {
 		s.writeError(w, err)
 		return
 	}
-	mutation.Guard = guard
+	mutation.Guard = &input.RunGuard
 	state, err := s.store.RecordOperationalStateGuarded(r.Context(), mutation, domain.OperationalStateInput{
-		RunID: run.ID, Environment: input.Environment, RolloutState: input.RolloutState,
+		RunID: r.PathValue("id"), Environment: input.Environment, RolloutState: input.RolloutState,
 		ObservationStartedAt: input.ObservationStartedAt, ObservationEndsAt: input.ObservationEndsAt,
 		RollbackState: input.RollbackState, PolicyVersion: input.PolicyVersion,
 		SourceRevision: input.SourceRevision, Outcome: input.Outcome,
@@ -856,10 +842,8 @@ func (s *Server) heartbeatRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input struct {
-		AgentID         string `json:"agent_id"`
-		ExpectedVersion int64  `json:"expected_version"`
-		FenceToken      int64  `json:"fence_token"`
-		LeaseSeconds    int    `json:"lease_seconds"`
+		store.RunGuard
+		LeaseSeconds int `json:"lease_seconds"`
 	}
 	if err := readJSON(r, &input); err != nil {
 		s.writeError(w, err)
@@ -870,7 +854,7 @@ func (s *Server) heartbeatRun(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, err)
 		return
 	}
-	mutation.Guard = &store.RunGuard{AgentID: input.AgentID, ExpectedVersion: input.ExpectedVersion, FenceToken: input.FenceToken}
+	mutation.Guard = &input.RunGuard
 	if err := s.store.HeartbeatRun(
 		r.Context(), mutation, r.PathValue("id"), input.AgentID, time.Duration(input.LeaseSeconds)*time.Second,
 	); err != nil {
@@ -885,9 +869,7 @@ func (s *Server) submitPlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input struct {
-		AgentID              string   `json:"agent_id"`
-		ExpectedVersion      int64    `json:"expected_version"`
-		FenceToken           int64    `json:"fence_token"`
+		store.RunGuard
 		Plan                 string   `json:"plan"`
 		ContextDigest        string   `json:"context_digest"`
 		RiskClass            string   `json:"risk_class"`
@@ -913,7 +895,7 @@ func (s *Server) submitPlan(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, err)
 		return
 	}
-	mutation.Guard = &store.RunGuard{AgentID: input.AgentID, ExpectedVersion: input.ExpectedVersion, FenceToken: input.FenceToken}
+	mutation.Guard = &input.RunGuard
 	var revision domain.PlanRevision
 	var decision *domain.Decision
 	if strings.TrimSpace(input.ContextDigest) == "" && strings.TrimSpace(input.RiskClass) == "" &&
@@ -954,11 +936,9 @@ func (s *Server) reportProgress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input struct {
-		AgentID         string         `json:"agent_id"`
-		ExpectedVersion int64          `json:"expected_version"`
-		FenceToken      int64          `json:"fence_token"`
-		Message         string         `json:"message"`
-		Payload         map[string]any `json:"payload"`
+		store.RunGuard
+		Message string         `json:"message"`
+		Payload map[string]any `json:"payload"`
 	}
 	if err := readJSON(r, &input); err != nil {
 		s.writeError(w, err)
@@ -969,7 +949,7 @@ func (s *Server) reportProgress(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, err)
 		return
 	}
-	mutation.Guard = &store.RunGuard{AgentID: input.AgentID, ExpectedVersion: input.ExpectedVersion, FenceToken: input.FenceToken}
+	mutation.Guard = &input.RunGuard
 	if err := s.store.ReportProgress(
 		r.Context(), mutation, r.PathValue("id"), input.Message, input.Payload,
 	); err != nil {
@@ -979,48 +959,28 @@ func (s *Server) reportProgress(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) startRun(w http.ResponseWriter, r *http.Request) {
-	if !s.requireRunProject(w, r, r.PathValue("id")) {
-		return
+func (s *Server) runTransition(transition func(context.Context, store.Mutation, string) error) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !s.requireRunProject(w, r, r.PathValue("id")) {
+			return
+		}
+		guard, err := readRunGuard(r)
+		if err != nil {
+			s.writeError(w, err)
+			return
+		}
+		mutation, err := mutationFromRequest(r)
+		if err != nil {
+			s.writeError(w, err)
+			return
+		}
+		mutation.Guard = guard
+		if err := transition(r.Context(), mutation, r.PathValue("id")); err != nil {
+			s.writeError(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
 	}
-	input, err := readRunGuard(r)
-	if err != nil {
-		s.writeError(w, err)
-		return
-	}
-	mutation, err := mutationFromRequest(r)
-	if err != nil {
-		s.writeError(w, err)
-		return
-	}
-	mutation.Guard = input
-	if err := s.store.StartRun(r.Context(), mutation, r.PathValue("id")); err != nil {
-		s.writeError(w, err)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
-func (s *Server) beginVerification(w http.ResponseWriter, r *http.Request) {
-	if !s.requireRunProject(w, r, r.PathValue("id")) {
-		return
-	}
-	input, err := readRunGuard(r)
-	if err != nil {
-		s.writeError(w, err)
-		return
-	}
-	mutation, err := mutationFromRequest(r)
-	if err != nil {
-		s.writeError(w, err)
-		return
-	}
-	mutation.Guard = input
-	if err := s.store.BeginVerification(r.Context(), mutation, r.PathValue("id")); err != nil {
-		s.writeError(w, err)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) completeRun(w http.ResponseWriter, r *http.Request) {
@@ -1028,12 +988,10 @@ func (s *Server) completeRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input struct {
-		AgentID         string   `json:"agent_id"`
-		ExpectedVersion int64    `json:"expected_version"`
-		FenceToken      int64    `json:"fence_token"`
-		Summary         string   `json:"summary"`
-		Evidence        string   `json:"evidence"`
-		EvidenceIDs     []string `json:"evidence_ids"`
+		store.RunGuard
+		Summary     string   `json:"summary"`
+		Evidence    string   `json:"evidence"`
+		EvidenceIDs []string `json:"evidence_ids"`
 	}
 	if err := readJSON(r, &input); err != nil {
 		s.writeError(w, err)
@@ -1044,7 +1002,7 @@ func (s *Server) completeRun(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, err)
 		return
 	}
-	mutation.Guard = &store.RunGuard{AgentID: input.AgentID, ExpectedVersion: input.ExpectedVersion, FenceToken: input.FenceToken}
+	mutation.Guard = &input.RunGuard
 	if len(input.EvidenceIDs) == 0 {
 		s.writeError(w, fmt.Errorf("evidence_ids must reference current structured evidence; Markdown evidence is no longer a completion gate: %w", domain.ErrInvalidInput))
 		return
@@ -1063,10 +1021,8 @@ func (s *Server) blockRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input struct {
-		AgentID         string `json:"agent_id"`
-		ExpectedVersion int64  `json:"expected_version"`
-		FenceToken      int64  `json:"fence_token"`
-		Reason          string `json:"reason"`
+		store.RunGuard
+		Reason string `json:"reason"`
 	}
 	if err := readJSON(r, &input); err != nil {
 		s.writeError(w, err)
@@ -1081,7 +1037,7 @@ func (s *Server) blockRun(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, err)
 		return
 	}
-	mutation.Guard = &store.RunGuard{AgentID: input.AgentID, ExpectedVersion: input.ExpectedVersion, FenceToken: input.FenceToken}
+	mutation.Guard = &input.RunGuard
 	if err := s.store.BlockRun(r.Context(), mutation, r.PathValue("id"), input.Reason); err != nil {
 		s.writeError(w, err)
 		return
@@ -1360,19 +1316,14 @@ func mutationFromRequest(r *http.Request) (store.Mutation, error) {
 }
 
 func readRunGuard(r *http.Request) (*store.RunGuard, error) {
-	var input struct {
-		AgentID         string `json:"agent_id"`
-		ExpectedVersion int64  `json:"expected_version"`
-		FenceToken      int64  `json:"fence_token"`
-	}
-	if err := readJSON(r, &input); err != nil {
+	var guard store.RunGuard
+	if err := readJSON(r, &guard); err != nil {
 		return nil, err
 	}
-	guard := &store.RunGuard{AgentID: input.AgentID, ExpectedVersion: input.ExpectedVersion, FenceToken: input.FenceToken}
 	if strings.TrimSpace(guard.AgentID) == "" || guard.ExpectedVersion < 1 || guard.FenceToken < 1 {
 		return nil, fmt.Errorf("agent_id, expected_version, and fence_token are required: %w", domain.ErrInvalidInput)
 	}
-	return guard, nil
+	return &guard, nil
 }
 
 func (s *Server) writeServiceAuthError(w http.ResponseWriter, err error) {
@@ -1568,19 +1519,13 @@ func newRequestID() string {
 }
 
 func readJSON(r *http.Request, destination any) error {
-	decoder := json.NewDecoder(http.MaxBytesReader(nilResponseWriter{}, r.Body, 1<<20))
+	decoder := json.NewDecoder(http.MaxBytesReader(nil, r.Body, 1<<20))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(destination); err != nil {
 		return fmt.Errorf("invalid request body: %w: %v", domain.ErrInvalidInput, err)
 	}
 	return nil
 }
-
-type nilResponseWriter struct{}
-
-func (nilResponseWriter) Header() http.Header       { return make(http.Header) }
-func (nilResponseWriter) Write([]byte) (int, error) { return 0, nil }
-func (nilResponseWriter) WriteHeader(int)           {}
 
 func writeJSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
