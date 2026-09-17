@@ -79,7 +79,7 @@ Use the existing [installation and acceptance guide](deploy/kubernetes/first-rel
 | RUN-17 | Verify | Marina | Fail an active Kubernetes worker. | Job/process failure or eviction cannot produce false completion; cleanup and the current follow-up-task recovery path are observable. |
 | RUN-18 | Open | Joint | Record the installation acceptance result. | A redacted report links task/run IDs, PR revision, image/configuration versions, and RUN-09 through RUN-17 results; unresolved failures stay open. |
 
-**2026-09-17 progress:** RUN-01/02/04/06/07 are complete for the local installation. A private [acceptance repository](https://github.com/jmlero/marina-acceptance), offline fixture checks and a pinned worker are prepared. RUN-03/05 still need scoped credentials and model/budget configuration. The operator confirmed these are TBD and no independent host is available; RUN-08–18 remain open or awaiting live evidence as detailed in the [per-task report](docs/validation/run-01-18-2026-09-17.md). Intake remains disabled.
+**2026-09-17 progress:** RUN-01/02/04/06/07 are complete for the local installation. A private [acceptance repository](https://github.com/jmlero/marina-acceptance), offline fixture checks and a pinned worker are prepared. The operator authorized €5 total test spend and requested a GLM trial; `z-ai/glm-5.3-flash` is now configured with conservative USD budget rates. Both GLM and Luna passed direct streaming/tool probes and produced the same fixture repair, each passing seven isolated regression tests. Six inference requests cost $0.0004802 in total; the [GLM comparison](docs/validation/glm-model-trial-2026-09-17.md) records costs, latency and limits of this evidence. RUN-03/05 still need the undecided repository-scoped Git credential; RUN-09 still needs the pinned harness/gateway fixture run. Only local Podman/Kind is available. RUN-08–18 remain open or awaiting live evidence as detailed in the [per-task report](docs/validation/first-release-model-2026-09-17.md). Intake remains disabled.
 
 **First-release gate:** the selected installation passes the acceptance exercises. Backup/restore work is deferred for the current pilot under decision 0010; persistent storage and restart recovery remain required. A running local Kind cluster or green mock tests alone do not satisfy the workflow acceptance gate, and RUN-10 separately proves laptop independence.
 
@@ -98,11 +98,11 @@ Use the same first installation. OPS-01/02 are deferred until backup recovery be
 
 **2026-09-17 operations follow-up:** OPS-03/05/06 are complete. Operator/service
 credential rotation passed locally; OPS-04 retains its live Git/model requirement.
-A private model-key file is populated, but exact model/rates, test spend and scoped
-Git credentials remain pending. The operator confirmed only local Podman/Kind is
-available. RUN-03/05/08–18 remain open or awaiting live evidence; the
-[per-item follow-up report](docs/validation/first-release-operations-2026-09-17.md)
-records progress and blockers. Intake remains disabled.
+A private model-key file is populated. The subsequent [GLM trial](docs/validation/glm-model-trial-2026-09-17.md)
+records the current model, conservative rates, €5 total authorization, passing
+provider probes and isolated fixture checks; scoped Git credentials remain undecided. The operator
+confirmed only local Podman/Kind is available. RUN-03/05/08–18 remain open or
+awaiting live evidence. Intake remains disabled.
 
 ## 4. Reuse project context
 

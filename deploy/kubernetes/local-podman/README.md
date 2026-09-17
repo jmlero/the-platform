@@ -15,15 +15,17 @@ pbcopy < ~/.local/share/the-platform/marina-local/installation/operator-token
 This profile runs authenticated TLS services with **new task intake disabled**.
 The mounted `workflow.json` now selects the disposable
 [acceptance repository](https://github.com/jmlero/marina-acceptance), its offline
-checks and a pinned worker image. The model and provider credentials remain
-unconfigured. No model credential or Git credential is inferred from the
-operator's development tools. No external coding run is implied by a healthy
-local installation.
+checks and a pinned worker image. The prepared model is `z-ai/glm-5.3-flash`;
+its private key and conservative USD budget rates are configured. The repository-scoped Git credential
+remains undecided, and the repository workflow is not enabled. No model credential
+or Git credential is inferred from the operator's development tools. No external
+coding run is implied by a healthy local installation.
 
 The pilot now selects OpenRouter and GitHub/GHCR under
 [decision 0010](../../../docs/decisions/0010-initial-installation-services.md).
-The exact model, test spend and scoped credentials remain to be configured and tested;
-this decision does not change the existing disabled-intake installation. SQLite
+The operator authorized €5 total acceptance spend; GLM and Luna passed direct
+provider protocol probes and isolated fixture checks. The pinned harness, gateway and repository workflow still
+need live acceptance after scoped Git credentials are configured. SQLite
 databases and artifacts stay on their existing Kubernetes volumes. Backup/restore
 work is deferred for now.
 
@@ -143,8 +145,23 @@ The [operations follow-up](../../../docs/validation/first-release-operations-202
 records renewed TLS, operator/service credential rotation and the locally loaded
 `ops-20260917` Marina image with offline artifact retention and stricter provider
 credential handling. Original credentials and persistent identities were
-preserved; new task intake remains disabled. The private model-key file is now
-populated, while model/rates/spend and scoped Git credentials remain pending.
+preserved; new task intake remains disabled. At that stage the private model-key
+file was populated, while model/rates/spend and scoped Git credentials were pending.
+
+The [model follow-up](../../../docs/validation/first-release-model-2026-09-17.md)
+records the later Luna configuration, operator-authorized €5 budget and two live
+OpenRouter streaming/tool-call requests costing $0.0001172. Private configuration
+and the cluster ConfigMap agree; repository intake remains disabled. Preflight
+now reports only the missing scoped Git credential. The provider probe does not
+pass RUN-09's Codex/gateway/fixture acceptance condition.
+
+The subsequent [GLM comparison](../../../docs/validation/glm-model-trial-2026-09-17.md)
+records the operator-requested switch to `z-ai/glm-5.3-flash`. Both models produced
+the same regression fix, passing all seven tests in isolated containers; GLM's
+single coding request was cheaper and slower. Total observed inference cost is
+$0.0004802. The private and cluster configurations now select GLM; the Luna
+configuration remains backed up. Intake is still disabled pending scoped Git
+credentials and the full harness/gateway acceptance run.
 
 The current Deck and Marina images were built and loaded locally, then the
 existing installation was upgraded while preserving its two bound PVCs,
@@ -161,9 +178,10 @@ snapshot for the selected GitHub/OpenRouter endpoints. See the
 refreshing those destinations or enabling execution.
 
 The [RUN-01–18 report](../../../docs/validation/run-01-18-2026-09-17.md) records
-image digests, exact results and remaining prerequisites. The model and provider
-credentials are still TBD, and only local Kubernetes is available. No real coding
-run, model inference, verification PR or laptop-off acceptance is claimed.
+image digests and earlier results. Scoped Git credentials remain TBD, and only
+local Kubernetes is available. No real coding run, verification PR or laptop-off
+acceptance is claimed; the later provider-only inference is recorded separately
+in the model follow-up above.
 
 ## Earlier verification on 2026-09-09
 
