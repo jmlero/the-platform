@@ -2,16 +2,16 @@
 
 - Status: accepted implementation boundary
 - Date: 2026-09-17
-- Scope: AppDeck entry points and platformctl
+- Scope: Deck entry points and platformctl
 
 Tasks with explicit `source.*` or `pull_request.*` permissions identify repository
 work for the current PR workflow. Creating, moving or editing such work in Ready
 requires observable acceptance criteria, at least two attempts, and explicit
 `source.read`, `source.write`, and `pull_request.create` authority. Incomplete work
-can remain in Backlog. AppDeck does not infer coding intent from task prose or
+can remain in Backlog. Deck does not infer coding intent from task prose or
 silently grant authority. Generic tasks retain provider-neutral compatibility.
 Marina independently checks every claimed task, including legacy/generic work;
-AppDeck admission is not a promise of installation readiness.
+Deck admission is not a promise of installation readiness.
 
 Channel promotion reuses the task form so budgets and PR permission cannot diverge.
 Posting a message atomically stores a correlated event. Messages page in durable

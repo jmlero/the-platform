@@ -1,15 +1,15 @@
 IMAGE ?= marina:dev
 VERSION ?= dev
 
-.PHONY: build check conformance-appdeck fmt image manifests run test vet
+.PHONY: build check conformance-deck fmt image manifests run test vet
 
 build:
 	go build -o bin/marina ./cmd/marina
 
 check: test vet
 
-conformance-appdeck:
-	APPDECK_REPO="$(APPDECK_REPO)" ./scripts/test-appdeck-conformance.sh
+conformance-deck:
+	DECK_REPO="$(DECK_REPO)" ./scripts/test-deck-conformance.sh
 
 fmt:
 	gofmt -w cmd internal

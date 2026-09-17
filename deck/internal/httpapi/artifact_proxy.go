@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-// AppDeck stores artifact metadata. Bytes remain in the separately owned Marina
+// Deck stores artifact metadata. Bytes remain in the separately owned Marina
 // store and are fetched only after operator authentication and ledger lookup.
 func WithArtifactStore(baseURL, tokenFile, caFile string) Option {
 	return func(s *Server) {

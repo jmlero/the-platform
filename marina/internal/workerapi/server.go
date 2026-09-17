@@ -1,5 +1,5 @@
 // Package workerapi is the bounded data boundary for disposable workers. Its
-// credentials grant access to one attempt, never to AppDeck or Git publication.
+// credentials grant access to one attempt, never to Deck or Git publication.
 package workerapi
 
 import (

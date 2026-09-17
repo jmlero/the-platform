@@ -15,7 +15,7 @@ class LocalPreparationTest(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             manifest = (output / "kustomization.yaml").read_text()
             self.assertIn("deploy/kubernetes/local-podman", manifest)
-            self.assertIn("localhost/the-platform/appdeck", manifest)
+            self.assertIn("localhost/the-platform/deck", manifest)
             self.assertIn("localhost/the-platform/marina", manifest)
             self.assertNotIn("YOUR_REGISTRY", manifest)
             self.assertEqual(output.stat().st_mode & 0o777, 0o700)
@@ -23,7 +23,7 @@ class LocalPreparationTest(unittest.TestCase):
             self.assertEqual(len(token), 64)
             self.assertNotIn(token, result.stdout)
             self.assertEqual((output / "operator-token").stat().st_mode & 0o777, 0o600)
-            for service in ("appdeck", "marina"):
+            for service in ("deck", "marina"):
                 verified = subprocess.run(
                     ["openssl", "verify", "-x509_strict", "-CAfile", str(output / "ca.crt"),
                      str(output / f"{service}.crt")], capture_output=True, text=True)

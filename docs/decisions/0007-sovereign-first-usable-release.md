@@ -2,7 +2,7 @@
 
 - Status: accepted product direction; implementation and deployment gates remain explicit
 - Date: 2026-09-09
-- Scope: AppDeck and Marina
+- Scope: Deck and Marina
 
 ## Decision
 
@@ -12,12 +12,12 @@ hosted control plane are product requirements, including for prospective Europea
 customers. Remote execution alone does not express that value.
 
 The first usable release handles explicitly authorized, bounded repository fixes.
-One operator submits work in AppDeck; Marina runs an isolated worker, verifies its
+One operator submits work in Deck; Marina runs an isolated worker, verifies its
 output, observes required CI, and returns a pull request
 ready for human review or a focused explanation of why it stopped. Merging and
 deployment stay under human control.
 
-AppDeck focuses on task authorization, decisions, results, and exceptions. Its
+Deck focuses on task authorization, decisions, results, and exceptions. Its
 existing channels and operational records remain compatible, but expanding chat,
 general project management, and production-operation views is deferred. The two
 services retain independent modules, databases, identities, and the public HTTP
@@ -50,14 +50,14 @@ review changes produces a blocker and a new task; automated revision loops wait.
 The plan binds the starting commit in its immutable context and text. Its optional
 `source_revision` is empty because the output commit does not exist at planning
 time. Verification evidence binds the actual published commit, and Marina checks
-the current branch/PR head and required CI again before completing. AppDeck retains
+the current branch/PR head and required CI again before completing. Deck retains
 its existing exact-revision gate for plans that provide a fixed source revision.
 This uses the existing version-1 contract rather than mislabeling base-revision
 evidence as proof of a changed output.
 
 Installation configuration is hashed into durable workflow state. Changing it
 during a run blocks that run for review; it cannot silently widen authority.
-Worker and artifact credentials are distinct, AppDeck remains the human ledger,
+Worker and artifact credentials are distinct, Deck remains the human ledger,
 and Marina's artifact byte store is accessed through authenticated HTTP.
 
 ## Delivery discipline
@@ -76,5 +76,5 @@ additional provider families, and a plugin marketplace are outside this release.
 ## Superseded direction
 
 The broader dark-factory vision remains a long-term direction. It does not authorize
-parallel feature expansion before the first usable repository workflow. AppDeck's
+parallel feature expansion before the first usable repository workflow. Deck's
 "better Linear" and "Slack-like" ambitions no longer define its current scope.

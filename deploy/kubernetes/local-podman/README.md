@@ -66,7 +66,7 @@ kubectl --context kind-marina-local apply --server-side -f /private/tmp/marina-c
 
 The [Kind configuration](https://kind.sigs.k8s.io/docs/user/configuration/)
 disables its default CNI; [Calico's Kind installation](https://docs.tigera.io/calico/latest/getting-started/kubernetes/kind)
-provides network policy enforcement. `appdeck-host-ingress.yaml` allows only the
+provides network policy enforcement. `deck-host-ingress.yaml` allows only the
 observed macOS Podman forwarding gateway, `192.168.127.1/32`. If it differs,
 inspect `podman machine ssh podman-machine-default ip -j route` and adjust that
 one address. The published host port remains bound to `127.0.0.1`.
@@ -74,10 +74,10 @@ one address. The published host port remains bound to `127.0.0.1`.
 Build and load images without a remote registry:
 
 ```sh
-podman build -f deck/Dockerfile -t localhost/the-platform/appdeck:local deck
+podman build -f deck/Dockerfile -t localhost/the-platform/deck:local deck
 podman build -f marina/Dockerfile -t localhost/the-platform/marina:local marina
 podman build -f marina/Dockerfile.worker --build-arg CODEX_VERSION=0.153.4 -t localhost/the-platform/marina-worker:local marina
-podman save --format docker-archive -o /private/tmp/marina-local-images.tar localhost/the-platform/appdeck:local localhost/the-platform/marina:local
+podman save --format docker-archive -o /private/tmp/marina-local-images.tar localhost/the-platform/deck:local localhost/the-platform/marina:local
 kind load image-archive --name marina-local /private/tmp/marina-local-images.tar
 podman save --format oci-archive -o /private/tmp/marina-local-worker.tar localhost/the-platform/marina-worker:local
 kind load image-archive --name marina-local /private/tmp/marina-local-worker.tar
@@ -89,14 +89,14 @@ existing directory. Reuse it on upgrades to preserve credentials and trust.
 ```sh
 python3 scripts/prepare-installation.py --local-podman ~/.local/share/the-platform/marina-local/installation
 kubectl --context kind-marina-local apply -k ~/.local/share/the-platform/marina-local/installation
-kubectl --context kind-marina-local -n marina-system rollout status deployment/appdeck
+kubectl --context kind-marina-local -n marina-system rollout status deployment/deck
 kubectl --context kind-marina-local -n marina-system rollout status deployment/marina
 ```
 
 Trust the generated **leaf certificate for localhost only** in your user keychain:
 
 ```sh
-security add-trusted-cert -r trustAsRoot -p ssl -s localhost -k ~/Library/Keychains/login.keychain-db ~/.local/share/the-platform/marina-local/installation/appdeck.crt
+security add-trusted-cert -r trustAsRoot -p ssl -s localhost -k ~/Library/Keychains/login.keychain-db ~/.local/share/the-platform/marina-local/installation/deck.crt
 ```
 
 Clients using their own trust store should supply

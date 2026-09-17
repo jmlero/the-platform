@@ -4,7 +4,7 @@
 
 The primary problem is dependence on the developer's laptop. In the creator's current workflow, the agent is started locally and receives much of its working context through a conversation on that machine. Coding becomes faster, but execution and continuity still depend on keeping the laptop and session available. Closing the laptop should not interrupt authorized work or make the context needed to continue inaccessible.
 
-The first product promise is to run agents and preserve their work on always-on Kubernetes infrastructure controlled by the operator, on premises or in a chosen cloud. The laptop becomes an access device. Tasks, relevant conversation context, decisions, progress, and results must remain available independently of it, so the operator can disconnect and later reconnect from another device. AppDeck and Marina should provide this as one coherent experience.
+The first product promise is to run agents and preserve their work on always-on Kubernetes infrastructure controlled by the operator, on premises or in a chosen cloud. The laptop becomes an access device. Tasks, relevant conversation context, decisions, progress, and results must remain available independently of it, so the operator can disconnect and later reconnect from another device. Deck and Marina should provide this as one coherent experience.
 
 The deployment target is vanilla Kubernetes through standard APIs, without requiring a particular cloud provider or Kubernetes distribution. Installations supply the documented storage, DNS, and network-policy capabilities. The local Podman/Kind cluster is the development test environment; choosing a hosting vendor is not a prerequisite for building or testing the product.
 
@@ -14,7 +14,7 @@ Remote execution and task autonomy are separate capabilities. Removing the lapto
 
 ## Working through a board, conversation, and inbox
 
-The intended experience lets the operator create work on a board or discuss it in a project web conversation, then delegate it to a configured agent. For example, after discussing a defect, the operator could write `@codex implement the fix we agreed on`. Marina would execute the authorized work on Kubernetes while AppDeck keeps its task, discussion, progress, and result connected. The operator can leave and return later from another device.
+The intended experience lets the operator create work on a board or discuss it in a project web conversation, then delegate it to a configured agent. For example, after discussing a defect, the operator could write `@codex implement the fix we agreed on`. Marina would execute the authorized work on Kubernetes while Deck keeps its task, discussion, progress, and result connected. The operator can leave and return later from another device.
 
 These are complementary views of the same work:
 
@@ -49,12 +49,12 @@ This direction is relevant to European sovereignty needs: the [European Commissi
 
 The first usable release carries authorized, bounded repository fixes through
 isolated execution, separate deterministic verification, and CI observation to a pull request ready
-for human review. AppDeck focuses on authorization, decisions, results, and
+for human review. Deck focuses on authorization, decisions, results, and
 exceptions. Additional chat, provider families, and production operations are
 deferred. [Decision 0007](docs/decisions/0007-sovereign-first-usable-release.md)
 governs this focus over the broader destination described below.
 
-The supported implementation is the AppDeck–Marina HTTP/JSON pair with separate
+The supported implementation is the Deck–Marina HTTP/JSON pair with separate
 stores. It performs one implementation and one verification attempt, supports
 cancellation, and blocks on failed checks or requested changes. Headless and
 in-process packaging, pause/resume, automatic CI/review revision loops, independent
@@ -118,11 +118,11 @@ Adjacent products validate important parts of this direction.
 
 [Herdr](https://herdr.dev/) is a separate comparison reference from Herd above. Its [open-source runtime](https://github.com/herdrdev/herdr) hosts existing coding-agent CLIs in background terminals, brings local and SSH-connected machines into one view, and identifies agents awaiting attention. Its [persistence documentation](https://herdr.dev/docs/session-state/) distinguishes reconnecting to live processes from restoring layouts and supported agent conversations after a server restart. It is relevant to reducing supervision across personal projects; continued execution requires the machine hosting the work to remain running.
 
-[Kilo](https://kilo.ai/) presents an open-source coding agent across IDE, CLI, and cloud surfaces, with model choice, local-model support, an agent command center, and code-review workflows. It is a useful reference for how AppDeck and Marina can present one coherent experience across directing, executing, and reviewing work. Its deployment and data boundaries should be evaluated separately against Marina's ownership requirements.
+[Kilo](https://kilo.ai/) presents an open-source coding agent across IDE, CLI, and cloud surfaces, with model choice, local-model support, an agent command center, and code-review workflows. It is a useful reference for how Deck and Marina can present one coherent experience across directing, executing, and reviewing work. Its deployment and data boundaries should be evaluated separately against Marina's ownership requirements.
 
 [Devin](https://devin.ai/) positions itself as an AI software engineer for delegated engineering tasks. Its described workflows include planning, implementation, testing, pull requests, and responding to review feedback and CI results, with integrations into existing team tools. For Marina, it is a direct reference for carrying work through to a reviewable outcome and reducing human supervision. Its deployment, authority, and data boundaries require separate comparison against Marina's ownership requirements.
 
-[Background Agents](https://backgroundagents.dev/), documented as [Open-Inspect](https://github.com/ColeMurray/background-agents), is an open-source background coding system with isolated development environments, collaborative sessions, pull-request creation, and scheduled or event-driven work. It targets trusted users within one organization. Its [deployment documentation](https://github.com/ColeMurray/background-agents/blob/main/docs/CONTROL_PLANE_CONTAINER.md) includes a container-hosted control plane alongside Cloudflare, while execution still requires a sandbox provider. It is a close reference for assessing whether adapting an existing system could meet the combined AppDeck–Marina need; self-hosting alone should not be assumed to distinguish Marina.
+[Background Agents](https://backgroundagents.dev/), documented as [Open-Inspect](https://github.com/ColeMurray/background-agents), is an open-source background coding system with isolated development environments, collaborative sessions, pull-request creation, and scheduled or event-driven work. It targets trusted users within one organization. Its [deployment documentation](https://github.com/ColeMurray/background-agents/blob/main/docs/CONTROL_PLANE_CONTAINER.md) includes a container-hosted control plane alongside Cloudflare, while execution still requires a sandbox provider. It is a close reference for assessing whether adapting an existing system could meet the combined Deck–Marina need; self-hosting alone should not be assumed to distinguish Marina.
 
 [Pizza Bot](https://aws.amazon.com/blogs/opensource/introducing-pizza-bot-an-open-source-inbox-for-ai-agents-that-work-in-the-background/) is a self-hosted, open-source application for background knowledge work. It organizes completed results and requests for human input in an inbox, with durable threads and server-owned execution accessible from different clients. Running that server on an always-on host removes its laptop dependency. It is a community project rather than an AWS managed service, and an interaction reference for Marina rather than an established software-delivery equivalent.
 
@@ -134,11 +134,11 @@ These products are relevant reference points, but for different layers:
 
 - **Investigate Ona primarily for execution infrastructure.** Study its isolated and reproducible development environments, runner and management-plane separation, Dev Container model, guardrails, secret handling, automations, prebuilds, and warm capacity. These should inform Marina's runtime and environment extension contracts without importing Ona's cloud topology as Marina's architecture.
 - **Investigate Amp primarily for execution placement and isolated-machine lifecycle.** Study Orbs versus Amp CLI runners, pause and resume of idle machines, authenticated portals for services running inside the environment, setup and resume hooks, and the boundary between Amp-managed remote machines and any host running the CLI. These should inform Marina's runtime placement options without importing Amp's hosted Orb product as Marina's architecture.
-- **Investigate Herd primarily for orchestration and interaction.** Study its persistent state above agent CLIs, commander-worker model, machine routing, approval flow, recovery behavior, and Command Room. These should inform durable agent identity, harness abstraction, specialized-agent dispatch, and AppDeck's human-agent interaction model without turning Marina into a fleet dashboard.
+- **Investigate Herd primarily for orchestration and interaction.** Study its persistent state above agent CLIs, commander-worker model, machine routing, approval flow, recovery behavior, and Command Room. These should inform durable agent identity, harness abstraction, specialized-agent dispatch, and Deck's human-agent interaction model without turning Marina into a fleet dashboard.
 - **Investigate Herdr primarily for session continuity and operator attention.** Study reconnecting across machines, recognizing blocked agents, and resuming supported sessions. Compare how far these capabilities meet the personal workflow need, and which additional guarantees require Marina's task authority, recovery, and completion evidence.
-- **Investigate Kilo primarily for the integrated product experience.** Study how its IDE, CLI, cloud agents, model choice, and review workflows fit together. Compare the effort required to delegate work, follow progress, and assess results with the combined AppDeck–Marina experience.
+- **Investigate Kilo primarily for the integrated product experience.** Study how its IDE, CLI, cloud agents, model choice, and review workflows fit together. Compare the effort required to delegate work, follow progress, and assess results with the combined Deck–Marina experience.
 - **Investigate Devin primarily for delegated engineering outcomes.** Study task handoff, planning, verification, CI and review iteration, and intervention requests. Compare how much human attention is needed to reach an acceptable result, and how clearly each product communicates evidence and remaining uncertainty.
-- **Investigate Background Agents primarily as an existing framework to evaluate for reuse.** Compare its workflow customization, operator effort, ownership boundaries, recovery, and verification guarantees with the combined AppDeck–Marina target. Treat documented features as claims to validate through use.
+- **Investigate Background Agents primarily as an existing framework to evaluate for reuse.** Compare its workflow customization, operator effort, ownership boundaries, recovery, and verification guarantees with the combined Deck–Marina target. Treat documented features as claims to validate through use.
 - **Investigate Pizza Bot primarily for asynchronous interaction.** Study durable threads, separation of results from required decisions, and returning to work across devices.
 - **Investigate Codex in Slack primarily for conversational delegation.** Study using a discussion as task context and returning results to the originating thread.
 
@@ -155,14 +155,14 @@ The framing questions are deliberately different:
 - Codex in Slack helps answer: **How can a conversation become an actionable coding task with little handoff effort?**
 - Marina must answer: **How does an extensible Kubernetes-native factory govern complete, evidence-backed software outcomes?**
 
-For the first proof, Ona deserves deeper investigation while defining the Kubernetes runtime and environment contract. Amp deserves focused investigation for dual placement—managed isolated machines versus operator-owned CLI runners—and for pause, resume, and in-environment service exposure. Herd deserves focused investigation for AppDeck interaction, approvals, agent dispatch, recovery, and harness portability. Herdr deserves focused investigation for session continuity and visibility of needed interventions across machines. Kilo deserves focused investigation for the combined delegation and review experience. Devin deserves focused investigation for task completion through CI and review feedback with limited human supervision. Background Agents deserves focused investigation as a potential foundation for a comparable workflow. Marina's intended value in durable reconciliation across intent, execution, evidence, delivery, and production feedback must be tested against these systems' actual capabilities.
+For the first proof, Ona deserves deeper investigation while defining the Kubernetes runtime and environment contract. Amp deserves focused investigation for dual placement—managed isolated machines versus operator-owned CLI runners—and for pause, resume, and in-environment service exposure. Herd deserves focused investigation for Deck interaction, approvals, agent dispatch, recovery, and harness portability. Herdr deserves focused investigation for session continuity and visibility of needed interventions across machines. Kilo deserves focused investigation for the combined delegation and review experience. Devin deserves focused investigation for task completion through CI and review feedback with limited human supervision. Background Agents deserves focused investigation as a potential foundation for a comparable workflow. Marina's intended value in durable reconciliation across intent, execution, evidence, delivery, and production feedback must be tested against these systems' actual capabilities.
 
 Marina's distinct product thesis is to make this durable orchestration layer a Kubernetes-native, extensible software factory:
 
 - **A platform installed on the operator's infrastructure.** The initial product runs as a set of independently governed services and workloads on Kubernetes, not as a laptop session or a required hosted control plane.
 - **Outcome orchestration, not only agent or environment orchestration.** Marina owns the durable loop from bounded intent through execution, verification, delivery, observation, and recovery.
 - **Factory contracts above infrastructure.** Tasks, runs, authority, context, evidence, artifacts, and policy remain stable even when Pods, Jobs, models, harnesses, clouds, or external providers change.
-- **An opinionated default stack with replaceable boundaries.** AppDeck and the Kubernetes Job runtime provide the first coherent experience; alternative work-control surfaces, runtimes, harnesses, and integrations can be added without redesigning the core.
+- **An opinionated default stack with replaceable boundaries.** Deck and the Kubernetes Job runtime provide the first coherent experience; alternative work-control surfaces, runtimes, harnesses, and integrations can be added without redesigning the core.
 - **Extensibility without an escape from governance.** Every extension participates in identity, authority, budgets, audit, failure handling, and evidence. Plugins may add capability but may not bypass factory invariants.
 
 Marina is therefore not trying to be another coding model, IDE assistant, cloud development environment, or fleet dashboard. It is the control and reconciliation layer that can compose those capabilities into one inspectable, unattended delivery system.
@@ -196,7 +196,7 @@ The first user is the project's creator: one human architect operating personal 
 
 ```mermaid
 flowchart LR
-    H[Humans] <--> W[AppDeck<br/>tasks, channels, decisions]
+    H[Humans] <--> W[Deck<br/>tasks, channels, decisions]
     A[Specialized agents] <--> W
     W <--> M
     S[Signals<br/>issues, CI, security, telemetry, incidents] --> X
@@ -286,11 +286,11 @@ A runtime adapter should be able to:
 
 Codex, Claude Code, a custom agent, an AgentCore harness, or a future runtime should be selectable behind that contract. Portability belongs at the protocol and evidence boundaries; Marina should not standardize the private cognition of each agent.
 
-## AppDeck and Marina
+## Deck and Marina
 
-AppDeck and Marina should form one product experience for now, with distinct module responsibilities. Independent product experiences remain a future option.
+Deck and Marina should form one product experience for now, with distinct module responsibilities. Independent product experiences remain a future option.
 
-**AppDeck is the operator's work, conversation, decision, and results surface.** The target combines a board, project conversations, and an inbox around the same durable work. Its first usable experience prioritizes work needing a decision, results ready for review, and exceptions requiring intervention. Existing project channels remain available as supporting context; conversational dispatch and broader chat or project-management expansion remain future work.
+**Deck is the operator's work, conversation, decision, and results surface.** The target combines a board, project conversations, and an inbox around the same durable work. Its first usable experience prioritizes work needing a decision, results ready for review, and exceptions requiring intervention. Existing project channels remain available as supporting context; conversational dispatch and broader chat or project-management expansion remain future work.
 
 Channels are not a second, disposable chat product. They are a conversational entrance into the same durable work graph:
 
@@ -298,7 +298,7 @@ Channels are not a second, disposable chat product. They are a conversational en
 - A conversation can propose a task, split work, request a decision, attach evidence, or summon a specialized agent.
 - Turning conversation into execution creates a reviewable task with an outcome, constraints, acceptance criteria, budget, and authority boundary.
 - Messages can reference tasks, plans, runs, deployments, incidents, artifacts, and evidence without copying their canonical state into chat.
-- Agent progress and focused escalations return to the relevant channel while AppDeck keeps the structured ledger truthful.
+- Agent progress and focused escalations return to the relevant channel while Deck keeps the structured ledger truthful.
 
 Natural conversation supplies intent and context. In the proposed interaction model, an explicit delegation in a thread should create or reference the same authorized task used by the board, recording scope and constraints without forcing the operator to re-enter them. Execution uses that durable authorization; ordinary discussion and later messages do not silently expand it. The existing implementation requires explicit operator promotion of channel content into a task.
 
@@ -306,11 +306,11 @@ Natural conversation supplies intent and context. In the proposed interaction mo
 
 Marina should dispatch specialized agents when different skills, context, tools, permissions, or independent verification justify specialization. Their identities and histories are durable, but their compute is normally ephemeral. A planner, implementer, verifier, release agent, or incident agent is a policy-bound capability profile—not necessarily a permanently running Pod or a theatrical job title.
 
-AppDeck implements that interface as the supported HTTP/JSON service. Provider-neutral ports preserve the future option of another provider or headless adapter, but those are not shipped execution modes. In-process packaging is also future work. The current operator CLI talks to AppDeck; it is not a headless Marina provider.
+Deck implements that interface as the supported HTTP/JSON service. Provider-neutral ports preserve the future option of another provider or headless adapter, but those are not shipped execution modes. In-process packaging is also future work. The current operator CLI talks to Deck; it is not a headless Marina provider.
 
-Marina should not duplicate AppDeck's product model, and AppDeck should not become a general agent runtime. Each project must configure one authoritative work-control provider to prevent split-brain state. When AppDeck is installed, it owns the human-facing task, decision, and evidence ledger; Marina owns internal workflow checkpoints and reconciles them with AppDeck after restarts and partial failures.
+Marina should not duplicate Deck's product model, and Deck should not become a general agent runtime. Each project must configure one authoritative work-control provider to prevent split-brain state. When Deck is installed, it owns the human-facing task, decision, and evidence ledger; Marina owns internal workflow checkpoints and reconciles them with Deck after restarts and partial failures.
 
-For laptop-off operation, the chosen work-control plugin cannot exist only as a process on the developer's machine. AppDeck should retain its local-first development mode while also supporting a durable, always-on deployment as a Marina component.
+For laptop-off operation, the chosen work-control plugin cannot exist only as a process on the developer's machine. Deck should retain its local-first development mode while also supporting a durable, always-on deployment as a Marina component.
 
 ## Starting from scratch, informed by experience
 
@@ -356,7 +356,7 @@ The initial topology should make three kinds of workload visibly separate:
 
 | Boundary | Contains | Governing rule |
 | --- | --- | --- |
-| Platform control namespaces | AppDeck, Marina, reconciliation, policy, context, evidence, and supporting data services | Durable control services own coordination state but do not run untrusted repository code. |
+| Platform control namespaces | Deck, Marina, reconciliation, policy, context, evidence, and supporting data services | Durable control services own coordination state but do not run untrusted repository code. |
 | Agent execution namespaces | Ephemeral workloads for specialized agents, isolated workspaces, verification, and build activity | Each attempt receives scoped identity, network access, resources, credentials, deadline, and authority. |
 | Application namespaces | Preview, development, staging, and production applications created or changed through the factory | Delivery follows environment policy, evidence gates, existing CD controls, observation windows, and rollback rules. |
 
@@ -370,7 +370,7 @@ The core should define explicit extension families:
 
 | Extension boundary | What an implementation supplies |
 | --- | --- |
-| Work and interaction | Tasks, channels, plans, decisions, commands, operator-visible state, and evidence presentation; AppDeck is the default |
+| Work and interaction | Tasks, channels, plans, decisions, commands, operator-visible state, and evidence presentation; Deck is the default |
 | Runtime and environment | Start, inspect, resume, cancel, collect, and clean up isolated execution; Kubernetes Jobs are first |
 | Harness and model | The bounded agent loop, tools, checkpoints, usage, and normalized output |
 | Context and tools | Versioned retrieval, provenance, trust, freshness, and task-scoped capabilities |
@@ -383,7 +383,7 @@ Every extension contract should define version and capability negotiation, lifec
 
 "Plugin" names a logical product boundary, not a commitment to unsafe in-process dynamic loading or a language-specific ABI. An implementation may begin as a compiled adapter and later run as a separately deployed service, sidecar, controller, or remote provider. Packaging may evolve; the versioned contract and factory invariants must remain stable.
 
-The default installation should be useful without assembling a framework from parts. It should ship a coherent AppDeck, Marina, Kubernetes Job runtime, and baseline integrations while keeping each provider boundary visible and replaceable. The extensibility test is simple: a capable third party should be able to add an implementation at a supported boundary without forking Marina or gaining a path around policy and evidence gates.
+The default installation should be useful without assembling a framework from parts. It should ship a coherent Deck, Marina, Kubernetes Job runtime, and baseline integrations while keeping each provider boundary visible and replaceable. The extensibility test is simple: a capable third party should be able to add an implementation at a supported boundary without forking Marina or gaining a path around policy and evidence gates.
 
 ## Autonomy is a policy, not a switch
 
@@ -472,13 +472,13 @@ Autonomy is successful only when it improves these measures without hiding risk 
 
 The first release must prove this complete laptop-off loop before attempting a general platform:
 
-1. A human defines a bounded task and acceptance criteria through the installed AppDeck plugin, then disconnects.
+1. A human defines a bounded task and acceptance criteria through the installed Deck plugin, then disconnects.
 2. Always-on Marina claims the task with a lease and persists a plan.
 3. Marina starts an isolated Kubernetes job through a runtime adapter.
 4. The worker receives the frozen task and pinned repository and implements the change. Full project-context assembly remains future integration.
 5. A separate clean verification Job runs deterministic checks and produces source-bound evidence. Independent semantic review is deferred.
 6. Marina opens a pull request and observes required CI and its current head. Failed checks or requested changes block; automatic revision loops are later work.
-7. The AppDeck plugin shows truthful state, decisions, cost, artifacts, and evidence after either component restarts.
+7. The Deck plugin shows truthful state, decisions, cost, artifacts, and evidence after either component restarts.
 8. The run stops at a PR ready for human review or a focused blocker. The human retains merge and deployment authority.
 
 The next proof closes a small operational loop: a controlled production-like signal creates a diagnostic task, an agent reproduces the issue, proposes a tested remediation, delivery deploys it to a canary environment, and Marina verifies recovery or rolls back. Direct autonomous production mutation is not required to prove the architecture.
@@ -487,9 +487,9 @@ The next proof closes a small operational loop: a controlled production-like sig
 
 Stages beyond the bounded first release are targets, including the revision and delivery loops below.
 
-1. **Installable control plane and durable remote worker** — A repeatable Kubernetes distribution, one runtime adapter, isolated workspaces, restart recovery, budgets, normalized events, a work-control plugin interface, and the AppDeck plugin.
+1. **Installable control plane and durable remote worker** — A repeatable Kubernetes distribution, one runtime adapter, isolated workspaces, restart recovery, budgets, normalized events, a work-control plugin interface, and the Deck plugin.
 2. **Unattended pull-request loop** — Plan, implement, test, independent review, PR creation, CI/review revision, and evidence-gated completion.
-3. **Agent-native collaboration plane** — AppDeck channels connect natural human-agent conversation to structured tasks, decisions, runs, evidence, and specialized-agent dispatch.
+3. **Agent-native collaboration plane** — Deck channels connect natural human-agent conversation to structured tasks, decisions, runs, evidence, and specialized-agent dispatch.
 4. **Application delivery loop** — Agent-produced applications run in separately governed preview and non-production namespaces with progressive delivery, observation windows, and automatic rollback.
 5. **Production feedback loop** — Alert and telemetry intake, diagnosis, remediation proposals, bounded operational actions, and verified recovery.
 6. **Extensible factory ecosystem** — Additional harness and provider adapters, conformance-tested extension contracts, multi-project policy, stronger tenancy, capacity management, and evidence-driven autonomy tuning.
@@ -504,7 +504,7 @@ Marina is not intended to:
 - Treat every task as suitable for autonomous execution.
 - Equate an LLM review with deterministic correctness.
 - Require long-lived agent processes when durable state and ephemeral execution are safer.
-- Require AppDeck for headless execution or hard-code its storage model into Marina.
+- Require Deck for headless execution or hard-code its storage model into Marina.
 - Expose Pods, Jobs, CRDs, or cluster topology as the public factory model.
 - Require a fork of Marina to add a supported runtime, harness, context source, work-control provider, or delivery integration.
 - Let an extension bypass identity, authority, policy, budgets, audit, or evidence gates.
@@ -518,8 +518,8 @@ Five product directions are now explicit:
 - Marina is an installable, Kubernetes-native software-factory layer.
 - Extensibility across explicit, governed contracts is a core product requirement.
 - Marina is initially a single-operator product for its creator's own repositories.
-- AppDeck is the default agent-native work and conversation plane, combining structured task tracking with human-agent channels.
-- AppDeck remains pluggable rather than becoming a mandatory dependency of the factory core.
+- Deck is the default agent-native work and conversation plane, combining structured task tracking with human-agent channels.
+- Deck remains pluggable rather than becoming a mandatory dependency of the factory core.
 
 The remaining product decisions should stay explicit rather than becoming accidental implementation choices:
 
@@ -529,7 +529,7 @@ The remaining product decisions should stay explicit rather than becoming accide
 4. Which actions must always remain human decisions regardless of confidence or accumulated evidence?
 5. What evidence and operating history must exist before a repository advances beyond PR-review authority?
 
-Until these are decided, the recommended baseline is single-operator, installed in a user-controlled Kubernetes cluster, PR-review autonomy as the first-release policy, AppDeck as the first work-control plugin, a Kubernetes Job as the first runtime, and no assumed alternate provider until the corresponding core contract has been proven.
+Until these are decided, the recommended baseline is single-operator, installed in a user-controlled Kubernetes cluster, PR-review autonomy as the first-release policy, Deck as the first work-control plugin, a Kubernetes Job as the first runtime, and no assumed alternate provider until the corresponding core contract has been proven.
 
 ## Influences
 
@@ -552,6 +552,6 @@ Until these are decided, the recommended baseline is single-operator, installed 
 
 Marina succeeds when software engineering no longer begins with "open the laptop and start the agent."
 
-A human should be able to install the factory on Kubernetes, connect the extensions their environment requires, and collaborate with agents through tasks and natural channels. Conversation should become bounded, reviewable work; specialized agents should execute it in isolated namespaces; and the resulting applications should run in separately governed namespaces. The factory should continue to discover, execute, verify, deliver, observe, and improve within those boundaries while the human steps away. When the human returns, AppDeck should show not activity theater but an evidence-backed account of what changed, why it changed, what the agents learned, what the system could not decide, and where human judgment has the highest leverage.
+A human should be able to install the factory on Kubernetes, connect the extensions their environment requires, and collaborate with agents through tasks and natural channels. Conversation should become bounded, reviewable work; specialized agents should execute it in isolated namespaces; and the resulting applications should run in separately governed namespaces. The factory should continue to discover, execute, verify, deliver, observe, and improve within those boundaries while the human steps away. When the human returns, Deck should show not activity theater but an evidence-backed account of what changed, why it changed, what the agents learned, what the system could not decide, and where human judgment has the highest leverage.
 
 That is the shift from faster code writing to an autonomous software delivery system—from a coding assistant to an inspectable dark software factory.

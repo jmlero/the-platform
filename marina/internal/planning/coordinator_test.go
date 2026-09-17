@@ -23,7 +23,7 @@ func TestCoordinatorPersistsPlanIntentAndReconcilesDecision(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = store.Close() })
 	record, _, err := store.EnsureExecution(ctx, execution.NewExecution{
-		WorkProvider: "appdeck", ProjectID: "project-1", ExternalWorkID: "task-1", ExternalRunID: "run-1",
+		WorkProvider: "deck", ProjectID: "project-1", ExternalWorkID: "task-1", ExternalRunID: "run-1",
 		AgentID: "marina-1", ExternalRunVersion: 7, FenceToken: 3, TaskVersion: 2,
 		TaskDigest: "sha256:task", BindingVersion: 1, LeaseExpiresAt: now.Add(time.Hour),
 		Budget: execution.Budget{DeadlineAt: now.Add(time.Hour), MaxAttempts: 3, MaxTokens: 1000, MaxCostMicros: 100000},
@@ -80,7 +80,7 @@ func TestCoordinatorDeniesMutationBeforeProviderCall(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = store.Close() })
 	record, _, err := store.EnsureExecution(ctx, execution.NewExecution{
-		WorkProvider: "appdeck", ProjectID: "project-1", ExternalWorkID: "task-1", ExternalRunID: "run-1",
+		WorkProvider: "deck", ProjectID: "project-1", ExternalWorkID: "task-1", ExternalRunID: "run-1",
 		AgentID: "marina-1", ExternalRunVersion: 1, FenceToken: 1, TaskVersion: 1, TaskDigest: "digest",
 		BindingVersion: 1, LeaseExpiresAt: now.Add(time.Hour),
 		Budget: execution.Budget{DeadlineAt: now.Add(time.Hour), MaxAttempts: 1, MaxTokens: 100},

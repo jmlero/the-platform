@@ -29,7 +29,7 @@ def main():
         write(name, value + "\n")
         return hashlib.sha256(value.encode()).hexdigest()
 
-    service_hash = token("appdeck-token")
+    service_hash = token("deck-token")
     operator_hash = token("operator-token")
     token("artifact-token")
     token("worker-signing-key")
@@ -51,7 +51,7 @@ def main():
     openssl("req", "-x509", "-newkey", "rsa:3072", "-nodes", "-days", "365", "-keyout", "ca.key",
             "-out", "ca.crt", "-subj", "/CN=Marina installation CA", "-addext", "basicConstraints=critical,CA:TRUE",
             "-addext", "keyUsage=critical,keyCertSign,cRLSign")
-    for service, port in (("marina", 8090), ("appdeck", 8080)):
+    for service, port in (("marina", 8090), ("deck", 8080)):
         name = f"{service}.marina-system.svc"
         openssl("req", "-newkey", "rsa:3072", "-nodes", "-keyout", f"{service}.key", "-out", f"{service}.csr", "-subj", f"/CN={name}")
         write(f"{service}.ext", f"subjectAltName=DNS:{name},DNS:{name}.cluster.local,DNS:localhost,IP:127.0.0.1\nextendedKeyUsage=serverAuth\n")
@@ -77,12 +77,12 @@ configMapGenerator:
     namespace: marina-workers
     files: [ca.crt]
 secretGenerator:
-  - name: appdeck-auth
+  - name: deck-auth
     namespace: marina-system
     files: [service-auth.json, operator-auth.json]
   - name: marina-credentials
     namespace: marina-system
-    files: [appdeck-token, git-token, model-token, worker-signing-key]
+    files: [deck-token, git-token, model-token, worker-signing-key]
   - name: marina-artifact-auth
     namespace: marina-system
     files: [token=artifact-token]
@@ -90,14 +90,14 @@ secretGenerator:
     namespace: marina-system
     type: kubernetes.io/tls
     files: [tls.crt=marina.crt, tls.key=marina.key]
-  - name: appdeck-tls
+  - name: deck-tls
     namespace: marina-system
     type: kubernetes.io/tls
-    files: [tls.crt=appdeck.crt, tls.key=appdeck.key]
-# Set the AppDeck and Marina images you built. Use immutable digests for releases.
+    files: [tls.crt=deck.crt, tls.key=deck.key]
+# Set the Deck and Marina images you built. Use immutable digests for releases.
 images:
-  - name: ghcr.io/jmlero/the-platform-appdeck
-    newName: {registry}/appdeck
+  - name: ghcr.io/jmlero/the-platform-deck
+    newName: {registry}/deck
     newTag: {tag}
   - name: ghcr.io/jmlero/the-platform-marina
     newName: {registry}/marina

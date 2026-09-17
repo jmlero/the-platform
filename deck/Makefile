@@ -1,4 +1,4 @@
-IMAGE ?= appdeck:dev
+IMAGE ?= deck:dev
 
 .PHONY: setup web build run dev-api dev-web check test image manifests clean
 
@@ -10,13 +10,13 @@ web:
 
 build: web
 	mkdir -p bin
-	go build -trimpath -o bin/appdeck ./cmd/appdeck
+	go build -trimpath -o bin/deck ./cmd/deck
 
 run: build
-	./bin/appdeck
+	./bin/deck
 
 dev-api:
-	APPDECK_LOG_LEVEL=debug go run ./cmd/appdeck
+	DECK_LOG_LEVEL=debug go run ./cmd/deck
 
 dev-web:
 	npm --prefix web run dev

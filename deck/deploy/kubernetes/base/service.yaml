@@ -1,11 +1,11 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: appdeck
+  name: deck
 spec:
   type: ClusterIP
   selector:
-    app.kubernetes.io/name: appdeck
+    app.kubernetes.io/name: deck
   ports:
     - name: http
       port: 8080

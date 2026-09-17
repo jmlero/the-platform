@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: appdeck
+  name: deck
 spec:
   replicas: 1
   revisionHistoryLimit: 2
@@ -9,13 +9,13 @@ spec:
     type: Recreate
   selector:
     matchLabels:
-      app.kubernetes.io/name: appdeck
+      app.kubernetes.io/name: deck
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: appdeck
+        app.kubernetes.io/name: deck
     spec:
-      serviceAccountName: appdeck
+      serviceAccountName: deck
       automountServiceAccountToken: false
       enableServiceLinks: false
       terminationGracePeriodSeconds: 30
@@ -28,12 +28,12 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       containers:
-        - name: appdeck
-          image: appdeck
+        - name: deck
+          image: deck
           imagePullPolicy: IfNotPresent
           envFrom:
             - configMapRef:
-                name: appdeck-config
+                name: deck-config
           ports:
             - name: http
               containerPort: 8080
@@ -80,7 +80,7 @@ spec:
       volumes:
         - name: data
           persistentVolumeClaim:
-            claimName: appdeck-data
+            claimName: deck-data
         - name: temporary
           emptyDir:
             sizeLimit: 64Mi

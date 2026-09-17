@@ -76,7 +76,7 @@ func Open(ctx context.Context, path string) (*Store, error) {
 func sqliteDSN(path string) string {
 	var u *url.URL
 	if path == ":memory:" {
-		u = &url.URL{Scheme: "file", Opaque: "appdeck-memory"}
+		u = &url.URL{Scheme: "file", Opaque: "deck-memory"}
 		query := u.Query()
 		query.Set("mode", "memory")
 		query.Set("cache", "shared")
@@ -100,7 +100,7 @@ func (s *Store) Close() error {
 // readiness surfaces; process liveness deliberately does not depend on it.
 func (s *Store) Health(ctx context.Context) error {
 	if err := s.db.PingContext(ctx); err != nil {
-		return fmt.Errorf("ping AppDeck store: %w", err)
+		return fmt.Errorf("ping Deck store: %w", err)
 	}
 	return nil
 }
@@ -113,6 +113,11 @@ func (s *Store) migrate(ctx context.Context) error {
 		)
 	`); err != nil {
 		return fmt.Errorf("create migration table: %w", err)
+	}
+	// The ledger migration was renamed with the product. Never replay its DDL.
+	if _, err := s.db.ExecContext(ctx, `UPDATE schema_migrations
+		SET version = '006_deck_ledger.sql' WHERE version = '006_appdeck_ledger.sql'`); err != nil {
+		return fmt.Errorf("normalize ledger migration name: %w", err)
 	}
 
 	entries, err := fs.ReadDir(migrationFiles, "migrations")

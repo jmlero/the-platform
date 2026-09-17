@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: AppDeck Agent API
+  title: Deck Agent API
   version: 1.0.0
   description: |-
     Work-control API for creating and inspecting work, claiming tasks, submitting
@@ -12,12 +12,12 @@ info:
       identifiers do not change that version; incompatible semantics require `/api/v2`.
     - Fields named `*_at`, `now`, and `server_time` are UTC Unix timestamps in
       milliseconds. Durations explicitly named `*_seconds` are integer seconds.
-    - Clients may send `X-Request-ID`. AppDeck echoes an accepted value or creates
+    - Clients may send `X-Request-ID`. Deck echoes an accepted value or creates
       one, returns it in every response, and includes it in structured API errors.
     - Claim and run-mutation operations accept `Idempotency-Key`. A supplied key
       is required and scoped to project, caller identity, and operation; an exact replay returns
       the original successful result, while reuse with different input is a conflict.
-      AppDeck generates a one-shot key when legacy clients omit the header, but only
+      Deck generates a one-shot key when legacy clients omit the header, but only
       a caller-supplied stable key makes a lost response safely replayable.
     - API errors have stable `code`, `message`, `retryable`, and `request_id` fields.
       The `error` string remains a compatibility alias for `message` in version 1.
@@ -27,13 +27,13 @@ info:
       unpaginated unless their operation advertises a paginated capability.
     - Capability identifiers are additive. Clients must require only capabilities
       needed for the behavior they are about to enable.
-    - Operations with `x-capability` use an opaque Bearer credential when AppDeck
+    - Operations with `x-capability` use an opaque Bearer credential when Deck
       service authentication is configured. The credential resolves to one stable
       service identity with explicit project and capability grants. Bearer tokens
       must travel only over a protected transport and are never accepted in URLs.
 servers:
   - url: http://localhost:8080/api/v1
-    description: Local AppDeck
+    description: Local Deck
 tags:
   - name: Provider
   - name: Workspace
@@ -1093,14 +1093,14 @@ components:
     operatorSession:
       type: apiKey
       in: cookie
-      name: appdeck_operator_session
+      name: deck_operator_session
     serviceBearer:
       type: http
       scheme: bearer
       bearerFormat: opaque
       description: >-
         High-entropy service credential resolved to a stable identity with
-        explicit project and capability grants. AppDeck stores only SHA-256
+        explicit project and capability grants. Deck stores only SHA-256
         fingerprints; Marina loads the token value from a file reference.
 
   headers:
@@ -1110,7 +1110,7 @@ components:
         type: string
         maxLength: 128
     WWWAuthenticate:
-      description: Bearer authentication challenge for the AppDeck service API.
+      description: Bearer authentication challenge for the Deck service API.
       schema:
         type: string
 
@@ -1150,7 +1150,7 @@ components:
 
   responses:
     AuthenticationRequired:
-      description: A valid AppDeck service credential is required
+      description: A valid Deck service credential is required
       headers:
         X-Request-ID:
           $ref: "#/components/headers/RequestId"
@@ -1224,7 +1224,7 @@ components:
       properties:
         provider:
           type: string
-          const: appdeck
+          const: deck
         protocol_version:
           type: string
           const: "1.0"

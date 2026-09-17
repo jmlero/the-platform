@@ -33,7 +33,7 @@ func TestWorkerCredentialCannotOutliveProviderFence(t *testing.T) {
 	defer journal.Close()
 	now := time.Now().UTC()
 	lease := now.Add(time.Minute)
-	record, _, err := journal.EnsureExecution(ctx, execution.NewExecution{WorkProvider: "appdeck", ExternalWorkID: "task", ExternalRunID: "run", AgentID: "agent", LeaseExpiresAt: lease, Budget: execution.Budget{DeadlineAt: now.Add(time.Hour), MaxAttempts: 3, MaxTokens: 10000}})
+	record, _, err := journal.EnsureExecution(ctx, execution.NewExecution{WorkProvider: "deck", ExternalWorkID: "task", ExternalRunID: "run", AgentID: "agent", LeaseExpiresAt: lease, Budget: execution.Budget{DeadlineAt: now.Add(time.Hour), MaxAttempts: 3, MaxTokens: 10000}})
 	if err != nil {
 		t.Fatal(err)
 	}

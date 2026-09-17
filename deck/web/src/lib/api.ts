@@ -30,7 +30,7 @@ export class ApiError extends Error {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const method = (init?.method ?? 'GET').toUpperCase();
   const csrfToken = !['GET', 'HEAD', 'OPTIONS'].includes(method)
-    ? readCookie('appdeck_operator_csrf')
+    ? readCookie('deck_operator_csrf')
     : '';
   const response = await fetch(path, {
     ...init,
@@ -51,7 +51,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       // The status still provides a useful error when the response is not JSON.
     }
     if (response.status === 401 && typeof window !== 'undefined') {
-      window.dispatchEvent(new Event('appdeck:unauthenticated'));
+      window.dispatchEvent(new Event('deck:unauthenticated'));
     }
     throw new ApiError(message, response.status);
   }

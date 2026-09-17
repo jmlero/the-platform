@@ -305,7 +305,7 @@ func (s *Store) CompleteRunWithEvidence(
 		Name: "verification-report.md", Kind: "verification", Content: report,
 		Digest: reportDigest, SizeBytes: int64(len(report)), CreatedAt: now,
 	}
-	artifact.URI = "appdeck://artifacts/" + artifact.ID
+	artifact.URI = "deck://artifacts/" + artifact.ID
 	result, err := tx.ExecContext(ctx, `
 		UPDATE runs
 		SET status = 'completed', result_summary = ?, lease_expires_at = NULL,

@@ -8,7 +8,7 @@ afterEach(() => {
 
 describe('operator API requests', () => {
   it('adds the browser CSRF token to human mutations', async () => {
-    vi.stubGlobal('document', { cookie: 'appdeck_operator_csrf=csrf-token-123' });
+    vi.stubGlobal('document', { cookie: 'deck_operator_csrf=csrf-token-123' });
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ id: 'tsk_test' }), {
         status: 201,
@@ -36,7 +36,7 @@ describe('operator API requests', () => {
   });
 
   it('does not attach a CSRF token to session reads', async () => {
-    vi.stubGlobal('document', { cookie: 'appdeck_operator_csrf=csrf-token-123' });
+    vi.stubGlobal('document', { cookie: 'deck_operator_csrf=csrf-token-123' });
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ authenticated: true, operator_id: 'operator-primary' }), {
         status: 200,

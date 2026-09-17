@@ -12,17 +12,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jmlero/the-platform/cli/internal/appdeck"
+	"github.com/jmlero/the-platform/cli/internal/deck"
 )
 
 const (
-	defaultAppDeckURL = "http://localhost:8080"
+	defaultDeckURL    = "http://localhost:8080"
 	defaultTimeout    = 10 * time.Second
 	maxTokenFileBytes = 64 << 10
 )
 
 type runner struct {
-	appDeckURL string
+	deckURL    string
 	tokenFile  string
 	timeout    time.Duration
 	jsonOutput bool
@@ -48,24 +48,30 @@ func Run(
 	if stderr == nil {
 		stderr = io.Discard
 	}
+	for _, name := range []string{"APPDECK_URL", "APPDECK_TOKEN_FILE", "APPDECK_TOKEN"} {
+		if getenv(name) != "" {
+			_, _ = fmt.Fprintf(stderr, "rename environment variable %s to %s\n", name, strings.TrimPrefix(name, "APP"))
+			return 2
+		}
+	}
 
-	appDeckURL := strings.TrimSpace(getenv("APPDECK_URL"))
-	if appDeckURL == "" {
-		appDeckURL = defaultAppDeckURL
+	deckURL := strings.TrimSpace(getenv("DECK_URL"))
+	if deckURL == "" {
+		deckURL = defaultDeckURL
 	}
 	r := runner{
-		appDeckURL: appDeckURL,
-		tokenFile:  strings.TrimSpace(getenv("APPDECK_TOKEN_FILE")),
-		timeout:    defaultTimeout,
-		stdout:     stdout,
-		stderr:     stderr,
-		getenv:     getenv,
+		deckURL:   deckURL,
+		tokenFile: strings.TrimSpace(getenv("DECK_TOKEN_FILE")),
+		timeout:   defaultTimeout,
+		stdout:    stdout,
+		stderr:    stderr,
+		getenv:    getenv,
 	}
 
 	flags := flag.NewFlagSet("platformctl", flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	flags.StringVar(&r.appDeckURL, "appdeck-url", r.appDeckURL, "AppDeck base URL")
-	flags.StringVar(&r.tokenFile, "token-file", r.tokenFile, "file containing an AppDeck operator login token")
+	flags.StringVar(&r.deckURL, "deck-url", r.deckURL, "Deck base URL")
+	flags.StringVar(&r.tokenFile, "token-file", r.tokenFile, "file containing a Deck operator login token")
 	flags.DurationVar(&r.timeout, "timeout", r.timeout, "request timeout")
 	flags.BoolVar(&r.jsonOutput, "json", false, "write JSON output")
 	showVersion := flags.Bool("version", false, "print version")
@@ -145,7 +151,7 @@ func (r runner) runCreateCommand(ctx context.Context, commandType string, args [
 		return r.failure(err)
 	}
 	defer cancel()
-	command, err := client.CreateCommand(commandContext, flags.Arg(0), appdeck.CreateCommandInput{
+	command, err := client.CreateCommand(commandContext, flags.Arg(0), deck.CreateCommandInput{
 		Type: commandType, Reason: *reason,
 	})
 	if err != nil {
@@ -257,7 +263,7 @@ func (r runner) runTasksGet(ctx context.Context, args []string) int {
 func (r runner) runTasksCreate(ctx context.Context, args []string) int {
 	flags := flag.NewFlagSet("platformctl tasks create", flag.ContinueOnError)
 	flags.SetOutput(r.stderr)
-	input := appdeck.CreateTaskInput{}
+	input := deck.CreateTaskInput{}
 	flags.StringVar(&input.ProjectID, "project", "prj_default", "project ID")
 	flags.StringVar(&input.Title, "title", "", "task title (required)")
 	flags.StringVar(&input.Description, "description", "", "task description")
@@ -310,13 +316,13 @@ func (r runner) runTasksCreate(ctx context.Context, args []string) int {
 	return 0
 }
 
-func (r runner) client(ctx context.Context) (*appdeck.Client, context.Context, context.CancelFunc, error) {
+func (r runner) client(ctx context.Context) (*deck.Client, context.Context, context.CancelFunc, error) {
 	token, err := r.token()
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	httpClient := &http.Client{Timeout: r.timeout}
-	client, err := appdeck.New(r.appDeckURL, token, httpClient)
+	client, err := deck.New(r.deckURL, token, httpClient)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -332,7 +338,7 @@ func (r runner) client(ctx context.Context) (*appdeck.Client, context.Context, c
 
 func (r runner) token() (string, error) {
 	if strings.TrimSpace(r.tokenFile) == "" {
-		return strings.TrimSpace(r.getenv("APPDECK_TOKEN")), nil
+		return strings.TrimSpace(r.getenv("DECK_TOKEN")), nil
 	}
 	file, err := os.Open(r.tokenFile)
 	if err != nil {
@@ -391,8 +397,8 @@ func parseFlags(flags *flag.FlagSet, args []string) int {
 	return -1
 }
 
-func filterTasks(tasks []appdeck.Task, status, project string) []appdeck.Task {
-	filtered := make([]appdeck.Task, 0, len(tasks))
+func filterTasks(tasks []deck.Task, status, project string) []deck.Task {
+	filtered := make([]deck.Task, 0, len(tasks))
 	for _, task := range tasks {
 		if status != "" && task.Status != status {
 			continue
@@ -430,7 +436,7 @@ func writeRootUsage(writer io.Writer) {
   platformctl [global options] runs <command> [options] <run-id>
 
 Commands:
-  health          Verify that AppDeck is reachable
+  health          Verify that Deck is reachable
   tasks list      List work from the operator workspace
   tasks get       Inspect a task and its runs
   tasks create    Create backlog or ready work
@@ -441,8 +447,8 @@ Commands:
   runs retry      Request a durable retry command
 
 Global options:
-  --appdeck-url URL    AppDeck base URL (default: APPDECK_URL or http://localhost:8080)
-  --token-file PATH    Operator-token file (default: APPDECK_TOKEN_FILE)
+  --deck-url URL    Deck base URL (default: DECK_URL or http://localhost:8080)
+  --token-file PATH    Operator-token file (default: DECK_TOKEN_FILE)
   --timeout DURATION   Request timeout (default: 10s)
   --json               Write JSON output
   --version            Print version

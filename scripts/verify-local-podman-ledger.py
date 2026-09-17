@@ -28,7 +28,7 @@ def request(path, payload=None, method=None):
     if payload is not None:
         headers["Content-Type"] = "application/json"
         for cookie in cookies:
-            if cookie.name == "appdeck_operator_csrf":
+            if cookie.name == "deck_operator_csrf":
                 headers["X-CSRF-Token"] = cookie.value
     body = None if payload is None else json.dumps(payload).encode()
     with opener.open(urllib.request.Request(base + path, data=body, headers=headers, method=method), timeout=10) as response:
@@ -59,7 +59,7 @@ if task is None:
 else:
     task = request(f"/api/v1/tasks/{task['id']}/move", {"status": "ready"})
 kubectl = ["kubectl", "--context", "kind-marina-local", "-n", "marina-system"]
-for deployment in ("appdeck", "marina"):
+for deployment in ("deck", "marina"):
     subprocess.run(kubectl + ["rollout", "restart", f"deployment/{deployment}"], check=True)
     subprocess.run(kubectl + ["rollout", "status", f"deployment/{deployment}", "--timeout=55s"], check=True)
 assert request("/api/v1/operator/session")["authenticated"], "session did not survive Deck restart"

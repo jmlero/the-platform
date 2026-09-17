@@ -1,6 +1,6 @@
-# AppDeck
+# Deck
 
-AppDeck is the task authorization, decision and results surface for work carried
+Deck is the task authorization, decision and results surface for work carried
 out by Marina. Its default overview separates work needing attention, active
 work and reviewable results. Operators can approve a plan, cancel a run, inspect
 the PR and download verification evidence.
@@ -10,7 +10,7 @@ for the first repository workflow. It enables authenticated operator sessions,
 TLS, separate service credentials and digest-checked access to Marina's artifact
 store. Channel and operational APIs remain compatible; their expansion is deferred.
 
-This directory contains the first working prototype. Read the root [AppDeck vision](../VISION_DECK.md) for the product direction and [ARCHITECTURE.md](../ARCHITECTURE.md) for its boundary with Marina.
+This directory contains the first working prototype. Read the root [Deck vision](../VISION_DECK.md) for the product direction and [ARCHITECTURE.md](../ARCHITECTURE.md) for its boundary with Marina.
 
 ## What the prototype demonstrates
 
@@ -57,9 +57,12 @@ make run
 
 Open [http://localhost:8080](http://localhost:8080).
 
-On a new database AppDeck seeds a small demo workspace. Atlas claims the ready task and submits a plan. Open **Decisions**, approve the plan, and return to **Agent factory** to watch the durable lifecycle progress through execution, verification, and completion.
+On a new database Deck seeds a small demo workspace. Atlas claims the ready task and submits a plan. Open **Decisions**, approve the plan, and return to **Agent factory** to watch the durable lifecycle progress through execution, verification, and completion.
 
-Runtime data is stored in `./data/appdeck.db` by default.
+Runtime data is stored in `./data/deck.db` by default.
+
+When updating an existing installation, follow the [Deck naming upgrade](../docs/decisions/0012-deck-component-name.md)
+to retain its database, credentials and persistent volume.
 
 ## Development
 
@@ -81,7 +84,7 @@ Useful commands:
 make check    # Go vet and Svelte diagnostics
 make test     # Go and frontend tests
 make build    # Static frontend plus one Go binary
-make image    # Build the AppDeck container image
+make image    # Build the Deck container image
 make manifests # Render the Kubernetes deployment base
 ```
 
@@ -101,17 +104,17 @@ The hardened single-replica base is under [deploy/kubernetes/](deploy/kubernetes
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `APPDECK_ADDR` | `:8080` | HTTP listen address |
-| `APPDECK_DATA_DIR` | `./data` | Directory containing `appdeck.db` |
-| `APPDECK_DEMO_AGENT` | `true` | Seed demo tasks and run Atlas |
-| `APPDECK_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, or `error` |
-| `APPDECK_SERVICE_AUTH_FILE` | unset | Version-1 service-identity policy for authenticated machine API operations |
-| `APPDECK_OPERATOR_AUTH_FILE` | unset | Version-1 operator-token fingerprint policy used to create human sessions |
-| `APPDECK_OPERATOR_COOKIE_SECURE` | `true` | Require HTTPS for operator cookies; set `false` only for trusted local HTTP development |
+| `DECK_ADDR` | `:8080` | HTTP listen address |
+| `DECK_DATA_DIR` | `./data` | Directory containing `deck.db` |
+| `DECK_DEMO_AGENT` | `true` | Seed demo tasks and run Atlas |
+| `DECK_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, or `error` |
+| `DECK_SERVICE_AUTH_FILE` | unset | Version-1 service-identity policy for authenticated machine API operations |
+| `DECK_OPERATOR_AUTH_FILE` | unset | Version-1 operator-token fingerprint policy used to create human sessions |
+| `DECK_OPERATOR_COOKIE_SECURE` | `true` | Require HTTPS for operator cookies; set `false` only for trusted local HTTP development |
 
 ## Operator authentication
 
-For an exposed installation, configure `APPDECK_OPERATOR_AUTH_FILE` with a stable operator ID and the SHA-256 fingerprint of a token containing at least 256 bits of cryptographically random material:
+For an exposed installation, configure `DECK_OPERATOR_AUTH_FILE` with a stable operator ID and the SHA-256 fingerprint of a token containing at least 256 bits of cryptographically random material:
 
 ```json
 {
@@ -125,15 +128,15 @@ For an exposed installation, configure `APPDECK_OPERATOR_AUTH_FILE` with a stabl
 }
 ```
 
-The login page exchanges the raw token for a 12-hour server-side session. AppDeck persists only SHA-256 digests of the session and CSRF secrets, sets a host-only `HttpOnly` session cookie with `SameSite=Strict`, rejects cross-origin authenticated browser requests, and requires the browser to echo the separate CSRF cookie in `X-CSRF-Token` for mutations. Sessions survive process restart and are deleted on logout.
+The login page exchanges the raw token for a 12-hour server-side session. Deck persists only SHA-256 digests of the session and CSRF secrets, sets a host-only `HttpOnly` session cookie with `SameSite=Strict`, rejects cross-origin authenticated browser requests, and requires the browser to echo the separate CSRF cookie in `X-CSRF-Token` for mutations. Sessions survive process restart and are deleted on logout.
 
-AppDeck reloads the policy for every login and readiness check, so token fingerprints can overlap during rotation without changing the operator ID. Existing sessions remain valid until logout or expiry. Keep the raw token in a secret manager or mounted secret file, never in this repository or AppDeck data. Outside trusted loopback, use TLS and leave secure cookies enabled.
+Deck reloads the policy for every login and readiness check, so token fingerprints can overlap during rotation without changing the operator ID. Existing sessions remain valid until logout or expiry. Keep the raw token in a secret manager or mounted secret file, never in this repository or Deck data. Outside trusted loopback, use TLS and leave secure cookies enabled.
 
-When `APPDECK_OPERATOR_AUTH_FILE` is unset, the local prototype keeps its original unauthenticated operator workflow. That mode must not be exposed to an untrusted network. The complete rationale is in [decision 0005](../docs/decisions/0005-operator-authentication.md).
+When `DECK_OPERATOR_AUTH_FILE` is unset, the local prototype keeps its original unauthenticated operator workflow. That mode must not be exposed to an untrusted network. The complete rationale is in [decision 0005](../docs/decisions/0005-operator-authentication.md).
 
 ## Service authentication
 
-Set `APPDECK_SERVICE_AUTH_FILE` before connecting Marina outside the trusted local prototype. The JSON policy maps one or more SHA-256 token fingerprints to a stable identity, explicit AppDeck project IDs, and explicit protocol capabilities:
+Set `DECK_SERVICE_AUTH_FILE` before connecting Marina outside the trusted local prototype. The JSON policy maps one or more SHA-256 token fingerprints to a stable identity, explicit Deck project IDs, and explicit protocol capabilities:
 
 ```json
 {
@@ -156,7 +159,7 @@ Set `APPDECK_SERVICE_AUTH_FILE` before connecting Marina outside the trusted loc
 }
 ```
 
-Use at least 256 bits of random token material and give the raw value only to Marina through its token-file reference. AppDeck reloads and validates the policy on every request, so two fingerprints can overlap during rotation without changing the identity. Wildcard grants, malformed policies, missing credentials, and unauthorized projects or capabilities fail closed. Bearer credentials require TLS or another authenticated encrypted transport outside single-host loopback.
+Use at least 256 bits of random token material and give the raw value only to Marina through its token-file reference. Deck reloads and validates the policy on every request, so two fingerprints can overlap during rotation without changing the identity. Wildcard grants, malformed policies, missing credentials, and unauthorized projects or capabilities fail closed. Bearer credentials require TLS or another authenticated encrypted transport outside single-host loopback.
 
 The browser uses separate operator routes and, when configured, the human-session boundary above. Marina's service credential cannot create a human session. The complete service-authentication rationale and rotation sequence are in [decision 0003](../docs/decisions/0003-service-authentication.md).
 
@@ -164,9 +167,9 @@ The browser uses separate operator routes and, when configured, the human-sessio
 
 The machine-readable contract is in [api/openapi.yaml](api/openapi.yaml). The core agent loop is:
 
-Protocol compatibility and readiness are available at `GET /api/v1/provider`. Version 1 uses UTC Unix milliseconds for domain timestamps, echoes or creates `X-Request-ID` on every request, and returns stable structured error codes while retaining the original `error` string for compatibility. Capability identifiers let Marina enable only behavior the installed AppDeck version actually supports. When service authentication is configured, every operation marked with `x-capability` requires a Bearer credential and enforces its capability plus the canonical resource's project scope.
+Protocol compatibility and readiness are available at `GET /api/v1/provider`. Version 1 uses UTC Unix milliseconds for domain timestamps, echoes or creates `X-Request-ID` on every request, and returns stable structured error codes while retaining the original `error` string for compatibility. Capability identifiers let Marina enable only behavior the installed Deck version actually supports. When service authentication is configured, every operation marked with `x-capability` requires a Bearer credential and enforces its capability plus the canonical resource's project scope.
 
-Claims and all `/runs/...` service mutations require `Idempotency-Key`. AppDeck stores the key, request digest, and original successful result in the same SQLite transaction as the state change. Repeating the same project, service identity, operation, key, resource, and payload returns that result without creating another run, event, decision, artifact, or command acknowledgement; changing the payload returns `409 conflict`. Records survive restart.
+Claims and all `/runs/...` service mutations require `Idempotency-Key`. Deck stores the key, request digest, and original successful result in the same SQLite transaction as the state change. Repeating the same project, service identity, operation, key, resource, and payload returns that result without creating another run, event, decision, artifact, or command acknowledgement; changing the payload returns `409 conflict`. Records survive restart.
 
 Every active-run mutation also requires the stable logical agent ID, exact run version, and current fence token. Claims freeze the task version and acceptance-criteria digest on the run. Lease expiry, cancellation, replan, and authority reduction advance the authority epoch so delayed writes from an older worker fail with `409 conflict`. Claim lookup and assigned-run pagination let a restarted controller resolve an ambiguous claim without issuing a new one.
 
@@ -175,13 +178,13 @@ Every active-run mutation also requires the stable logical agent ID, exact run v
 3. Atomically claim one task with a lease.
 4. Send heartbeats while holding the lease.
 5. Submit an immutable structured plan revision and optionally request approval.
-6. Wait for the revision-bound decision and explicitly start the approved run. AppDeck preserves plan revisions; the configured Marina repository workflow blocks on requested changes rather than automatically revising.
+6. Wait for the revision-bound decision and explicitly start the approved run. Deck preserves plan revisions; the configured Marina repository workflow blocks on requested changes rather than automatically revising.
 7. Report durable progress and provider-neutral operational state.
 8. Enter verification, record current structured evidence, and complete by referencing its IDs.
 
-Operator commands are durable resources rather than direct lifecycle-column edits. Marina lists them after its persisted cursor and acknowledges each result idempotently. Projected events are deduplicated by producer event ID and execution sequence before entering AppDeck's visible timeline. Provider state and display states are derived from admitted records, lease timestamps, evidence freshness, and synchronization lag; missing facts remain visibly unknown.
+Operator commands are durable resources rather than direct lifecycle-column edits. Marina lists them after its persisted cursor and acknowledges each result idempotently. Projected events are deduplicated by producer event ID and execution sequence before entering Deck's visible timeline. Provider state and display states are derived from admitted records, lease timestamps, evidence freshness, and synchronization lag; missing facts remain visibly unknown.
 
-Task creation and channel promotion use the same budget and PR-permission form, with two attempts by default. Tasks declaring `source.*` or `pull_request.*` authority identify repository work: entering or editing Ready requires acceptance criteria, at least two attempts, and explicit `source.read`, `source.write`, and `pull_request.create` permission. Save incomplete work in Backlog. AppDeck does not infer repository intent from prose; generic work remains compatible, and Marina independently checks every claimed repository task. This admission check does not grant permissions or guarantee cluster/model readiness.
+Task creation and channel promotion use the same budget and PR-permission form, with two attempts by default. Tasks declaring `source.*` or `pull_request.*` authority identify repository work: entering or editing Ready requires acceptance criteria, at least two attempts, and explicit `source.read`, `source.write`, and `pull_request.create` permission. Save incomplete work in Backlog. Deck does not infer repository intent from prose; generic work remains compatible, and Marina independently checks every claimed repository task. This admission check does not grant permissions or guarantee cluster/model readiness.
 
 Channel history uses opaque, channel-scoped `cursor` / `next_cursor` pagination in append order (100 messages by default, maximum 200 per page). The browser follows every page and refreshes on message/promotion events and SSE reconnect, deduplicating by message ID. Reopening a channel recovers history even if live notifications were missed.
 
@@ -197,7 +200,7 @@ curl http://localhost:8080/readyz
 ## Project layout
 
 ```text
-cmd/appdeck/              application entry point
+cmd/deck/              application entry point
 internal/domain/          task, run, plan, decision, evidence, channel, operation, event, and artifact model
 internal/store/           SQLite repositories and migrations
 internal/httpapi/         REST and SSE API
@@ -209,4 +212,4 @@ api/openapi.yaml          agent-facing HTTP contract
 
 ## Prototype boundaries
 
-This release is single-user and single-process. Machine operations authenticate a scoped Marina service identity and use guarded, idempotent, fenced mutations; human routes use a separate optional operator session. AppDeck records provider-neutral work-control and operational facts but does not execute runtimes, mutate source control, operate deployments, or store artifact bytes. Multi-user permissions, password recovery, federated identity, distributed scheduling, autonomous task decomposition, and a general-purpose agent execution runtime remain outside the prototype.
+This release is single-user and single-process. Machine operations authenticate a scoped Marina service identity and use guarded, idempotent, fenced mutations; human routes use a separate optional operator session. Deck records provider-neutral work-control and operational facts but does not execute runtimes, mutate source control, operate deployments, or store artifact bytes. Multi-user permissions, password recovery, federated identity, distributed scheduling, autonomous task decomposition, and a general-purpose agent execution runtime remain outside the prototype.

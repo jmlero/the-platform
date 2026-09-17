@@ -7,13 +7,13 @@ The broader software-factory vision remains the long-term direction.
 
 This project starts from scratch as a new Kubernetes-based concept. Experience from the earlier AWS-native `platform-marina` informs the creator's technical judgment, but Marina inherits neither its architecture nor its code and is not a port or rewrite of it.
 
-It is single-operator first. AppDeck over HTTP/JSON is the supported work-control provider. Headless and in-process alternatives remain future packaging; work-control surfaces, agent harnesses, runtimes, context sources, policy and verification systems, delivery integrations, and platform services remain replaceable behind governed contracts.
+It is single-operator first. Deck over HTTP/JSON is the supported work-control provider. Headless and in-process alternatives remain future packaging; work-control surfaces, agent harnesses, runtimes, context sources, policy and verification systems, delivery integrations, and platform services remain replaceable behind governed contracts.
 
-Read the root [Marina vision](../VISION.md) for the product vision, its relationship with AppDeck, the experience brought from `platform-marina`, the Kubernetes-native platform and extensibility thesis, and the questions still to resolve.
+Read the root [Marina vision](../VISION.md) for the product vision, its relationship with Deck, the experience brought from `platform-marina`, the Kubernetes-native platform and extensibility thesis, and the questions still to resolve.
 
 Read [DARK_FACTORY.md](../DARK_FACTORY.md) for the precise meaning of a dark software factory in Marina.
 
-Read [the root architecture](../ARCHITECTURE.md) for the joint AppDeck–Marina component boundaries, source-of-truth rules, lifecycle protocol, failure semantics, and delivery gates.
+Read [the root architecture](../ARCHITECTURE.md) for the joint Deck–Marina component boundaries, source-of-truth rules, lifecycle protocol, failure semantics, and delivery gates.
 
 ## Current implementation
 
@@ -21,30 +21,30 @@ The following implementations and reusable foundations are present; the configur
 
 - A dependency-light Go control-service binary.
 - A narrow, provider-neutral work-control port.
-- An AppDeck adapter for protocol discovery, capability validation, stable error correlation, scoped service authentication, stable registration, claim recovery, assigned-run discovery, guarded run control, commands, and projected events.
+- A Deck adapter for protocol discovery, capability validation, stable error correlation, scoped service authentication, stable registration, claim recovery, assigned-run discovery, guarded run control, commands, and projected events.
 - A durable SQLite execution journal with stable installation identity, versioned project bindings, acquisition intents, version-guarded lifecycle transitions, checkpoints, evidence, leases, budgets, retry state, command cursors, an ordered provider outbox, and append-only events.
 - Idempotency constraints that prevent one external run, checkpoint key, or evidence key from creating duplicate internal work.
 - An evidence gate that prevents an execution from completing without source-bound verification evidence.
 - A side-effect-free restart planner that reconstructs the next safe recovery action from persisted state.
-- Startup reconciliation that verifies the exact AppDeck task, run, and agent before confirming or renewing a provider lease; it never creates a replacement claim.
+- Startup reconciliation that verifies the exact Deck task, run, and agent before confirming or renewing a provider lease; it never creates a replacement claim.
 - A continuous, non-overlapping recovery controller that protects only journaled work, converges provider terminal states, and blocks budget-exhausted runs instead of renewing them.
 - A cross-package restart proof showing inspect → heartbeat → inspect against the original run, with no replacement claim call.
-- Truthful `/healthz` liveness and `/readyz` readiness for both AppDeck and the journal.
-- A `doctor` command for checking AppDeck connectivity.
-- File-referenced AppDeck credentials that reload per request for rotation and are never written to the execution journal.
+- Truthful `/healthz` liveness and `/readyz` readiness for both Deck and the journal.
+- A `doctor` command for checking Deck connectivity.
+- File-referenced Deck credentials that reload per request for rotation and are never written to the execution journal.
 - Stable keys for reconciliation-driven lease renewal and budget stopping, plus explicit keys on acquisition, planning, and progress requests.
-- Deterministic product tests plus an authenticated real-process AppDeck conformance path.
+- Deterministic product tests plus an authenticated real-process Deck conformance path.
 - A bounded work-intake controller that journals intent before claim, resolves ambiguous responses without blind reacquisition, validates the frozen task snapshot, and binds one exact run before any later side effect.
 - Ordered command consumption in which cancellation and authority reduction fence ordinary progress before acknowledgement.
 - Time-bounded external calls, persisted classified backoff and exhaustion, non-overlapping cycles, lease safety windows, and durable normalized progress/failure projection.
 - A provider-neutral runtime lifecycle and immutable specification, with durable attempt, usage, artifact, and cleanup records plus explicit ambiguous-start and orphan recovery decisions.
 - Exact-revision local Git materialization, immutable provenance-rich context packages, and typed versioned policy snapshots with bounded authority and budget evaluation.
-- Structured AppDeck plan-revision submission and restart-safe approval/change-request reconciliation through durable checkpoints.
+- Structured Deck plan-revision submission and restart-safe approval/change-request reconciliation through durable checkpoints.
 - Narrow source-control and deterministic verification contracts, including repository-owned check manifests, evidence invalidation, and risk-based independent-review requirements.
 - Validated, correlated, classified, and deduplicated operational signals whose raw text remains untrusted and grants no mutation authority.
 - An offline `diagnostics` command that exports a deterministic, conservatively redacted journal view without exposing a new work-control API.
 
-On service startup, Marina validates AppDeck's Milestone 1 capabilities, opens the journal, reloads its stable identity and project binding, registers the logical controller, reconciles unresolved acquisitions, and then protects exact run ownership and leases. The same non-overlapping control and lease cycles run periodically. Failed, blocked, and cancelled provider runs converge into guarded local terminal states; budget exhaustion blocks the exact provider run and is classified durably. Provider completion still cannot bypass Marina's verification and evidence gates.
+On service startup, Marina validates Deck's Milestone 1 capabilities, opens the journal, reloads its stable identity and project binding, registers the logical controller, reconciles unresolved acquisitions, and then protects exact run ownership and leases. The same non-overlapping control and lease cycles run periodically. Failed, blocked, and cancelled provider runs converge into guarded local terminal states; budget exhaustion blocks the exact provider run and is classified durably. Provider completion still cannot bypass Marina's verification and evidence gates.
 
 With `--config workflow.json` (or `MARINA_CONFIG_FILE`), the service enables the
 repository workflow: frozen task budget/authority, immutable plan, optional
@@ -100,10 +100,10 @@ Build the non-root container image:
 make image IMAGE=marina:dev VERSION=dev
 ```
 
-Check an AppDeck instance:
+Check a Deck instance:
 
 ```bash
-./bin/marina doctor --appdeck-url http://localhost:8080
+./bin/marina doctor --deck-url http://localhost:8080
 ```
 
 Inspect the local journal without serving internal state as an API:
@@ -112,19 +112,19 @@ Inspect the local journal without serving internal state as an API:
 ./bin/marina diagnostics --journal-path ./data/marina.db > marina-diagnostics.json
 ```
 
-The export omits raw signal text and free-form journal messages, redacts arbitrary payload strings, sanitizes URLs, and fingerprints provider handles. It contains operational metadata only; AppDeck remains the authoritative human-facing work-control ledger.
+The export omits raw signal text and free-form journal messages, redacts arbitrary payload strings, sanitizes URLs, and fingerprints provider handles. It contains operational metadata only; Deck remains the authoritative human-facing work-control ledger.
 
-For an authenticated AppDeck service API, set `MARINA_APPDECK_TOKEN_FILE` to the file containing the raw opaque token. Marina reads the file for every request so a projected or atomically replaced secret rotates without changing the stable installation, logical agent, or run identity. Do not put the token in an environment variable, command argument, URL, or repository file.
+For an authenticated Deck service API, set `MARINA_DECK_TOKEN_FILE` to the file containing the raw opaque token. Marina reads the file for every request so a projected or atomically replaced secret rotates without changing the stable installation, logical agent, or run identity. Do not put the token in an environment variable, command argument, URL, or repository file.
 
-Mutating work-control requests carry `Idempotency-Key`. The intake controller persists its claim key before calling AppDeck; lease, budget, command, and projection operations derive repeatable keys from durable journal identity. Direct adapter callers that omit a key receive a one-shot compatibility key, which is unsuitable for ambiguous-response recovery.
+Mutating work-control requests carry `Idempotency-Key`. The intake controller persists its claim key before calling Deck; lease, budget, command, and projection operations derive repeatable keys from durable journal identity. Direct adapter callers that omit a key receive a one-shot compatibility key, which is unsuitable for ambiguous-response recovery.
 
-This release supports AppDeck work-control protocol `>=1.0,<2.0`. Minor-version additions remain capability-gated; an unsupported major version or a missing reconciliation capability keeps Marina not ready and prevents dependent external actions.
+This release supports Deck work-control protocol `>=1.0,<2.0`. Minor-version additions remain capability-gated; an unsupported major version or a missing reconciliation capability keeps Marina not ready and prevents dependent external actions.
 
 Run Marina's initial HTTP service:
 
 ```bash
-MARINA_APPDECK_URL=http://localhost:8080 \
-MARINA_APPDECK_TOKEN_FILE=/run/secrets/appdeck/token \
+MARINA_DECK_URL=http://localhost:8080 \
+MARINA_DECK_TOKEN_FILE=/run/secrets/deck/token \
 MARINA_JOURNAL_PATH=./data/marina.db \
 ./bin/marina serve
 ```
@@ -149,23 +149,23 @@ make manifests
 | --- | --- | --- |
 | `MARINA_ADDR` | `:8090` | Marina HTTP listen address. |
 | `MARINA_CONFIG_FILE` | unset | Explicit repository workflow configuration; enables worker execution. |
-| `MARINA_APPDECK_URL` | `http://localhost:8080` | AppDeck server root URL. |
-| `MARINA_APPDECK_TOKEN_FILE` | unset | File reference containing the AppDeck service Bearer token. |
-| `MARINA_APPDECK_PROJECT_ID` | `prj_default` | AppDeck project bound to this initial controller. |
+| `MARINA_DECK_URL` | `http://localhost:8080` | Deck server root URL. |
+| `MARINA_DECK_TOKEN_FILE` | unset | File reference containing the Deck service Bearer token. |
+| `MARINA_DECK_PROJECT_ID` | `prj_default` | Deck project bound to this initial controller. |
 | `MARINA_JOURNAL_PATH` | `data/marina.db` | Durable SQLite execution journal. |
 | `MARINA_REPOSITORY` | `disabled://milestone-one` | Repository binding; deliberately non-mutating in Milestone 1. |
 | `MARINA_POLICY_VERSION` | `milestone-one` | Version persisted with the project binding and executions. |
 | `MARINA_LEASE_RENEW_BEFORE` | `10s` | Window in which reconciliation renews an external lease. |
-| `MARINA_RUN_LEASE` | `30s` | AppDeck lease duration requested by each heartbeat. |
+| `MARINA_RUN_LEASE` | `30s` | Deck lease duration requested by each heartbeat. |
 | `MARINA_RECONCILE_INTERVAL` | `10s` | Interval between non-overlapping lease reconciliation cycles. |
 
 ## Project layout
 
 ```text
 cmd/marina/                 CLI and service entry point
-../ARCHITECTURE.md          Joint AppDeck–Marina target architecture
+../ARCHITECTURE.md          Joint Deck–Marina target architecture
 internal/workcontrol/      Provider-neutral work-control contract
-internal/appdeck/          AppDeck adapter
+internal/deck/          Deck adapter
 internal/execution/        Durable execution model and recovery decisions
 internal/httpserver/       Marina liveness and readiness HTTP surface
 internal/journal/sqlite/   Transactional execution journal and migrations

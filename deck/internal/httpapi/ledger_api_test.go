@@ -143,7 +143,7 @@ func TestOperatorChannelPromotionAndExportAPI(t *testing.T) {
 	exportRequest := httptest.NewRequest(http.MethodGet, "/api/v1/operator/export?project_id=prj_default", nil)
 	exportResponse := httptest.NewRecorder()
 	handler.ServeHTTP(exportResponse, exportRequest)
-	if exportResponse.Code != http.StatusOK || !strings.Contains(exportResponse.Body.String(), `"schema_version": "appdeck-export/v1"`) {
+	if exportResponse.Code != http.StatusOK || !strings.Contains(exportResponse.Body.String(), `"schema_version": "deck-export/v1"`) {
 		t.Fatalf("export status = %d, body = %s", exportResponse.Code, exportResponse.Body.String())
 	}
 	if strings.Contains(exportResponse.Body.String(), `"content"`) {

@@ -46,11 +46,20 @@ func TestVersionCommand(t *testing.T) {
 	}
 }
 
+func TestPreviousProviderEnvironmentFailsBeforeStarting(t *testing.T) {
+	t.Setenv("MARINA_APPDECK_TOKEN_FILE", "private-value")
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"serve", "--help"}, &stdout, &stderr)
+	if code != 2 || !strings.Contains(stderr.String(), "MARINA_DECK_TOKEN_FILE") || strings.Contains(stderr.String(), "private-value") {
+		t.Fatalf("exit = %d, stderr = %q", code, stderr.String())
+	}
+}
+
 func TestDoctorCommand(t *testing.T) {
-	tokenPath := filepath.Join(t.TempDir(), "appdeck-token")
+	tokenPath := filepath.Join(t.TempDir(), "deck-token")
 	const token = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 	if err := os.WriteFile(tokenPath, []byte(token+"\n"), 0o600); err != nil {
-		t.Fatalf("write AppDeck token: %v", err)
+		t.Fatalf("write Deck token: %v", err)
 	}
 	previousTransport := http.DefaultTransport
 	http.DefaultTransport = roundTripFunc(func(request *http.Request) (*http.Response, error) {
@@ -64,7 +73,7 @@ func TestDoctorCommand(t *testing.T) {
 			t.Errorf("doctor Authorization = %q", request.Header.Get("Authorization"))
 		}
 		return textResponse(http.StatusOK, `{
-			"provider":"appdeck",
+			"provider":"deck",
 			"protocol_version":"1.0",
 			"capabilities":["provider.info","agent.register","work.ready.list","work.inspect","work.claim.atomic","work.claim.lookup","run.assigned.list","run.lease.renew","run.block","command.list","command.ack","event.append"],
 			"server_time":1784368800000,
@@ -78,13 +87,13 @@ func TestDoctorCommand(t *testing.T) {
 	var stderr bytes.Buffer
 	code := run([]string{
 		"doctor",
-		"--appdeck-url", "https://appdeck.test",
-		"--appdeck-token-file", tokenPath,
+		"--deck-url", "https://deck.test",
+		"--deck-token-file", tokenPath,
 	}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit code = %d, stderr = %q", code, stderr.String())
 	}
-	if stdout.String() != "AppDeck: available\n" {
+	if stdout.String() != "Deck: available\n" {
 		t.Fatalf("stdout = %q", stdout.String())
 	}
 }
@@ -130,7 +139,7 @@ func TestEnvironmentDurationIsValidated(t *testing.T) {
 	}
 }
 
-func TestServeRejectsIncompleteOrUnreadableTLSBeforeContactingAppDeck(t *testing.T) {
+func TestServeRejectsIncompleteOrUnreadableTLSBeforeContactingDeck(t *testing.T) {
 	for _, arguments := range [][]string{
 		{"--tls-cert-file", "missing.crt"},
 		{"--tls-key-file", "missing.key"},

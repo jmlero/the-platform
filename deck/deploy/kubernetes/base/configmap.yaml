@@ -1,10 +1,10 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: appdeck-config
+  name: deck-config
 data:
-  APPDECK_ADDR: ":8080"
-  APPDECK_DATA_DIR: "/data"
-  APPDECK_DEMO_AGENT: "false"
-  APPDECK_LOG_LEVEL: "info"
-  APPDECK_OPERATOR_COOKIE_SECURE: "true"
+  DECK_ADDR: ":8080"
+  DECK_DATA_DIR: "/data"
+  DECK_DEMO_AGENT: "false"
+  DECK_LOG_LEVEL: "info"
+  DECK_OPERATOR_COOKIE_SECURE: "true"

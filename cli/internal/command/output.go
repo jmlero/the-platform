@@ -7,7 +7,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/jmlero/the-platform/cli/internal/appdeck"
+	"github.com/jmlero/the-platform/cli/internal/deck"
 )
 
 func writeJSON(writer io.Writer, value any) error {
@@ -20,7 +20,7 @@ func writeJSON(writer io.Writer, value any) error {
 	return nil
 }
 
-func writeTaskList(writer io.Writer, tasks []appdeck.Task) {
+func writeTaskList(writer io.Writer, tasks []deck.Task) {
 	if len(tasks) == 0 {
 		_, _ = fmt.Fprintln(writer, "No tasks.")
 		return
@@ -40,7 +40,7 @@ func writeTaskList(writer io.Writer, tasks []appdeck.Task) {
 	_ = table.Flush()
 }
 
-func writeTaskDetail(writer io.Writer, detail appdeck.TaskDetail) {
+func writeTaskDetail(writer io.Writer, detail deck.TaskDetail) {
 	table := tabwriter.NewWriter(writer, 0, 4, 2, ' ', 0)
 	_, _ = fmt.Fprintf(table, "ID:\t%s\n", detail.Task.ID)
 	_, _ = fmt.Fprintf(table, "Project:\t%s\n", detail.Task.ProjectID)
@@ -68,7 +68,7 @@ func writeTaskDetail(writer io.Writer, detail appdeck.TaskDetail) {
 	_ = runs.Flush()
 }
 
-func writeCommandResult(writer io.Writer, command appdeck.Command) {
+func writeCommandResult(writer io.Writer, command deck.Command) {
 	_, _ = fmt.Fprintf(
 		writer,
 		"Requested %s for %s: %s (sequence %d, %s)\n",

@@ -208,7 +208,7 @@ func TestReadinessReflectsOperatorAuthenticationPolicyHealth(t *testing.T) {
 	}
 
 	// The handler reloads its policy, so replacing the only matching file in its
-	// temporary parent makes readiness fail closed without restarting AppDeck.
+	// temporary parent makes readiness fail closed without restarting Deck.
 	if err := os.WriteFile(policyPath, []byte(`{"version":1,"operators":[]}`), 0o600); err != nil {
 		t.Fatalf("replace operator policy: %v", err)
 	}
@@ -228,13 +228,13 @@ func TestReadinessReflectsOperatorAuthenticationPolicyHealth(t *testing.T) {
 
 func newOperatorAuthTestHandler(t *testing.T) (*store.Store, http.Handler, string) {
 	t.Helper()
-	appStore, err := store.Open(context.Background(), filepath.Join(t.TempDir(), "appdeck-operator-auth-test.db"))
+	appStore, err := store.Open(context.Background(), filepath.Join(t.TempDir(), "deck-operator-auth-test.db"))
 	if err != nil {
-		t.Fatalf("open AppDeck store: %v", err)
+		t.Fatalf("open Deck store: %v", err)
 	}
 	t.Cleanup(func() {
 		if err := appStore.Close(); err != nil {
-			t.Errorf("close AppDeck store: %v", err)
+			t.Errorf("close Deck store: %v", err)
 		}
 	})
 	policyPath := filepath.Join(t.TempDir(), "operator-auth.json")

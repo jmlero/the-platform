@@ -16,7 +16,7 @@ func TestAcquisitionSnapshotSurvivesRestartAndCannotBeReplaced(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = store.EnsureProjectBinding(ctx, execution.ProjectBinding{ProjectID: "project", Provider: "appdeck",
+	_, err = store.EnsureProjectBinding(ctx, execution.ProjectBinding{ProjectID: "project", Provider: "deck",
 		Repository: "disabled://test", Runtime: "disabled:test", PolicyVersion: "test", ContextConfig: "test",
 		ArtifactConfig: "test", DeliveryConfig: "test", BudgetMinutes: 20, MaxConcurrency: 1})
 	if err != nil {

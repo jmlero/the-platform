@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jmlero/the-platform/cli/internal/appdeck"
+	"github.com/jmlero/the-platform/cli/internal/deck"
 )
 
 func TestTasksListFiltersWorkspaceSnapshot(t *testing.T) {
@@ -20,7 +20,7 @@ func TestTasksListFiltersWorkspaceSnapshot(t *testing.T) {
 		if r.URL.Path != "/api/v1/bootstrap" {
 			t.Fatalf("path = %q", r.URL.Path)
 		}
-		writeCommandJSON(t, w, http.StatusOK, appdeck.Bootstrap{Tasks: []appdeck.Task{
+		writeCommandJSON(t, w, http.StatusOK, deck.Bootstrap{Tasks: []deck.Task{
 			{ID: "tsk_ready", ProjectID: "prj_default", Title: "Ready task", Status: "ready", Priority: "high"},
 			{ID: "tsk_backlog", ProjectID: "prj_default", Title: "Backlog task", Status: "backlog", Priority: "medium"},
 		}})
@@ -29,7 +29,7 @@ func TestTasksListFiltersWorkspaceSnapshot(t *testing.T) {
 
 	code, stdout, stderr := runForTest(
 		t,
-		[]string{"--appdeck-url", server.URL, "tasks", "list", "--status", "ready"},
+		[]string{"--deck-url", server.URL, "tasks", "list", "--status", "ready"},
 		emptyEnvironment,
 	)
 	if code != 0 {
@@ -40,27 +40,39 @@ func TestTasksListFiltersWorkspaceSnapshot(t *testing.T) {
 	}
 }
 
+func TestPreviousEnvironmentNamesFailBeforeCallingServer(t *testing.T) {
+	code, _, stderr := runForTest(t, []string{"help"}, func(key string) string {
+		if key == "APPDECK_TOKEN" {
+			return "private-value"
+		}
+		return ""
+	})
+	if code != 2 || !strings.Contains(stderr, "DECK_TOKEN") || strings.Contains(stderr, "private-value") {
+		t.Fatalf("exit = %d, stderr = %q", code, stderr)
+	}
+}
+
 func TestTasksGetWritesJSON(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/v1/operator/tasks/tsk_1" {
 			t.Fatalf("path = %q", r.URL.Path)
 		}
-		writeCommandJSON(t, w, http.StatusOK, appdeck.TaskDetail{
-			Task: appdeck.Task{ID: "tsk_1", Title: "Inspect me", Status: "running"},
-			Runs: []appdeck.Run{{ID: "run_1", Status: "running"}},
+		writeCommandJSON(t, w, http.StatusOK, deck.TaskDetail{
+			Task: deck.Task{ID: "tsk_1", Title: "Inspect me", Status: "running"},
+			Runs: []deck.Run{{ID: "run_1", Status: "running"}},
 		})
 	}))
 	t.Cleanup(server.Close)
 
 	code, stdout, stderr := runForTest(
 		t,
-		[]string{"--json", "--appdeck-url", server.URL, "tasks", "get", "tsk_1"},
+		[]string{"--json", "--deck-url", server.URL, "tasks", "get", "tsk_1"},
 		emptyEnvironment,
 	)
 	if code != 0 {
 		t.Fatalf("code = %d, stderr = %q", code, stderr)
 	}
-	var detail appdeck.TaskDetail
+	var detail deck.TaskDetail
 	if err := json.Unmarshal([]byte(stdout), &detail); err != nil {
 		t.Fatalf("decode stdout: %v", err)
 	}
@@ -70,7 +82,7 @@ func TestTasksGetWritesJSON(t *testing.T) {
 }
 
 func TestTasksCreateUsesTokenFile(t *testing.T) {
-	tokenPath := filepath.Join(t.TempDir(), "appdeck.token")
+	tokenPath := filepath.Join(t.TempDir(), "deck.token")
 	if err := os.WriteFile(tokenPath, []byte("operator-secret\n"), 0o600); err != nil {
 		t.Fatalf("write token: %v", err)
 	}
@@ -88,8 +100,8 @@ func TestTasksCreateUsesTokenFile(t *testing.T) {
 				w.WriteHeader(401)
 				return
 			}
-			http.SetCookie(w, &http.Cookie{Name: "appdeck_operator_session", Value: "session", Path: "/"})
-			http.SetCookie(w, &http.Cookie{Name: "appdeck_operator_csrf", Value: "csrf", Path: "/"})
+			http.SetCookie(w, &http.Cookie{Name: "deck_operator_session", Value: "session", Path: "/"})
+			http.SetCookie(w, &http.Cookie{Name: "deck_operator_csrf", Value: "csrf", Path: "/"})
 			w.WriteHeader(201)
 			return
 		}
@@ -99,26 +111,26 @@ func TestTasksCreateUsesTokenFile(t *testing.T) {
 		if r.Header.Get("X-CSRF-Token") != "csrf" {
 			t.Error("missing CSRF")
 		}
-		if cookie, err := r.Cookie("appdeck_operator_session"); err != nil || cookie.Value != "session" {
+		if cookie, err := r.Cookie("deck_operator_session"); err != nil || cookie.Value != "session" {
 			t.Error("missing session")
 		}
 		if r.Header.Get("Authorization") != "" {
 			t.Error("bearer credential sent")
 		}
-		var input appdeck.CreateTaskInput
+		var input deck.CreateTaskInput
 		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 			t.Fatalf("decode input: %v", err)
 		}
 		if input.Title != "CLI task" || input.Status != "ready" || input.Priority != "urgent" {
 			t.Fatalf("input = %#v", input)
 		}
-		inputTask := appdeck.Task{ID: "tsk_created", Title: input.Title, Status: input.Status}
+		inputTask := deck.Task{ID: "tsk_created", Title: input.Title, Status: input.Status}
 		writeCommandJSON(t, w, http.StatusCreated, inputTask)
 	}))
 	t.Cleanup(server.Close)
 
 	code, stdout, stderr := runForTest(t, []string{
-		"--appdeck-url", server.URL,
+		"--deck-url", server.URL,
 		"--token-file", tokenPath,
 		"tasks", "create",
 		"--title", "CLI task",
@@ -133,7 +145,7 @@ func TestTasksCreateUsesTokenFile(t *testing.T) {
 	}
 }
 
-func TestTasksCreateValidatesBeforeCallingAppDeck(t *testing.T) {
+func TestTasksCreateValidatesBeforeCallingDeck(t *testing.T) {
 	code, _, stderr := runForTest(
 		t,
 		[]string{"tasks", "create", "--title", "Valid title", "--status", "invalid"},
@@ -155,14 +167,14 @@ func TestRunCommandsCreateDurableOperatorCommands(t *testing.T) {
 				if r.Method != http.MethodPost || r.URL.Path != "/api/v1/operator/runs/run_1/commands" {
 					t.Fatalf("request = %s %s", r.Method, r.URL.Path)
 				}
-				var input appdeck.CreateCommandInput
+				var input deck.CreateCommandInput
 				if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 					t.Fatalf("decode command: %v", err)
 				}
 				if input.Type != commandType || input.Reason != "operator intent" {
 					t.Fatalf("input = %#v", input)
 				}
-				writeCommandJSON(t, w, http.StatusCreated, appdeck.Command{
+				writeCommandJSON(t, w, http.StatusCreated, deck.Command{
 					ID: "cmd_1", RunID: "run_1", Sequence: int64(index + 1),
 					Type: commandType, Status: "pending", Reason: input.Reason,
 				})
@@ -170,7 +182,7 @@ func TestRunCommandsCreateDurableOperatorCommands(t *testing.T) {
 			t.Cleanup(server.Close)
 
 			code, stdout, stderr := runForTest(t, []string{
-				"--appdeck-url", server.URL,
+				"--deck-url", server.URL,
 				"runs", commandType,
 				"--reason", "operator intent",
 				"run_1",
@@ -188,20 +200,20 @@ func TestRunCommandsCreateDurableOperatorCommands(t *testing.T) {
 
 func TestRunCommandWritesJSON(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		writeCommandJSON(t, w, http.StatusCreated, appdeck.Command{
+		writeCommandJSON(t, w, http.StatusCreated, deck.Command{
 			ID: "cmd_json", RunID: "run_json", Sequence: 3, Type: "cancel", Status: "pending",
 		})
 	}))
 	t.Cleanup(server.Close)
 
 	code, stdout, stderr := runForTest(t, []string{
-		"--json", "--appdeck-url", server.URL,
+		"--json", "--deck-url", server.URL,
 		"runs", "cancel", "--reason", "stop safely", "run_json",
 	}, emptyEnvironment)
 	if code != 0 {
 		t.Fatalf("code = %d, stderr = %q", code, stderr)
 	}
-	var command appdeck.Command
+	var command deck.Command
 	if err := json.Unmarshal([]byte(stdout), &command); err != nil {
 		t.Fatalf("decode output: %v", err)
 	}
@@ -210,7 +222,7 @@ func TestRunCommandWritesJSON(t *testing.T) {
 	}
 }
 
-func TestRunCommandRequiresReasonBeforeCallingAppDeck(t *testing.T) {
+func TestRunCommandRequiresReasonBeforeCallingDeck(t *testing.T) {
 	code, _, stderr := runForTest(
 		t,
 		[]string{"runs", "pause", "run_1"},
@@ -229,14 +241,14 @@ func TestHealthUsesEnvironmentConfiguration(t *testing.T) {
 		if authorization := r.Header.Get("Authorization"); authorization != "" {
 			t.Fatalf("Authorization = %q", authorization)
 		}
-		writeCommandJSON(t, w, http.StatusOK, appdeck.Health{Service: "appdeck", Status: "ok", Time: "now"})
+		writeCommandJSON(t, w, http.StatusOK, deck.Health{Service: "deck", Status: "ok", Time: "now"})
 	}))
 	t.Cleanup(server.Close)
 	environment := func(name string) string {
 		switch name {
-		case "APPDECK_URL":
+		case "DECK_URL":
 			return server.URL
-		case "APPDECK_TOKEN":
+		case "DECK_TOKEN":
 			return "from-env"
 		default:
 			return ""
@@ -247,7 +259,7 @@ func TestHealthUsesEnvironmentConfiguration(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("code = %d, stderr = %q", code, stderr)
 	}
-	if stdout != "appdeck: ok (now)\n" {
+	if stdout != "deck: ok (now)\n" {
 		t.Fatalf("stdout = %q", stdout)
 	}
 }

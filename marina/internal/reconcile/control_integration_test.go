@@ -55,7 +55,7 @@ func TestDisabledIntakeLeavesReadyWorkUnclaimed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	binding, err := journal.EnsureProjectBinding(ctx, execution.ProjectBinding{ProjectID: "project-1", Provider: "appdeck",
+	binding, err := journal.EnsureProjectBinding(ctx, execution.ProjectBinding{ProjectID: "project-1", Provider: "deck",
 		Repository: "disabled://m1", Runtime: "disabled:m1", PolicyVersion: "m1", ContextConfig: "disabled:m1",
 		ArtifactConfig: "disabled:m1", DeliveryConfig: "disabled:m1", BudgetMinutes: 20, MaxConcurrency: 1})
 	if err != nil {
@@ -181,7 +181,7 @@ func TestControlCycleRecoversLostClaimPublishesOutboxAndConvergesCancellation(t 
 	if err != nil {
 		t.Fatal(err)
 	}
-	binding, err := journal.EnsureProjectBinding(ctx, execution.ProjectBinding{ProjectID: "project-1", Provider: "appdeck",
+	binding, err := journal.EnsureProjectBinding(ctx, execution.ProjectBinding{ProjectID: "project-1", Provider: "deck",
 		Repository: "disabled://m1", Runtime: "disabled:m1", PolicyVersion: "m1", ContextConfig: "disabled:m1",
 		ArtifactConfig: "disabled:m1", DeliveryConfig: "disabled:m1", BudgetMinutes: 20, MaxConcurrency: 1})
 	if err != nil {
@@ -294,7 +294,7 @@ func TestControlCycleAcksCancelAfterHeartbeatAdvancesVersion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	binding, err := journal.EnsureProjectBinding(ctx, execution.ProjectBinding{ProjectID: "project-cancel-heartbeat", Provider: "appdeck",
+	binding, err := journal.EnsureProjectBinding(ctx, execution.ProjectBinding{ProjectID: "project-cancel-heartbeat", Provider: "deck",
 		Repository: "disabled://m1", Runtime: "disabled:m1", PolicyVersion: "m1", ContextConfig: "disabled:m1",
 		ArtifactConfig: "disabled:m1", DeliveryConfig: "disabled:m1", BudgetMinutes: 20, MaxConcurrency: 1})
 	if err != nil {
@@ -343,7 +343,7 @@ func TestControlCycleNeverBindsClaimReapedBeforeRecovery(t *testing.T) {
 	}
 	defer journal.Close()
 	identity, _ := journal.EnsureInstallationIdentity(ctx)
-	binding, _ := journal.EnsureProjectBinding(ctx, execution.ProjectBinding{ProjectID: "project-reaped", Provider: "appdeck",
+	binding, _ := journal.EnsureProjectBinding(ctx, execution.ProjectBinding{ProjectID: "project-reaped", Provider: "deck",
 		Repository: "disabled://m1", Runtime: "disabled:m1", PolicyVersion: "m1", ContextConfig: "disabled:m1",
 		ArtifactConfig: "disabled:m1", DeliveryConfig: "disabled:m1", BudgetMinutes: 20, MaxConcurrency: 1})
 	provider := &controlProviderStub{work: workcontrol.WorkItem{ID: "task-reaped", ProjectID: binding.ProjectID,
@@ -391,7 +391,7 @@ func TestControlCycleRecoversDurableIntentBeforeClaimAndClaimedRunBeforeBind(t *
 				t.Fatal(err)
 			}
 			identity, _ := journal.EnsureInstallationIdentity(ctx)
-			binding, _ := journal.EnsureProjectBinding(ctx, execution.ProjectBinding{ProjectID: "project-" + crashPoint, Provider: "appdeck",
+			binding, _ := journal.EnsureProjectBinding(ctx, execution.ProjectBinding{ProjectID: "project-" + crashPoint, Provider: "deck",
 				Repository: "disabled://m1", Runtime: "disabled:m1", PolicyVersion: "m1", ContextConfig: "disabled:m1",
 				ArtifactConfig: "disabled:m1", DeliveryConfig: "disabled:m1", BudgetMinutes: 20, MaxConcurrency: 1})
 			provider := &controlProviderStub{work: workcontrol.WorkItem{ID: "task-" + crashPoint, ProjectID: binding.ProjectID,
@@ -455,7 +455,7 @@ func TestControlControllerRejectsOverlappingCycles(t *testing.T) {
 	}
 	defer journal.Close()
 	identity, _ := journal.EnsureInstallationIdentity(ctx)
-	binding, _ := journal.EnsureProjectBinding(ctx, execution.ProjectBinding{ProjectID: "project-overlap", Provider: "appdeck",
+	binding, _ := journal.EnsureProjectBinding(ctx, execution.ProjectBinding{ProjectID: "project-overlap", Provider: "deck",
 		Repository: "disabled://m1", Runtime: "disabled:m1", PolicyVersion: "m1", ContextConfig: "disabled:m1",
 		ArtifactConfig: "disabled:m1", DeliveryConfig: "disabled:m1", BudgetMinutes: 20, MaxConcurrency: 1})
 	provider := &controlProviderStub{events: map[string]workcontrol.ProjectedEvent{}, listReadyStarted: make(chan struct{}), listReadyRelease: make(chan struct{})}

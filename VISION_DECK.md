@@ -1,8 +1,8 @@
-# AppDeck Vision
+# Deck Vision
 
 ## Purpose
 
-AppDeck is the lightweight operator surface for authorized agent work, usable locally and on infrastructure controlled by its operator.
+Deck is the lightweight operator surface for authorized agent work, usable locally and on infrastructure controlled by its operator.
 
 It gives people a clear place to define outcomes and approval boundaries, lets agents claim structured work, and keeps every plan, decision, event, artifact, and result visible and auditable.
 
@@ -11,21 +11,21 @@ for review, and exceptions. It forms one coherent installation with Marina while
 retaining its separate service and public API. General project-management and chat
 expansion are deferred under [decision 0007](docs/decisions/0007-sovereign-first-usable-release.md).
 
-AppDeck is not intended to be a "main brain" that understands or executes everything. It is the shared contract between humans and replaceable agent runtimes: a dependable place to coordinate, observe, steer, and verify work.
+Deck is not intended to be a "main brain" that understands or executes everything. It is the shared contract between humans and replaceable agent runtimes: a dependable place to coordinate, observe, steer, and verify work.
 
 ## Supported release boundary
 
-AppDeck and Marina run as separate services over HTTP/JSON. The current repository
+Deck and Marina run as separate services over HTTP/JSON. The current repository
 workflow supports cancellation, one implementation and one separate deterministic
 verification attempt, and ends at a PR ready for human review or a blocker.
-AppDeck's broader command ledger does not implement pause/resume in Marina.
+Deck's broader command ledger does not implement pause/resume in Marina.
 Headless/in-process packaging, automatic CI/review revisions, independent semantic
 review, merge and deployment authority remain future work. The broader controls
 and integrations below describe product direction, not supported runtime behavior.
 
 ## Proposed way of working
 
-AppDeck and Marina should feel like one product: define work on a board or discuss it in a project web conversation, delegate to a configured agent, and return later to progress, a result, or a focused question. Marina executes the work on operator-controlled Kubernetes infrastructure. AppDeck keeps the task, conversation, decisions, and result accessible across devices.
+Deck and Marina should feel like one product: define work on a board or discuss it in a project web conversation, delegate to a configured agent, and return later to progress, a result, or a focused question. Marina executes the work on operator-controlled Kubernetes infrastructure. Deck keeps the task, conversation, decisions, and result accessible across devices.
 
 The board organizes work; conversation develops intent and supports delegation; an inbox brings back results awaiting review and decisions requiring attention. All three refer to the same task and history. Operators should be able to use either a task or a conversation as their starting point.
 
@@ -55,7 +55,7 @@ An agent declaring a task complete is not sufficient. A completed run should inc
 
 ### Agents are replaceable
 
-AppDeck should expose a small, stable protocol through an API, CLI, and eventually an MCP adapter. Agent runtimes remain outside the core application so that different tools and models can participate without becoming hard dependencies.
+Deck should expose a small, stable protocol through an API, CLI, and eventually an MCP adapter. Agent runtimes remain outside the core application so that different tools and models can participate without becoming hard dependencies.
 
 ### Local first, portable by design
 
@@ -67,7 +67,7 @@ Every run should support limits for time, attempts, cost or token usage, and per
 
 ## Core experience
 
-AppDeck should provide:
+Deck should provide:
 
 - A backlog and Kanban-style board for organizing work.
 - Structured tasks with an outcome, context, constraints, acceptance criteria, priority, dependencies, and budget.
@@ -119,7 +119,7 @@ The product should begin as one application process with:
 
 ```text
 Human -- Web UI ---------+
-                         +-- AppDeck control plane
+                         +-- Deck control plane
 Agents -- API/CLI/MCP ---+           |
                                      +-- SQLite
                                      +-- artifacts and exports
@@ -155,7 +155,7 @@ These capabilities can be evaluated after the core human-agent contract has prov
 
 ## Product differentiation
 
-Backlogs and boards are familiar entry points, not the primary differentiation. AppDeck's value comes from making agent work interruptible, observable, and verifiable through:
+Backlogs and boards are familiar entry points, not the primary differentiation. Deck's value comes from making agent work interruptible, observable, and verifiable through:
 
 - Plan review before execution.
 - Structured human decisions.

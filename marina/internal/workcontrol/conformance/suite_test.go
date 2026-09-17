@@ -144,7 +144,7 @@ func (subject *subjectStub) BlockRun(_ context.Context, runID string, block work
 func TestVerifyExercisesOneExactLifecycle(t *testing.T) {
 	now := time.Now().UTC()
 	fixtures := Fixtures{
-		Provider: ProviderFixture{Provider: "appdeck", ProtocolVersion: workcontrol.ProtocolVersion},
+		Provider: ProviderFixture{Provider: "deck", ProtocolVersion: workcontrol.ProtocolVersion},
 		Agent: AgentFixture{
 			ID: "agent-fixture", Name: "Marina conformance agent", Kind: "marina",
 			InstallationID: "installation-conformance",
@@ -160,7 +160,7 @@ func TestVerifyExercisesOneExactLifecycle(t *testing.T) {
 	}
 	subject := &subjectStub{
 		info: workcontrol.ProviderInfo{
-			Provider: "appdeck", ProtocolVersion: workcontrol.ProtocolVersion,
+			Provider: "deck", ProtocolVersion: workcontrol.ProtocolVersion,
 			Capabilities: append([]string(nil), lifecycleCapabilities...),
 			ServerTime:   now, Ready: true, Readiness: map[string]string{"store": "available"},
 		},
@@ -191,12 +191,12 @@ func TestVerifyRejectsMissingCapabilityBeforeMutation(t *testing.T) {
 	now := time.Now().UTC()
 	subject := &subjectStub{
 		info: workcontrol.ProviderInfo{
-			Provider: "appdeck", ProtocolVersion: workcontrol.ProtocolVersion,
+			Provider: "deck", ProtocolVersion: workcontrol.ProtocolVersion,
 			Capabilities: []string{workcontrol.CapabilityProviderInfo},
 			ServerTime:   now, Ready: true,
 		},
 	}
-	fixtures := Fixtures{Provider: ProviderFixture{Provider: "appdeck", ProtocolVersion: workcontrol.ProtocolVersion}}
+	fixtures := Fixtures{Provider: ProviderFixture{Provider: "deck", ProtocolVersion: workcontrol.ProtocolVersion}}
 
 	_, err := Verify(context.Background(), subject, fixtures, "task-real-1")
 	if err == nil || !strings.Contains(err.Error(), workcontrol.CapabilityAgentRegister) {

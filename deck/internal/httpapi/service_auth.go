@@ -25,7 +25,7 @@ var (
 	ErrServiceAuthUnavailable = errors.New("service authorization policy is unavailable")
 )
 
-// ServiceIdentity is the stable AppDeck principal represented by an opaque
+// ServiceIdentity is the stable Deck principal represented by an opaque
 // credential. Projects and capabilities are deliberately explicit; wildcard
 // grants would make it too easy to expand Marina's authority accidentally.
 type ServiceIdentity struct {

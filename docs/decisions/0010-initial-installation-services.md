@@ -2,7 +2,7 @@
 
 - Status: accepted initial configuration direction; credentials, model, repository, and live validation remain pending
 - Date: 2026-09-17
-- Scope: AppDeck and Marina development installation and first repository pilot
+- Scope: Deck and Marina development installation and first repository pilot
 
 ## Decisions
 
@@ -15,8 +15,8 @@ selection is required.
 | --- | --- |
 | Model inference | OpenRouter using an operator-supplied API token. Select and test a compatible model before the first live coding run. |
 | Source control | GitHub for the acceptance repository, branches, pull requests, and configured CI checks. |
-| Durable application state | Keep the existing separate AppDeck and Marina SQLite databases on separate Kubernetes persistent volumes. |
-| Artifacts | Keep Marina's existing file artifact store on its persistent volume; AppDeck accesses it through the authenticated API. |
+| Durable application state | Keep the existing separate Deck and Marina SQLite databases on separate Kubernetes persistent volumes. |
+| Artifacts | Keep Marina's existing file artifact store on its persistent volume; Deck accesses it through the authenticated API. |
 | Images and packaged dependencies | Use GitHub's container registry, GHCR, for published application/worker images. Preload images locally when useful. Package the dependencies needed by the acceptance checks in the worker image or repository. |
 | Backups | Defer backup automation and restore drills for the current pilot. They are not an acceptance prerequisite at this stage. |
 | Runtime connectivity | The running platform requires only GitHub services and OpenRouter externally. Internal service traffic, Kubernetes API access, and cluster DNS remain inside the installation. |

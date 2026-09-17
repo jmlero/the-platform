@@ -37,7 +37,7 @@ func TestCancelIsNotAcknowledgedUntilJobTerminationIsObserved(t *testing.T) {
 	}
 	defer journal.Close()
 	now := time.Now().UTC()
-	e, _, err := journal.EnsureExecution(ctx, execution.NewExecution{WorkProvider: "appdeck", ExternalWorkID: "task", ExternalRunID: "run", AgentID: "agent", LeaseExpiresAt: now.Add(time.Minute), Budget: execution.Budget{DeadlineAt: now.Add(time.Hour), MaxAttempts: 2, MaxTokens: 10000}})
+	e, _, err := journal.EnsureExecution(ctx, execution.NewExecution{WorkProvider: "deck", ExternalWorkID: "task", ExternalRunID: "run", AgentID: "agent", LeaseExpiresAt: now.Add(time.Minute), Budget: execution.Budget{DeadlineAt: now.Add(time.Hour), MaxAttempts: 2, MaxTokens: 10000}})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -110,10 +110,10 @@
 
   onMount(() => {
 		const handleUnauthenticated = () => resetAuthenticatedWorkspace();
-		window.addEventListener('appdeck:unauthenticated', handleUnauthenticated);
+		window.addEventListener('deck:unauthenticated', handleUnauthenticated);
 		void initializeSession();
     return () => {
-			window.removeEventListener('appdeck:unauthenticated', handleUnauthenticated);
+			window.removeEventListener('deck:unauthenticated', handleUnauthenticated);
 			unsubscribeLiveEvents?.();
       if (refreshTimer) clearTimeout(refreshTimer);
     };
@@ -128,7 +128,7 @@
 			if (!session) {
 				loginError = '';
 			} else {
-				error = caught instanceof Error ? caught.message : 'Could not load AppDeck.';
+				error = caught instanceof Error ? caught.message : 'Could not load Deck.';
 			}
 		} finally {
 			sessionChecking = false;
@@ -193,7 +193,7 @@
       providerStatus = snapshot.provider_status;
       error = '';
     } catch (caught) {
-      error = caught instanceof Error ? caught.message : 'Could not load AppDeck.';
+      error = caught instanceof Error ? caught.message : 'Could not load Deck.';
     } finally {
       loading = false;
     }
@@ -310,7 +310,7 @@
 </script>
 
 <svelte:head>
-  <title>AppDeck · Agent control plane</title>
+  <title>Deck · Agent control plane</title>
 </svelte:head>
 
 {#if sessionChecking}
@@ -322,7 +322,7 @@
 		<section class="auth-card" aria-labelledby="operator-login-title">
 			<div class="brand auth-brand">
 				<span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
-				<div><strong>AppDeck</strong><small>CONTROL PLANE</small></div>
+				<div><strong>Deck</strong><small>CONTROL PLANE</small></div>
 			</div>
 			<span class="eyebrow">Operator access</span>
 			<h1 id="operator-login-title">Sign in to the control room</h1>
@@ -338,7 +338,7 @@
 				/>
 				{#if loginError}<div class="auth-error" role="alert">{loginError}</div>{/if}
 				<button type="submit" disabled={authenticating || loginToken.length < 32}>
-					{authenticating ? 'Signing in…' : 'Enter AppDeck'} <ArrowRight size={15} />
+					{authenticating ? 'Signing in…' : 'Enter Deck'} <ArrowRight size={15} />
 				</button>
 			</form>
 			<small class="auth-note">The token is exchanged for a revocable 12-hour browser session.</small>
@@ -353,12 +353,12 @@
   <aside class:mobile-open={sidebarOpen} class="sidebar">
     <div class="brand">
       <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
-      <div><strong>AppDeck</strong><small>CONTROL PLANE</small></div>
+      <div><strong>Deck</strong><small>CONTROL PLANE</small></div>
     </div>
 
     <button class="workspace-switcher" type="button">
       <span class="workspace-icon"><Layers3 size={15} /></span>
-      <span><small>Workspace</small><strong>AppDeck</strong></span>
+      <span><small>Workspace</small><strong>Deck</strong></span>
       <ChevronDown size={14} />
     </button>
 
@@ -417,7 +417,7 @@
         <Menu size={18} />
       </button>
       <div class="location">
-        <span>AppDeck</span><span>/</span><strong>{activeView === 'factory' ? 'Task board' : activeView}</strong>
+        <span>Deck</span><span>/</span><strong>{activeView === 'factory' ? 'Task board' : activeView}</strong>
       </div>
       <div class="topbar-actions">
         <label class="search-box">
@@ -432,7 +432,7 @@
         <span class:offline={!connected} class="connection">
           {#if connected}<Wifi size={13} /> Live{:else}<WifiOff size={13} /> Reconnecting{/if}
         </span>
-				<a class="export-link" href={api.exportURL()} download="appdeck-export.json" title="Export deterministic project ledger"><Download size={15} /></a>
+				<a class="export-link" href={api.exportURL()} download="deck-export.json" title="Export deterministic project ledger"><Download size={15} /></a>
 				<label class="export-link import-link" title="Import into an empty project ledger"><Upload size={15} /><input type="file" accept="application/json,.json" on:change={importProject} /></label>
 				{#if session.expires_at}
 					<span class="operator-name">{session.operator_id}</span>

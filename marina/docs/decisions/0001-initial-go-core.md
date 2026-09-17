@@ -17,15 +17,15 @@ This decision applies to the initial control service, not to every future runtim
 
 - Go produces one small deployable binary with straightforward process and concurrency behavior.
 - Kubernetes tooling and conventions are well supported.
-- AppDeck is currently implemented in Go, reducing incidental friction while the integration protocol is established.
-- The standard library is sufficient for the first HTTP service, AppDeck adapter, configuration, and tests.
+- Deck is currently implemented in Go, reducing incidental friction while the integration protocol is established.
+- The standard library is sufficient for the first HTTP service, Deck adapter, configuration, and tests.
 - The choice can be evaluated through working code before the system accumulates a large dependency surface.
 
 ## Consequences
 
 - The first build and test workflow requires Go 1.26.
 - Core contracts must remain protocol-oriented so runtime adapters can use different languages or deployment systems.
-- Sharing a language with AppDeck must not become code-level coupling or shared persistence.
+- Sharing a language with Deck must not become code-level coupling or shared persistence.
 - Provider SDKs and Kubernetes client libraries are deferred until a concrete adapter requires them.
 
 ## Revisit when

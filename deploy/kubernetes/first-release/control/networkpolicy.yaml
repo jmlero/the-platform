@@ -1,11 +1,11 @@
 # Restrict control-plane ingress. Label the chosen ingress controller namespace
-# marina.dev/operator-ingress=true to grant it AppDeck access.
+# marina.dev/operator-ingress=true to grant it Deck access.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
-metadata: {name: appdeck-ingress}
+metadata: {name: deck-ingress}
 spec:
   podSelector:
-    matchLabels: {app.kubernetes.io/name: appdeck}
+    matchLabels: {app.kubernetes.io/name: deck}
   policyTypes: [Ingress]
   ingress:
     - from:
@@ -30,16 +30,16 @@ spec:
           podSelector:
             matchLabels: {app.kubernetes.io/name: marina-worker}
         - podSelector:
-            matchLabels: {app.kubernetes.io/name: appdeck}
+            matchLabels: {app.kubernetes.io/name: deck}
       ports: [{protocol: TCP, port: 8090}]
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: appdeck-egress
+  name: deck-egress
 spec:
   podSelector:
-    matchLabels: {app.kubernetes.io/name: appdeck}
+    matchLabels: {app.kubernetes.io/name: deck}
   policyTypes: [Egress]
   egress:
     - to:

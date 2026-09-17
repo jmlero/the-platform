@@ -27,7 +27,7 @@ const (
 	operationReportOperational    = "operation.report"
 )
 
-// Mutation identifies one retriable request. AppDeck scopes keys by canonical
+// Mutation identifies one retriable request. Deck scopes keys by canonical
 // project, stable caller identity, and operation; the resource and request body
 // are part of the digest so reuse for different input is rejected.
 type Mutation struct {
@@ -37,7 +37,7 @@ type Mutation struct {
 }
 
 // RunGuard proves that a caller still owns the current authority epoch. It is
-// optional only for AppDeck's in-process demo; service handlers require it.
+// optional only for Deck's in-process demo; service handlers require it.
 type RunGuard struct {
 	AgentID         string `json:"agent_id"`
 	ExpectedVersion int64  `json:"expected_version"`

@@ -653,7 +653,7 @@ func (s *Store) SeedDemo(ctx context.Context) error {
 	}
 	seed := []domain.CreateTaskInput{
 		{
-			Title:              "Capture the AppDeck product vision",
+			Title:              "Capture the Deck product vision",
 			Description:        "Write down the control-plane vision and keep the first release focused.",
 			AcceptanceCriteria: "A committed vision document explains principles, lifecycle, architecture, and non-goals.",
 			Status:             domain.TaskDone,
@@ -670,7 +670,7 @@ func (s *Store) SeedDemo(ctx context.Context) error {
 		},
 		{
 			Title:              "Draft the first MCP tool contract",
-			Description:        "Describe the smallest set of tools an external agent needs to participate in AppDeck.",
+			Description:        "Describe the smallest set of tools an external agent needs to participate in Deck.",
 			AcceptanceCriteria: "The proposal covers discovery, claiming, planning, decisions, heartbeats, events, and completion.",
 			Status:             domain.TaskBacklog,
 			Priority:           "high",

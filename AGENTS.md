@@ -11,26 +11,26 @@ Before planning or changing cross-product behavior, read:
 1. [README.md](README.md)
 2. [ARCHITECTURE.md](ARCHITECTURE.md)
 3. [TODO.md](TODO.md)
-4. The affected product's README and root vision: [VISION_DECK.md](VISION_DECK.md) for AppDeck or [VISION.md](VISION.md) for Marina
+4. The affected product's README and root vision: [VISION_DECK.md](VISION_DECK.md) for Deck or [VISION.md](VISION.md) for Marina
 5. [marina/AGENTS.md](marina/AGENTS.md) for any Marina change
 
 ## Product boundaries
 
-- `cli/` owns `platformctl`: a stateless operator client that uses AppDeck's public HTTP/JSON API and owns no authoritative platform state.
-- `deck/` owns AppDeck: human steering and the authoritative work-control ledger.
+- `cli/` owns `platformctl`: a stateless operator client that uses Deck's public HTTP/JSON API and owns no authoritative platform state.
+- `deck/` owns Deck: human steering and the authoritative work-control ledger.
 - `marina/` owns Marina: durable autonomous execution and reconciliation.
 - Keep separate Go modules, binaries, databases where applicable, images, identities, deployments, migrations, and release versions.
 - Neither product may import the other's internal packages. Integration goes through the versioned HTTP/JSON contract.
 - Terminal clients must not import product internals or read product databases; they interact through supported public APIs.
-- AppDeck owns its provider-specific OpenAPI and canonical wire fixtures under `deck/api/`.
+- Deck owns its provider-specific OpenAPI and canonical wire fixtures under `deck/api/`.
 - Marina owns provider-neutral ports and the reusable consumer conformance suite under `marina/internal/workcontrol/`.
 - A joint contract item is complete only when both product checks and the real-process conformance test pass.
 
 ## Current supported behavior
 
-- The supported AppDeck–Marina pair uses HTTP/JSON and separate stores. Headless and in-process packaging remain future work.
+- The supported Deck–Marina pair uses HTTP/JSON and separate stores. Headless and in-process packaging remain future work.
 - The repository workflow ends at a PR ready for human review or a blocker, with one implementation and one separate deterministic verification attempt. It supports cancellation; pause/resume, automatic revision loops, independent semantic review, merge and deploy authority remain future work.
-- Distinguish AppDeck's command records and Marina's reusable foundations from behavior supported by the configured workflow.
+- Distinguish Deck's command records and Marina's reusable foundations from behavior supported by the configured workflow.
 
 ## Workflow
 

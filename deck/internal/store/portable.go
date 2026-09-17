@@ -9,7 +9,7 @@ import (
 	"github.com/jmlero/the-platform/deck/internal/domain"
 )
 
-const portableSchemaVersion = "appdeck-export/v1"
+const portableSchemaVersion = "deck-export/v1"
 
 type portableTask struct {
 	Task           domain.Task `json:"task"`
@@ -297,6 +297,10 @@ func (s *Store) ImportProject(ctx context.Context, encoded []byte) error {
 	var bundle portableBundle
 	if err := json.Unmarshal(encoded, &bundle); err != nil {
 		return fmt.Errorf("decode project import: %w", domain.ErrInvalidInput)
+	}
+	// Existing exports remain importable; all new exports use the Deck schema name.
+	if bundle.SchemaVersion == "appdeck-export/v1" {
+		bundle.SchemaVersion = portableSchemaVersion
 	}
 	if bundle.SchemaVersion != portableSchemaVersion || bundle.Project.ID == "" {
 		return fmt.Errorf("unsupported or incomplete project export: %w", domain.ErrInvalidInput)

@@ -14,25 +14,25 @@ RUN go mod download
 COPY cmd ./cmd
 COPY internal ./internal
 COPY --from=frontend /src/internal/webui/dist ./internal/webui/dist
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/appdeck ./cmd/appdeck
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/deck ./cmd/deck
 
 FROM alpine:3.22
 
 LABEL org.opencontainers.image.source="https://github.com/jmlero/the-platform" \
-      org.opencontainers.image.title="AppDeck" \
+      org.opencontainers.image.title="Deck" \
       org.opencontainers.image.description="Human-facing work-control plane for The Platform"
 
-RUN addgroup -S appdeck && adduser -S -G appdeck -u 10001 appdeck \
-    && mkdir -p /data && chown appdeck:appdeck /data
-COPY --from=backend /out/appdeck /usr/local/bin/appdeck
+RUN addgroup -S deck && adduser -S -G deck -u 10001 deck \
+    && mkdir -p /data && chown deck:deck /data
+COPY --from=backend /out/deck /usr/local/bin/deck
 
-USER appdeck
+USER deck
 EXPOSE 8080
 VOLUME ["/data"]
 
-ENV APPDECK_ADDR=:8080 \
-    APPDECK_DATA_DIR=/data \
-    APPDECK_DEMO_AGENT=true \
-    APPDECK_LOG_LEVEL=info
+ENV DECK_ADDR=:8080 \
+    DECK_DATA_DIR=/data \
+    DECK_DEMO_AGENT=true \
+    DECK_LOG_LEVEL=info
 
-ENTRYPOINT ["/usr/local/bin/appdeck"]
+ENTRYPOINT ["/usr/local/bin/deck"]

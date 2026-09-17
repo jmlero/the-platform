@@ -53,7 +53,7 @@ The factory becomes responsible for repeatedly carrying out the bounded engineer
 | Factory concept | Marina equivalent |
 | --- | --- |
 | Factory control system | Marina |
-| Operator control room | AppDeck plugin |
+| Operator control room | Deck plugin |
 | Factory floor | Kubernetes |
 | Autonomous work cell | Isolated agent runtime |
 | Machine and tooling | Agent harness, tools, and sandbox |
@@ -97,7 +97,7 @@ Imagine a dependency vulnerability is detected at 02:00:
 8. The agent fixes resulting CI or review failures.
 9. It creates a merge-ready PR—or merges if policy permits.
 10. If deployed, Marina observes the canary and either confirms the outcome or rolls back.
-11. AppDeck contains the complete evidence when you wake up.
+11. Deck contains the complete evidence when you wake up.
 
 If the upgrade requires a breaking database migration, Marina pauses and asks you. That does not mean the factory failed. Correct escalation is part of autonomous operation.
 

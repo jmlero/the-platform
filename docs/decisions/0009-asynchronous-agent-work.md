@@ -2,7 +2,7 @@
 
 - Status: proposed interaction model; release sequencing and detailed behavior remain open
 - Date: 2026-09-17
-- Scope: AppDeck and Marina product vision
+- Scope: Deck and Marina product vision
 
 ## Context
 
@@ -13,7 +13,7 @@ Relevant context should remain available across tasks and devices.
 
 ## Proposed direction
 
-AppDeck and Marina form one product experience while retaining their existing
+Deck and Marina form one product experience while retaining their existing
 service boundaries. Independent product experiences remain a future option.
 
 - The board organizes tasks and priorities and can initiate authorized work.

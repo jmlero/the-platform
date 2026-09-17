@@ -14,7 +14,7 @@ import (
 
 func TestHumanAgentLifecycle(t *testing.T) {
 	ctx := context.Background()
-	appStore, err := Open(ctx, filepath.Join(t.TempDir(), "appdeck-test.db"))
+	appStore, err := Open(ctx, filepath.Join(t.TempDir(), "deck-test.db"))
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}
@@ -94,7 +94,7 @@ func TestHumanAgentLifecycle(t *testing.T) {
 
 func TestManualMoveRejectsActiveTask(t *testing.T) {
 	ctx := context.Background()
-	appStore, err := Open(ctx, filepath.Join(t.TempDir(), "appdeck-test.db"))
+	appStore, err := Open(ctx, filepath.Join(t.TempDir(), "deck-test.db"))
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}
@@ -118,7 +118,7 @@ func TestManualMoveRejectsActiveTask(t *testing.T) {
 
 func TestClaimIdempotencySurvivesRestartAndRejectsDifferentPayload(t *testing.T) {
 	ctx := context.Background()
-	databasePath := filepath.Join(t.TempDir(), "appdeck-idempotency-restart.db")
+	databasePath := filepath.Join(t.TempDir(), "deck-idempotency-restart.db")
 	appStore, err := Open(ctx, databasePath)
 	if err != nil {
 		t.Fatalf("open store: %v", err)
@@ -174,7 +174,7 @@ func TestClaimIdempotencySurvivesRestartAndRejectsDifferentPayload(t *testing.T)
 
 func TestConcurrentClaimRetriesConvergeOnOneResult(t *testing.T) {
 	ctx := context.Background()
-	appStore, err := Open(ctx, filepath.Join(t.TempDir(), "appdeck-idempotency-concurrent.db"))
+	appStore, err := Open(ctx, filepath.Join(t.TempDir(), "deck-idempotency-concurrent.db"))
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}
@@ -231,7 +231,7 @@ func TestConcurrentClaimRetriesConvergeOnOneResult(t *testing.T) {
 
 func TestAllRunMutationsReplayWithoutDuplicateEffects(t *testing.T) {
 	ctx := context.Background()
-	appStore, err := Open(ctx, filepath.Join(t.TempDir(), "appdeck-idempotency-lifecycle.db"))
+	appStore, err := Open(ctx, filepath.Join(t.TempDir(), "deck-idempotency-lifecycle.db"))
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}

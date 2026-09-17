@@ -17,7 +17,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/jmlero/the-platform/marina/internal/appdeck"
+	"github.com/jmlero/the-platform/marina/internal/deck"
 	"github.com/jmlero/the-platform/marina/internal/execution"
 	"github.com/jmlero/the-platform/marina/internal/flow"
 	"github.com/jmlero/the-platform/marina/internal/httpserver"
@@ -37,6 +37,15 @@ func run(arguments []string, stdout io.Writer, stderr io.Writer) int {
 	if len(arguments) == 0 {
 		writeUsage(stderr)
 		return 2
+	}
+	if arguments[0] == "serve" || arguments[0] == "doctor" {
+		for _, entry := range os.Environ() {
+			name, _, _ := strings.Cut(entry, "=")
+			if strings.HasPrefix(name, "MARINA_APPDECK_") {
+				_, _ = fmt.Fprintf(stderr, "rename environment variable %s to %s\n", name, strings.Replace(name, "MARINA_APPDECK_", "MARINA_DECK_", 1))
+				return 2
+			}
+		}
 	}
 
 	switch arguments[0] {
@@ -105,29 +114,29 @@ func runDiagnostics(arguments []string, stdout io.Writer, stderr io.Writer) int 
 func runDoctor(arguments []string, stdout io.Writer, stderr io.Writer) int {
 	flags := flag.NewFlagSet("doctor", flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	serverURL := flags.String("appdeck-url", envOrDefault("MARINA_APPDECK_URL", "http://localhost:8080"), "AppDeck server URL")
+	serverURL := flags.String("deck-url", envOrDefault("MARINA_DECK_URL", "http://localhost:8080"), "Deck server URL")
 	tokenFile := flags.String(
-		"appdeck-token-file",
-		envOrDefault("MARINA_APPDECK_TOKEN_FILE", ""),
-		"file containing the AppDeck service Bearer token",
+		"deck-token-file",
+		envOrDefault("MARINA_DECK_TOKEN_FILE", ""),
+		"file containing the Deck service Bearer token",
 	)
 	if err := flags.Parse(arguments); err != nil {
 		return 2
 	}
 
-	client, err := newAppDeckClient(*serverURL, *tokenFile, &http.Client{Timeout: 5 * time.Second})
+	client, err := newDeckClient(*serverURL, *tokenFile, &http.Client{Timeout: 5 * time.Second})
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "configure AppDeck: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "configure Deck: %v\n", err)
 		return 1
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := client.Health(ctx); err != nil {
-		_, _ = fmt.Fprintf(stderr, "AppDeck unavailable: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "Deck unavailable: %v\n", err)
 		return 1
 	}
 
-	_, _ = fmt.Fprintln(stdout, "AppDeck: available")
+	_, _ = fmt.Fprintln(stdout, "Deck: available")
 	return 0
 }
 
@@ -154,11 +163,11 @@ func runServe(arguments []string, stderr io.Writer) int {
 	intakeEnabled := flags.Bool("intake-enabled", true, "discover new work; disabling preserves reconciliation of journaled work")
 	tlsCertFile := flags.String("tls-cert-file", envOrDefault("MARINA_TLS_CERT_FILE", ""), "server TLS certificate; also available without a workflow")
 	tlsKeyFile := flags.String("tls-key-file", envOrDefault("MARINA_TLS_KEY_FILE", ""), "server TLS private key")
-	serverURL := flags.String("appdeck-url", envOrDefault("MARINA_APPDECK_URL", "http://localhost:8080"), "AppDeck server URL")
+	serverURL := flags.String("deck-url", envOrDefault("MARINA_DECK_URL", "http://localhost:8080"), "Deck server URL")
 	tokenFile := flags.String(
-		"appdeck-token-file",
-		envOrDefault("MARINA_APPDECK_TOKEN_FILE", ""),
-		"file containing the AppDeck service Bearer token",
+		"deck-token-file",
+		envOrDefault("MARINA_DECK_TOKEN_FILE", ""),
+		"file containing the Deck service Bearer token",
 	)
 	journalPath := flags.String(
 		"journal-path",
@@ -173,7 +182,7 @@ func runServe(arguments []string, stderr io.Writer) int {
 	runLease := flags.Duration(
 		"run-lease",
 		runLeaseDefault,
-		"AppDeck lease duration requested by heartbeats",
+		"Deck lease duration requested by heartbeats",
 	)
 	reconcileInterval := flags.Duration(
 		"reconcile-interval",
@@ -209,9 +218,9 @@ func runServe(arguments []string, stderr io.Writer) int {
 			return 2
 		}
 	}
-	client, err := newAppDeckClient(*serverURL, *tokenFile, &http.Client{Timeout: 5 * time.Second}, appdeck.WithRequiredCapabilities(requiredCapabilities))
+	client, err := newDeckClient(*serverURL, *tokenFile, &http.Client{Timeout: 5 * time.Second}, deck.WithRequiredCapabilities(requiredCapabilities))
 	if err != nil {
-		logger.Error("configure AppDeck", "error", err)
+		logger.Error("configure Deck", "error", err)
 		return 1
 	}
 	startupCtx, cancelStartup := context.WithTimeout(context.Background(), 10*time.Second)
@@ -249,7 +258,7 @@ func runServe(arguments []string, stderr io.Writer) int {
 		return 1
 	}
 	bindingInput := execution.ProjectBinding{
-		ProjectID: envOrDefault("MARINA_APPDECK_PROJECT_ID", "prj_default"), Provider: "appdeck",
+		ProjectID: envOrDefault("MARINA_DECK_PROJECT_ID", "prj_default"), Provider: "deck",
 		Repository: envOrDefault("MARINA_REPOSITORY", "disabled://milestone-one"), Runtime: "disabled:milestone-one",
 		PolicyVersion: envOrDefault("MARINA_POLICY_VERSION", "milestone-one"), ContextConfig: "disabled:milestone-one",
 		ArtifactConfig: "disabled:milestone-one", DeliveryConfig: "disabled:milestone-one",
@@ -393,7 +402,7 @@ func runServe(arguments []string, stderr io.Writer) int {
 		logger.Info(
 			"Marina HTTP service starting",
 			"address", *address,
-			"appdeck_url", *serverURL,
+			"deck_url", *serverURL,
 			"journal_path", *journalPath,
 			"reconcile_interval", reconcileInterval.String(),
 		)
@@ -498,12 +507,12 @@ func envOrDefault(name string, fallback string) string {
 	return fallback
 }
 
-func newAppDeckClient(serverURL string, tokenFile string, httpClient *http.Client, additional ...appdeck.Option) (*appdeck.Client, error) {
-	options := append([]appdeck.Option(nil), additional...)
+func newDeckClient(serverURL string, tokenFile string, httpClient *http.Client, additional ...deck.Option) (*deck.Client, error) {
+	options := append([]deck.Option(nil), additional...)
 	if strings.TrimSpace(tokenFile) != "" {
-		options = append(options, appdeck.WithBearerTokenFile(tokenFile))
+		options = append(options, deck.WithBearerTokenFile(tokenFile))
 	}
-	return appdeck.New(serverURL, httpClient, options...)
+	return deck.New(serverURL, httpClient, options...)
 }
 
 func envDurationOrDefault(name string, fallback time.Duration) (time.Duration, error) {

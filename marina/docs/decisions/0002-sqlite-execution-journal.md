@@ -31,7 +31,7 @@ Use SQLite in WAL mode as Marina's initial internal execution journal.
 - Store the file on a single-writer persistent volume in Kubernetes.
 - Keep the journal behind an internal contract and migrations.
 - Use uniqueness constraints and guarded versions for idempotency and concurrency.
-- Keep AppDeck and Marina persistence separate; never share or directly query AppDeck's database.
+- Keep Deck and Marina persistence separate; never share or directly query Deck's database.
 - Use the pure-Go `modernc.org/sqlite` driver so the Marina binary does not require CGO.
 
 ## Consequences

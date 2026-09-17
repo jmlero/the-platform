@@ -11,7 +11,7 @@ Before planning or changing Marina, read these files completely:
 1. [README.md](README.md) — concise project orientation.
 2. [../VISION.md](../VISION.md) — product intent, boundaries, principles, and open decisions.
 3. [../DARK_FACTORY.md](../DARK_FACTORY.md) — the operational definition of a dark software factory.
-4. [../ARCHITECTURE.md](../ARCHITECTURE.md) — joint AppDeck–Marina ownership, protocols, lifecycle, and failure semantics.
+4. [../ARCHITECTURE.md](../ARCHITECTURE.md) — joint Deck–Marina ownership, protocols, lifecycle, and failure semantics.
 
 Treat these documents as the current product source of truth. A new explicit user decision takes precedence; update the relevant document when that decision changes the product direction.
 
@@ -29,7 +29,7 @@ The goal is not faster typing or more pull requests. The goal is safe, useful, e
 - Carry forward the creator's experience from `platform-marina`, not its architecture, code, backlog, layer model, providers, or assumptions.
 - Design for one operator and personal repositories first. Do not add multi-tenancy, organization administration, team RBAC, or billing without an explicit requirement.
 - Use Kubernetes as Marina's native installation and first execution substrate, but do not expose Kubernetes-specific concepts as Marina's public product model.
-- Use AppDeck over HTTP/JSON as the supported work-control provider. Keep the core provider-neutral; alternative providers and headless packaging remain future work.
+- Use Deck over HTTP/JSON as the supported work-control provider. Keep the core provider-neutral; alternative providers and headless packaging remain future work.
 - Keep work-control surfaces, agent harnesses, models, workflow engines, runtimes, context sources, policy and verification systems, delivery integrations, and platform services replaceable behind explicit governed contracts.
 - Stop at a pull request ready for human review. Merge/deploy authority needs a separately implemented and authorized workflow.
 
@@ -38,7 +38,7 @@ The goal is not faster typing or more pull requests. The goal is safe, useful, e
 | Term | Meaning in Marina |
 | --- | --- |
 | Marina | The always-on factory engine and integration host. |
-| AppDeck | The default pluggable human-steering, decision, and visibility component. |
+| Deck | The default pluggable human-steering, decision, and visibility component. |
 | Agent | A durable logical actor with identity, authority, state, budgets, and lifecycle; its compute may be ephemeral. |
 | Harness | The tools, sandbox, context handling, permissions, checkpoints, and exit conditions for one bounded agent run. |
 | Runtime adapter | A replaceable interface for starting, resuming, cancelling, and observing agent execution. |
@@ -124,13 +124,13 @@ Every new dependency or architectural commitment must earn its place against the
 
 Unless the user changes the direction, prefer work that advances this complete laptop-off slice:
 
-1. The operator creates a bounded task through the AppDeck plugin.
+1. The operator creates a bounded task through the Deck plugin.
 2. Always-on Marina claims it with a lease and persists the plan and execution state.
 3. A runtime adapter starts an isolated Kubernetes workload at a pinned repository revision.
 4. The agent receives the frozen task and pinned repository and implements the change; the broader context-package helpers still need workflow integration.
 5. A separate clean verification Job produces deterministic check evidence. Independent semantic review is future work.
 6. Marina creates a pull request and observes required CI at its current head. Failed checks or requested changes block; automatic revision loops remain future work.
-7. AppDeck shows truthful state, cost, decisions, artifacts, and evidence across restarts.
+7. Deck shows truthful state, cost, decisions, artifacts, and evidence across restarts.
 8. The run stops at a PR ready for human review or reports a focused blocker. It does not merge or deploy.
 
 Prefer one working vertical slice over broad scaffolding for later maturity stages.

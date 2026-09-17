@@ -5,18 +5,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; style-src 'unsafe-inline' blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; img-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; font-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; media-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; worker-src blob:; connect-src blob: data:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
-<title>AppDeck + Marina Architecture</title>
+<title>Deck + Marina Architecture</title>
 <style>:root{color-scheme:light dark;background:light-dark(rgb(255 255 255), rgb(24 24 24))}html,body{margin:0}body{box-sizing:border-box;padding:1rem;background:inherit}iframe{display:block;width:100%;max-width:736px;height:calc(100vh - 2rem);margin:0 auto;border:0}</style>
 </head>
 <body>
-<iframe sandbox="allow-scripts" referrerpolicy="no-referrer" title="AppDeck + Marina Architecture" srcdoc="&lt;!doctype html&gt;
+<iframe sandbox="allow-scripts" referrerpolicy="no-referrer" title="Deck + Marina Architecture" srcdoc="&lt;!doctype html&gt;
 &lt;html lang=&quot;en&quot;&gt;
 &lt;head&gt;
 &lt;meta charset=&quot;utf-8&quot;&gt;
 &lt;meta name=&quot;viewport&quot; content=&quot;width=device-width, initial-scale=1&quot;&gt;
 &lt;meta name=&quot;referrer&quot; content=&quot;no-referrer&quot;&gt;
 &lt;meta http-equiv=&quot;Content-Security-Policy&quot; content=&quot;default-src &#x27;none&#x27;; script-src &#x27;unsafe-inline&#x27; &#x27;unsafe-eval&#x27; &#x27;wasm-unsafe-eval&#x27; blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; style-src &#x27;unsafe-inline&#x27; blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; img-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; font-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; media-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; worker-src blob:; connect-src blob: data:; frame-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;&quot;&gt;
-&lt;title&gt;AppDeck + Marina Architecture&lt;/title&gt;
+&lt;title&gt;Deck + Marina Architecture&lt;/title&gt;
 &lt;style&gt;:root {
   color-scheme: light dark;
   background-color: var(--background) !important;
@@ -748,68 +748,68 @@ svg {
 html&gt;body{padding:0}&lt;/style&gt;
 &lt;/head&gt;
 &lt;body&gt;
-&lt;div id=&quot;appdeck-marina-explained&quot;&gt;
+&lt;div id=&quot;deck-marina-explained&quot;&gt;
   &lt;style&gt;
-    #appdeck-marina-explained {
-      --appdeck-color: var(--viz-series-1);
+    #deck-marina-explained {
+      --deck-color: var(--viz-series-1);
       --marina-color: var(--viz-series-2);
       --external-color: var(--viz-series-3);
       color: var(--foreground);
       width: 100%;
     }
 
-    #appdeck-marina-explained * {
+    #deck-marina-explained * {
       box-sizing: border-box;
     }
 
-    #appdeck-marina-explained .topline,
-    #appdeck-marina-explained .legend,
-    #appdeck-marina-explained .node-top,
-    #appdeck-marina-explained .detail-top,
-    #appdeck-marina-explained .feedback-belt,
-    #appdeck-marina-explained .boundary-strip {
+    #deck-marina-explained .topline,
+    #deck-marina-explained .legend,
+    #deck-marina-explained .node-top,
+    #deck-marina-explained .detail-top,
+    #deck-marina-explained .feedback-belt,
+    #deck-marina-explained .boundary-strip {
       display: flex;
       align-items: center;
       flex-wrap: wrap;
       gap: 8px;
     }
 
-    #appdeck-marina-explained .topline {
+    #deck-marina-explained .topline {
       justify-content: space-between;
       margin-bottom: 14px;
     }
 
-    #appdeck-marina-explained .topline .viz-controls {
+    #deck-marina-explained .topline .viz-controls {
       margin: 0;
     }
 
-    #appdeck-marina-explained .legend {
+    #deck-marina-explained .legend {
       color: var(--muted-foreground);
     }
 
-    #appdeck-marina-explained .legend-line {
+    #deck-marina-explained .legend-line {
       display: inline-block;
       width: 19px;
       border-top: 2px solid var(--foreground);
     }
 
-    #appdeck-marina-explained .legend-line.partial {
+    #deck-marina-explained .legend-line.partial {
       border-top-style: dotted;
     }
 
-    #appdeck-marina-explained .legend-line.planned {
+    #deck-marina-explained .legend-line.planned {
       border-top: 1px dashed var(--muted-foreground);
     }
 
-    #appdeck-marina-explained .explainer-view {
+    #deck-marina-explained .explainer-view {
       display: none;
     }
 
-    #appdeck-marina-explained .explainer-view.is-active {
+    #deck-marina-explained .explainer-view.is-active {
       display: block;
     }
 
-    #appdeck-marina-explained .overview-flow {
+    #deck-marina-explained .overview-flow {
       display: grid;
       grid-template-columns:
         minmax(0, 0.72fr) 28px
@@ -821,37 +821,37 @@ html&gt;body{padding:0}&lt;/style&gt;
       align-items: center;
     }
 
-    #appdeck-marina-explained .station {
+    #deck-marina-explained .station {
       min-width: 0;
       text-align: center;
     }
 
-    #appdeck-marina-explained .station-mark {
+    #deck-marina-explained .station-mark {
       min-width: 0;
       padding: 10px 6px;
       border-top: 3px solid var(--border);
       border-bottom: 1px solid var(--border);
     }
 
-    #appdeck-marina-explained .station-mark.human {
+    #deck-marina-explained .station-mark.human {
       border-top-color: color-mix(in srgb, var(--external-color) 72%, var(--border));
     }
 
-    #appdeck-marina-explained .station-mark.appdeck {
-      border-top-color: color-mix(in srgb, var(--appdeck-color) 78%, var(--border));
-      background: color-mix(in srgb, var(--appdeck-color) 10%, transparent);
+    #deck-marina-explained .station-mark.deck {
+      border-top-color: color-mix(in srgb, var(--deck-color) 78%, var(--border));
+      background: color-mix(in srgb, var(--deck-color) 10%, transparent);
     }
 
-    #appdeck-marina-explained .station-mark.marina {
+    #deck-marina-explained .station-mark.marina {
       border-top-color: color-mix(in srgb, var(--marina-color) 78%, var(--border));
       background: color-mix(in srgb, var(--marina-color) 10%, transparent);
     }
 
-    #appdeck-marina-explained .station-mark.planned {
+    #deck-marina-explained .station-mark.planned {
       border: 1px dashed var(--border);
     }
 
-    #appdeck-marina-explained .station-icon {
+    #deck-marina-explained .station-icon {
       width: 38px;
       height: 38px;
       margin: 0 auto 6px;
@@ -863,9 +863,9 @@ html&gt;body{padding:0}&lt;/style&gt;
       background: var(--background);
     }
 
-    #appdeck-marina-explained .station-button.btn,
-    #appdeck-marina-explained .layer-button.btn,
-    #appdeck-marina-explained .journey-button.btn {
+    #deck-marina-explained .station-button.btn,
+    #deck-marina-explained .layer-button.btn,
+    #deck-marina-explained .journey-button.btn {
       display: block;
       width: 100%;
       min-width: 0;
@@ -873,50 +873,50 @@ html&gt;body{padding:0}&lt;/style&gt;
       text-align: left;
     }
 
-    #appdeck-marina-explained .station-button.btn {
+    #deck-marina-explained .station-button.btn {
       text-align: center;
     }
 
-    #appdeck-marina-explained .station-title,
-    #appdeck-marina-explained .layer-title,
-    #appdeck-marina-explained .journey-title,
-    #appdeck-marina-explained .product-name,
-    #appdeck-marina-explained .detail-title {
+    #deck-marina-explained .station-title,
+    #deck-marina-explained .layer-title,
+    #deck-marina-explained .journey-title,
+    #deck-marina-explained .product-name,
+    #deck-marina-explained .detail-title {
       font-weight: 500;
     }
 
-    #appdeck-marina-explained .station-role,
-    #appdeck-marina-explained .station-detail,
-    #appdeck-marina-explained .layer-copy,
-    #appdeck-marina-explained .journey-copy,
-    #appdeck-marina-explained .product-purpose {
+    #deck-marina-explained .station-role,
+    #deck-marina-explained .station-detail,
+    #deck-marina-explained .layer-copy,
+    #deck-marina-explained .journey-copy,
+    #deck-marina-explained .product-purpose {
       display: block;
       color: var(--muted-foreground);
       margin-top: 4px;
     }
 
-    #appdeck-marina-explained .station-role {
+    #deck-marina-explained .station-role {
       color: var(--foreground);
     }
 
-    #appdeck-marina-explained .flow-arrow {
+    #deck-marina-explained .flow-arrow {
       min-width: 0;
       text-align: center;
       color: var(--muted-foreground);
     }
 
-    #appdeck-marina-explained .flow-arrow .arrow-glyph {
+    #deck-marina-explained .flow-arrow .arrow-glyph {
       display: block;
       color: var(--foreground);
       font-weight: 500;
       margin: 3px 0;
     }
 
-    #appdeck-marina-explained .flow-arrow .mobile-glyph {
+    #deck-marina-explained .flow-arrow .mobile-glyph {
       display: none;
     }
 
-    #appdeck-marina-explained .feedback-belt {
+    #deck-marina-explained .feedback-belt {
       justify-content: center;
       margin-top: 12px;
       padding: 9px 0;
@@ -926,88 +926,88 @@ html&gt;body{padding:0}&lt;/style&gt;
       text-align: center;
     }
 
-    #appdeck-marina-explained .feedback-belt strong {
+    #deck-marina-explained .feedback-belt strong {
       color: var(--foreground);
       font-weight: 500;
     }
 
-    #appdeck-marina-explained .plain-split {
+    #deck-marina-explained .plain-split {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 12px;
       margin-top: 12px;
     }
 
-    #appdeck-marina-explained .plain-role {
+    #deck-marina-explained .plain-role {
       min-width: 0;
       padding-top: 9px;
       border-top: 2px solid var(--border);
     }
 
-    #appdeck-marina-explained .plain-role.appdeck {
-      border-top-color: color-mix(in srgb, var(--appdeck-color) 75%, var(--border));
+    #deck-marina-explained .plain-role.deck {
+      border-top-color: color-mix(in srgb, var(--deck-color) 75%, var(--border));
     }
 
-    #appdeck-marina-explained .plain-role.marina {
+    #deck-marina-explained .plain-role.marina {
       border-top-color: color-mix(in srgb, var(--marina-color) 75%, var(--border));
     }
 
-    #appdeck-marina-explained .plain-role strong {
+    #deck-marina-explained .plain-role strong {
       display: block;
       font-weight: 500;
       margin-bottom: 3px;
     }
 
-    #appdeck-marina-explained .inside-grid {
+    #deck-marina-explained .inside-grid {
       display: grid;
       grid-template-columns: minmax(0, 1fr) 74px minmax(0, 1fr);
       gap: 12px;
       align-items: stretch;
     }
 
-    #appdeck-marina-explained .product-column {
+    #deck-marina-explained .product-column {
       min-width: 0;
       padding-top: 10px;
       border-top: 3px solid var(--border);
     }
 
-    #appdeck-marina-explained .product-column.appdeck {
-      border-top-color: color-mix(in srgb, var(--appdeck-color) 78%, var(--border));
+    #deck-marina-explained .product-column.deck {
+      border-top-color: color-mix(in srgb, var(--deck-color) 78%, var(--border));
     }
 
-    #appdeck-marina-explained .product-column.marina {
+    #deck-marina-explained .product-column.marina {
       border-top-color: color-mix(in srgb, var(--marina-color) 78%, var(--border));
     }
 
-    #appdeck-marina-explained .product-purpose {
+    #deck-marina-explained .product-purpose {
       margin-bottom: 10px;
     }
 
-    #appdeck-marina-explained .layer-stack {
+    #deck-marina-explained .layer-stack {
       display: grid;
       gap: 5px;
     }
 
-    #appdeck-marina-explained .layer-row {
+    #deck-marina-explained .layer-row {
       min-width: 0;
     }
 
-    #appdeck-marina-explained .layer-row.planned {
+    #deck-marina-explained .layer-row.planned {
       padding: 3px;
       border: 1px dashed var(--border);
     }
 
-    #appdeck-marina-explained .layer-arrow {
+    #deck-marina-explained .layer-arrow {
       color: var(--muted-foreground);
       text-align: center;
     }
 
-    #appdeck-marina-explained .node-top {
+    #deck-marina-explained .node-top {
       justify-content: space-between;
       width: 100%;
     }
 
-    #appdeck-marina-explained .bridge {
+    #deck-marina-explained .bridge {
       position: relative;
       min-height: 100%;
       display: flex;
@@ -1017,7 +1017,7 @@ html&gt;body{padding:0}&lt;/style&gt;
       text-align: center;
     }
 
-    #appdeck-marina-explained .bridge::before {
+    #deck-marina-explained .bridge::before {
       content: &quot;&quot;;
       position: absolute;
       top: 18px;
@@ -1026,20 +1026,20 @@ html&gt;body{padding:0}&lt;/style&gt;
       border-left: 1px solid var(--border);
     }
 
-    #appdeck-marina-explained .bridge-label {
+    #deck-marina-explained .bridge-label {
       position: relative;
       padding: 8px 3px;
       background: var(--background);
     }
 
-    #appdeck-marina-explained .bridge-label strong {
+    #deck-marina-explained .bridge-label strong {
       display: block;
       color: var(--foreground);
       font-weight: 500;
       margin: 3px 0;
     }
 
-    #appdeck-marina-explained .boundary-strip {
+    #deck-marina-explained .boundary-strip {
       justify-content: center;
       margin-top: 12px;
       padding-top: 10px;
@@ -1048,18 +1048,18 @@ html&gt;body{padding:0}&lt;/style&gt;
       text-align: center;
     }
 
-    #appdeck-marina-explained .boundary-strip strong {
+    #deck-marina-explained .boundary-strip strong {
       color: var(--foreground);
       font-weight: 500;
     }
 
-    #appdeck-marina-explained .journey {
+    #deck-marina-explained .journey {
       position: relative;
       display: grid;
       gap: 8px;
     }
 
-    #appdeck-marina-explained .journey::before {
+    #deck-marina-explained .journey::before {
       content: &quot;&quot;;
       position: absolute;
       top: 20px;
@@ -1068,7 +1068,7 @@ html&gt;body{padding:0}&lt;/style&gt;
       border-left: 2px solid var(--border);
     }
 
-    #appdeck-marina-explained .journey-step {
+    #deck-marina-explained .journey-step {
       position: relative;
       display: grid;
       grid-template-columns: 44px minmax(0, 1fr);
@@ -1077,7 +1077,7 @@ html&gt;body{padding:0}&lt;/style&gt;
       min-width: 0;
     }
 
-    #appdeck-marina-explained .step-number {
+    #deck-marina-explained .step-number {
       position: relative;
       z-index: 1;
       width: 42px;
@@ -1090,93 +1090,93 @@ html&gt;body{padding:0}&lt;/style&gt;
       font-weight: 500;
     }
 
-    #appdeck-marina-explained .journey-step.appdeck .step-number {
-      border-color: color-mix(in srgb, var(--appdeck-color) 75%, var(--border));
+    #deck-marina-explained .journey-step.deck .step-number {
+      border-color: color-mix(in srgb, var(--deck-color) 75%, var(--border));
     }
 
-    #appdeck-marina-explained .journey-step.marina .step-number {
+    #deck-marina-explained .journey-step.marina .step-number {
       border-color: color-mix(in srgb, var(--marina-color) 75%, var(--border));
     }
 
-    #appdeck-marina-explained .journey-step.planned .step-number {
+    #deck-marina-explained .journey-step.planned .step-number {
       border-style: dashed;
     }
 
-    #appdeck-marina-explained .journey-step.partial .step-number {
+    #deck-marina-explained .journey-step.partial .step-number {
       border-style: dotted;
     }
 
-    #appdeck-marina-explained .journey-button.btn {
+    #deck-marina-explained .journey-button.btn {
       border-left: 3px solid var(--border);
     }
 
-    #appdeck-marina-explained .journey-step.appdeck .journey-button.btn {
-      border-left-color: color-mix(in srgb, var(--appdeck-color) 75%, var(--border));
+    #deck-marina-explained .journey-step.deck .journey-button.btn {
+      border-left-color: color-mix(in srgb, var(--deck-color) 75%, var(--border));
     }
 
-    #appdeck-marina-explained .journey-step.marina .journey-button.btn {
+    #deck-marina-explained .journey-step.marina .journey-button.btn {
       border-left-color: color-mix(in srgb, var(--marina-color) 75%, var(--border));
     }
 
-    #appdeck-marina-explained .journey-step.planned .journey-button.btn {
+    #deck-marina-explained .journey-step.planned .journey-button.btn {
       border-left-style: dashed;
     }
 
-    #appdeck-marina-explained .journey-step.partial .journey-button.btn {
+    #deck-marina-explained .journey-step.partial .journey-button.btn {
       border-left-style: dotted;
     }
 
-    #appdeck-marina-explained .selected-detail.card {
+    #deck-marina-explained .selected-detail.card {
       margin-top: 14px;
     }
 
-    #appdeck-marina-explained .detail-top {
+    #deck-marina-explained .detail-top {
       justify-content: space-between;
       margin-bottom: 6px;
     }
 
-    #appdeck-marina-explained .detail-title {
+    #deck-marina-explained .detail-title {
       margin: 0;
     }
 
-    #appdeck-marina-explained .detail-plain {
+    #deck-marina-explained .detail-plain {
       margin: 0 0 10px;
     }
 
-    #appdeck-marina-explained .detail-label {
+    #deck-marina-explained .detail-label {
       display: block;
       color: var(--muted-foreground);
       margin-bottom: 3px;
     }
 
-    #appdeck-marina-explained .detail-value {
+    #deck-marina-explained .detail-value {
       overflow-wrap: anywhere;
     }
 
     @media (max-width: 700px) {
-      #appdeck-marina-explained .overview-flow,
-      #appdeck-marina-explained .inside-grid,
-      #appdeck-marina-explained .plain-split {
+      #deck-marina-explained .overview-flow,
+      #deck-marina-explained .inside-grid,
+      #deck-marina-explained .plain-split {
         grid-template-columns: minmax(0, 1fr);
       }
 
-      #appdeck-marina-explained .flow-arrow {
+      #deck-marina-explained .flow-arrow {
         padding: 2px 0;
       }
 
-      #appdeck-marina-explained .flow-arrow .desktop-glyph {
+      #deck-marina-explained .flow-arrow .desktop-glyph {
         display: none;
       }
 
-      #appdeck-marina-explained .flow-arrow .mobile-glyph {
+      #deck-marina-explained .flow-arrow .mobile-glyph {
         display: block;
       }
 
-      #appdeck-marina-explained .bridge {
+      #deck-marina-explained .bridge {
         min-height: 72px;
       }
 
-      #appdeck-marina-explained .bridge::before {
+      #deck-marina-explained .bridge::before {
         top: 50%;
         right: 18px;
         bottom: auto;
@@ -1185,7 +1185,7 @@ html&gt;body{padding:0}&lt;/style&gt;
         border-left: 0;
       }
 
-      #appdeck-marina-explained .bridge-label {
+      #deck-marina-explained .bridge-label {
         padding: 3px 10px;
       }
     }
@@ -1205,7 +1205,7 @@ html&gt;body{padding:0}&lt;/style&gt;
   &lt;/div&gt;
 
   &lt;section class=&quot;explainer-view is-active&quot; data-view=&quot;overview&quot; aria-label=&quot;Product relationship overview&quot;&gt;
-    &lt;div class=&quot;overview-flow&quot; role=&quot;img&quot; aria-label=&quot;A human steers AppDeck, AppDeck exchanges work state with Marina, Marina will run isolated agents, and verified pull request evidence flows back to the human&quot;&gt;
+    &lt;div class=&quot;overview-flow&quot; role=&quot;img&quot; aria-label=&quot;A human steers Deck, Deck exchanges work state with Marina, Marina will run isolated agents, and verified pull request evidence flows back to the human&quot;&gt;
       &lt;div class=&quot;station&quot;&gt;
         &lt;div class=&quot;station-mark human&quot;&gt;
           &lt;div class=&quot;station-icon&quot;&gt;&lt;i data-lucide=&quot;user-round&quot; aria-hidden=&quot;true&quot;&gt;&lt;/i&gt;&lt;/div&gt;
@@ -1221,10 +1221,10 @@ html&gt;body{padding:0}&lt;/style&gt;
       &lt;/div&gt;
 
       &lt;div class=&quot;station&quot;&gt;
-        &lt;div class=&quot;station-mark appdeck&quot;&gt;
+        &lt;div class=&quot;station-mark deck&quot;&gt;
           &lt;div class=&quot;station-icon&quot;&gt;&lt;i data-lucide=&quot;layout-dashboard&quot; aria-hidden=&quot;true&quot;&gt;&lt;/i&gt;&lt;/div&gt;
-          &lt;button type=&quot;button&quot; class=&quot;btn btn-ghost btn-block station-button&quot; data-node=&quot;appdeck-role&quot; aria-pressed=&quot;true&quot;&gt;
-            &lt;span class=&quot;station-title&quot;&gt;AppDeck&lt;/span&gt;
+          &lt;button type=&quot;button&quot; class=&quot;btn btn-ghost btn-block station-button&quot; data-node=&quot;deck-role&quot; aria-pressed=&quot;true&quot;&gt;
+            &lt;span class=&quot;station-title&quot;&gt;Deck&lt;/span&gt;
             &lt;span class=&quot;station-role text-small&quot;&gt;the control room&lt;/span&gt;
             &lt;span class=&quot;station-detail text-small&quot;&gt;Tasks · approvals · live state · evidence&lt;/span&gt;
           &lt;/button&gt;
@@ -1284,53 +1284,53 @@ html&gt;body{padding:0}&lt;/style&gt;
     &lt;/div&gt;
 
     &lt;div class=&quot;plain-split&quot;&gt;
-      &lt;div class=&quot;plain-role appdeck&quot;&gt;
-        &lt;strong&gt;AppDeck answers: “What does the human need to see or decide?”&lt;/strong&gt;
+      &lt;div class=&quot;plain-role deck&quot;&gt;
+        &lt;strong&gt;Deck answers: “What does the human need to see or decide?”&lt;/strong&gt;
         &lt;span class=&quot;text-small text-muted&quot;&gt;It is the default UI/plugin, not the execution engine.&lt;/span&gt;
       &lt;/div&gt;
       &lt;div class=&quot;plain-role marina&quot;&gt;
         &lt;strong&gt;Marina answers: “What safe action happens next, and how do we recover it?”&lt;/strong&gt;
-        &lt;span class=&quot;text-small text-muted&quot;&gt;It can run headlessly; AppDeck is replaceable behind a port.&lt;/span&gt;
+        &lt;span class=&quot;text-small text-muted&quot;&gt;It can run headlessly; Deck is replaceable behind a port.&lt;/span&gt;
       &lt;/div&gt;
     &lt;/div&gt;
   &lt;/section&gt;
 
   &lt;section class=&quot;explainer-view&quot; data-view=&quot;inside&quot; aria-label=&quot;Internal architecture of both products&quot;&gt;
     &lt;div class=&quot;inside-grid&quot;&gt;
-      &lt;section class=&quot;product-column appdeck&quot; aria-label=&quot;AppDeck internal layers&quot;&gt;
-        &lt;span class=&quot;product-name&quot;&gt;AppDeck&lt;/span&gt;
+      &lt;section class=&quot;product-column deck&quot; aria-label=&quot;Deck internal layers&quot;&gt;
+        &lt;span class=&quot;product-name&quot;&gt;Deck&lt;/span&gt;
         &lt;span class=&quot;product-purpose text-small&quot;&gt;Human-facing source of truth&lt;/span&gt;
         &lt;div class=&quot;layer-stack&quot;&gt;
           &lt;div class=&quot;layer-row&quot;&gt;
-            &lt;button type=&quot;button&quot; class=&quot;btn btn-block layer-button&quot; data-node=&quot;appdeck-ui&quot; aria-pressed=&quot;false&quot;&gt;
+            &lt;button type=&quot;button&quot; class=&quot;btn btn-block layer-button&quot; data-node=&quot;deck-ui&quot; aria-pressed=&quot;false&quot;&gt;
               &lt;span class=&quot;node-top&quot;&gt;&lt;span class=&quot;layer-title&quot;&gt;&lt;i data-lucide=&quot;monitor&quot; aria-hidden=&quot;true&quot;&gt;&lt;/i&gt; Web UI&lt;/span&gt;&lt;span class=&quot;viz-badge&quot;&gt;works now&lt;/span&gt;&lt;/span&gt;
               &lt;span class=&quot;layer-copy text-small&quot;&gt;Backlog, board, decisions, activity, evidence&lt;/span&gt;
             &lt;/button&gt;
           &lt;/div&gt;
           &lt;div class=&quot;layer-arrow&quot; aria-hidden=&quot;true&quot;&gt;↓&lt;/div&gt;
           &lt;div class=&quot;layer-row&quot;&gt;
-            &lt;button type=&quot;button&quot; class=&quot;btn btn-block layer-button&quot; data-node=&quot;appdeck-api&quot; aria-pressed=&quot;false&quot;&gt;
+            &lt;button type=&quot;button&quot; class=&quot;btn btn-block layer-button&quot; data-node=&quot;deck-api&quot; aria-pressed=&quot;false&quot;&gt;
               &lt;span class=&quot;node-top&quot;&gt;&lt;span class=&quot;layer-title&quot;&gt;&lt;i data-lucide=&quot;network&quot; aria-hidden=&quot;true&quot;&gt;&lt;/i&gt; Go REST + SSE&lt;/span&gt;&lt;span class=&quot;viz-badge&quot;&gt;works now&lt;/span&gt;&lt;/span&gt;
               &lt;span class=&quot;layer-copy text-small&quot;&gt;Human commands and agent lifecycle protocol&lt;/span&gt;
             &lt;/button&gt;
           &lt;/div&gt;
           &lt;div class=&quot;layer-arrow&quot; aria-hidden=&quot;true&quot;&gt;↓&lt;/div&gt;
           &lt;div class=&quot;layer-row&quot;&gt;
-            &lt;button type=&quot;button&quot; class=&quot;btn btn-block layer-button&quot; data-node=&quot;appdeck-store&quot; aria-pressed=&quot;false&quot;&gt;
+            &lt;button type=&quot;button&quot; class=&quot;btn btn-block layer-button&quot; data-node=&quot;deck-store&quot; aria-pressed=&quot;false&quot;&gt;
               &lt;span class=&quot;node-top&quot;&gt;&lt;span class=&quot;layer-title&quot;&gt;&lt;i data-lucide=&quot;shield-check&quot; aria-hidden=&quot;true&quot;&gt;&lt;/i&gt; Workflow store&lt;/span&gt;&lt;span class=&quot;viz-badge&quot;&gt;works now&lt;/span&gt;&lt;/span&gt;
               &lt;span class=&quot;layer-copy text-small&quot;&gt;Atomic claims, guarded states, durable events&lt;/span&gt;
             &lt;/button&gt;
           &lt;/div&gt;
           &lt;div class=&quot;layer-arrow&quot; aria-hidden=&quot;true&quot;&gt;↓&lt;/div&gt;
           &lt;div class=&quot;layer-row&quot;&gt;
-            &lt;button type=&quot;button&quot; class=&quot;btn btn-block layer-button&quot; data-node=&quot;appdeck-db&quot; aria-pressed=&quot;false&quot;&gt;
-              &lt;span class=&quot;node-top&quot;&gt;&lt;span class=&quot;layer-title&quot;&gt;&lt;i data-lucide=&quot;database&quot; aria-hidden=&quot;true&quot;&gt;&lt;/i&gt; appdeck.db&lt;/span&gt;&lt;span class=&quot;viz-badge&quot;&gt;SQLite&lt;/span&gt;&lt;/span&gt;
+            &lt;button type=&quot;button&quot; class=&quot;btn btn-block layer-button&quot; data-node=&quot;deck-db&quot; aria-pressed=&quot;false&quot;&gt;
+              &lt;span class=&quot;node-top&quot;&gt;&lt;span class=&quot;layer-title&quot;&gt;&lt;i data-lucide=&quot;database&quot; aria-hidden=&quot;true&quot;&gt;&lt;/i&gt; deck.db&lt;/span&gt;&lt;span class=&quot;viz-badge&quot;&gt;SQLite&lt;/span&gt;&lt;/span&gt;
               &lt;span class=&quot;layer-copy text-small&quot;&gt;Tasks, runs, agents, decisions, artifacts, events&lt;/span&gt;
             &lt;/button&gt;
           &lt;/div&gt;
           &lt;div class=&quot;layer-arrow&quot; aria-hidden=&quot;true&quot;&gt;↺&lt;/div&gt;
           &lt;div class=&quot;layer-row&quot;&gt;
-            &lt;button type=&quot;button&quot; class=&quot;btn btn-block layer-button&quot; data-node=&quot;appdeck-loops&quot; aria-pressed=&quot;false&quot;&gt;
+            &lt;button type=&quot;button&quot; class=&quot;btn btn-block layer-button&quot; data-node=&quot;deck-loops&quot; aria-pressed=&quot;false&quot;&gt;
               &lt;span class=&quot;node-top&quot;&gt;&lt;span class=&quot;layer-title&quot;&gt;&lt;i data-lucide=&quot;timer-reset&quot; aria-hidden=&quot;true&quot;&gt;&lt;/i&gt; Background loops&lt;/span&gt;&lt;span class=&quot;viz-badge&quot;&gt;works now&lt;/span&gt;&lt;/span&gt;
               &lt;span class=&quot;layer-copy text-small&quot;&gt;Lease reaper; optional Atlas demo agent&lt;/span&gt;
             &lt;/button&gt;
@@ -1367,7 +1367,7 @@ html&gt;body{padding:0}&lt;/style&gt;
           &lt;div class=&quot;layer-row&quot;&gt;
             &lt;button type=&quot;button&quot; class=&quot;btn btn-block layer-button&quot; data-node=&quot;workcontrol-port&quot; aria-pressed=&quot;false&quot;&gt;
               &lt;span class=&quot;node-top&quot;&gt;&lt;span class=&quot;layer-title&quot;&gt;&lt;i data-lucide=&quot;plug&quot; aria-hidden=&quot;true&quot;&gt;&lt;/i&gt; Work-control port&lt;/span&gt;&lt;span class=&quot;viz-badge&quot;&gt;works now&lt;/span&gt;&lt;/span&gt;
-              &lt;span class=&quot;layer-copy text-small&quot;&gt;AppDeck adapter today; other providers later&lt;/span&gt;
+              &lt;span class=&quot;layer-copy text-small&quot;&gt;Deck adapter today; other providers later&lt;/span&gt;
             &lt;/button&gt;
           &lt;/div&gt;
           &lt;div class=&quot;layer-arrow&quot; aria-hidden=&quot;true&quot;&gt;↓&lt;/div&gt;
@@ -1390,24 +1390,24 @@ html&gt;body{padding:0}&lt;/style&gt;
 
     &lt;div class=&quot;boundary-strip text-small&quot;&gt;
       &lt;strong&gt;No duplicated authority:&lt;/strong&gt;
-      &lt;span&gt;AppDeck owns human-facing tasks and decisions&lt;/span&gt;&lt;span&gt;•&lt;/span&gt;&lt;span&gt;Marina owns internal execution and recovery&lt;/span&gt;
+      &lt;span&gt;Deck owns human-facing tasks and decisions&lt;/span&gt;&lt;span&gt;•&lt;/span&gt;&lt;span&gt;Marina owns internal execution and recovery&lt;/span&gt;
     &lt;/div&gt;
   &lt;/section&gt;
 
   &lt;section class=&quot;explainer-view&quot; data-view=&quot;journey&quot; aria-label=&quot;Lifecycle of one task across both products&quot;&gt;
     &lt;div class=&quot;journey&quot;&gt;
-      &lt;div class=&quot;journey-step appdeck&quot;&gt;
+      &lt;div class=&quot;journey-step deck&quot;&gt;
         &lt;span class=&quot;step-number&quot;&gt;1&lt;/span&gt;
         &lt;button type=&quot;button&quot; class=&quot;btn btn-block journey-button&quot; data-node=&quot;step-1&quot; aria-pressed=&quot;false&quot;&gt;
-          &lt;span class=&quot;node-top&quot;&gt;&lt;span class=&quot;journey-title&quot;&gt;Human defines the outcome in AppDeck&lt;/span&gt;&lt;span class=&quot;viz-badge&quot;&gt;works now&lt;/span&gt;&lt;/span&gt;
+          &lt;span class=&quot;node-top&quot;&gt;&lt;span class=&quot;journey-title&quot;&gt;Human defines the outcome in Deck&lt;/span&gt;&lt;span class=&quot;viz-badge&quot;&gt;works now&lt;/span&gt;&lt;/span&gt;
           &lt;span class=&quot;journey-copy text-small&quot;&gt;Task + acceptance criteria + priority + time budget&lt;/span&gt;
         &lt;/button&gt;
       &lt;/div&gt;
 
-      &lt;div class=&quot;journey-step appdeck partial&quot;&gt;
+      &lt;div class=&quot;journey-step deck partial&quot;&gt;
         &lt;span class=&quot;step-number&quot;&gt;2&lt;/span&gt;
         &lt;button type=&quot;button&quot; class=&quot;btn btn-block journey-button&quot; data-node=&quot;step-2&quot; aria-pressed=&quot;false&quot;&gt;
-          &lt;span class=&quot;node-top&quot;&gt;&lt;span class=&quot;journey-title&quot;&gt;AppDeck creates a leased run&lt;/span&gt;&lt;span class=&quot;viz-badge&quot;&gt;partly wired&lt;/span&gt;&lt;/span&gt;
+          &lt;span class=&quot;node-top&quot;&gt;&lt;span class=&quot;journey-title&quot;&gt;Deck creates a leased run&lt;/span&gt;&lt;span class=&quot;viz-badge&quot;&gt;partly wired&lt;/span&gt;&lt;/span&gt;
           &lt;span class=&quot;journey-copy text-small&quot;&gt;Atomic claim exists; Marina does not yet discover and claim automatically&lt;/span&gt;
         &lt;/button&gt;
       &lt;/div&gt;
@@ -1420,11 +1420,11 @@ html&gt;body{padding:0}&lt;/style&gt;
         &lt;/button&gt;
       &lt;/div&gt;
 
-      &lt;div class=&quot;journey-step appdeck partial&quot;&gt;
+      &lt;div class=&quot;journey-step deck partial&quot;&gt;
         &lt;span class=&quot;step-number&quot;&gt;4&lt;/span&gt;
         &lt;button type=&quot;button&quot; class=&quot;btn btn-block journey-button&quot; data-node=&quot;step-4&quot; aria-pressed=&quot;false&quot;&gt;
           &lt;span class=&quot;node-top&quot;&gt;&lt;span class=&quot;journey-title&quot;&gt;Agent proposes a plan; human decides if needed&lt;/span&gt;&lt;span class=&quot;viz-badge&quot;&gt;partly wired&lt;/span&gt;&lt;/span&gt;
-          &lt;span class=&quot;journey-copy text-small&quot;&gt;AppDeck supports the loop; Marina orchestration is still next&lt;/span&gt;
+          &lt;span class=&quot;journey-copy text-small&quot;&gt;Deck supports the loop; Marina orchestration is still next&lt;/span&gt;
         &lt;/button&gt;
       &lt;/div&gt;
 
@@ -1452,10 +1452,10 @@ html&gt;body{padding:0}&lt;/style&gt;
         &lt;/button&gt;
       &lt;/div&gt;
 
-      &lt;div class=&quot;journey-step appdeck planned&quot;&gt;
+      &lt;div class=&quot;journey-step deck planned&quot;&gt;
         &lt;span class=&quot;step-number&quot;&gt;8&lt;/span&gt;
         &lt;button type=&quot;button&quot; class=&quot;btn btn-block journey-button&quot; data-node=&quot;step-8&quot; aria-pressed=&quot;false&quot;&gt;
-          &lt;span class=&quot;node-top&quot;&gt;&lt;span class=&quot;journey-title&quot;&gt;AppDeck shows the result or one focused decision&lt;/span&gt;&lt;span class=&quot;viz-badge&quot;&gt;next&lt;/span&gt;&lt;/span&gt;
+          &lt;span class=&quot;node-top&quot;&gt;&lt;span class=&quot;journey-title&quot;&gt;Deck shows the result or one focused decision&lt;/span&gt;&lt;span class=&quot;viz-badge&quot;&gt;next&lt;/span&gt;&lt;/span&gt;
           &lt;span class=&quot;journey-copy text-small&quot;&gt;Truthful status, costs, artifacts, evidence, and remaining judgment&lt;/span&gt;
         &lt;/button&gt;
       &lt;/div&gt;
@@ -1477,17 +1477,17 @@ html&gt;body{padding:0}&lt;/style&gt;
 
   &lt;script&gt;
     (function () {
-      var root = document.getElementById(&quot;appdeck-marina-explained&quot;);
+      var root = document.getElementById(&quot;deck-marina-explained&quot;);
       if (!root) return;
 
       var details = {
-        &quot;appdeck-role&quot;: {
-          title: &quot;AppDeck = the control room&quot;,
+        &quot;deck-role&quot;: {
+          title: &quot;Deck = the control room&quot;,
           status: &quot;works now&quot;,
           plain: &quot;This is where the human creates work, watches agents, approves plans, sees failures, and checks the evidence behind completion.&quot;,
           receives: &quot;Human intent plus progress, heartbeats, artifacts, and evidence from agents or Marina.&quot;,
           produces: &quot;A durable task/decision ledger and explicit instructions back to the factory.&quot;,
-          boundary: &quot;AppDeck coordinates work. It does not execute coding agents itself.&quot;
+          boundary: &quot;Deck coordinates work. It does not execute coding agents itself.&quot;
         },
         &quot;human&quot;: {
           title: &quot;Human = architect and governor&quot;,
@@ -1501,7 +1501,7 @@ html&gt;body{padding:0}&lt;/style&gt;
           title: &quot;Marina = the factory engine&quot;,
           status: &quot;foundation works now&quot;,
           plain: &quot;Marina keeps autonomous work safe and recoverable when no laptop or terminal is open. Today it protects journaled runs; later it will drive the full coding and pull-request loop.&quot;,
-          receives: &quot;Structured work and authority from a work-control provider such as AppDeck.&quot;,
+          receives: &quot;Structured work and authority from a work-control provider such as Deck.&quot;,
           produces: &quot;Recovered execution, normalized state, checkpoints, costs, artifacts, and evidence.&quot;,
           boundary: &quot;Marina does not own the human-facing backlog or decision history.&quot;
         },
@@ -1521,40 +1521,40 @@ html&gt;body{padding:0}&lt;/style&gt;
           produces: &quot;CI results, review comments, merge readiness, and revision signals.&quot;,
           boundary: &quot;The conservative first autonomy limit is a merge-ready pull request.&quot;
         },
-        &quot;appdeck-ui&quot;: {
-          title: &quot;AppDeck web UI&quot;,
+        &quot;deck-ui&quot;: {
+          title: &quot;Deck web UI&quot;,
           status: &quot;works now&quot;,
           plain: &quot;The SvelteKit interface turns durable task state into a backlog, execution board, decision inbox, live activity feed, and evidence view.&quot;,
           receives: &quot;REST snapshots and a server-sent event stream.&quot;,
           produces: &quot;Task edits, guarded moves, and recorded human decisions.&quot;,
           boundary: &quot;It displays canonical server state; it is not the database.&quot;
         },
-        &quot;appdeck-api&quot;: {
-          title: &quot;AppDeck REST and event boundary&quot;,
+        &quot;deck-api&quot;: {
+          title: &quot;Deck REST and event boundary&quot;,
           status: &quot;works now&quot;,
           plain: &quot;One Go process serves the UI and exposes separate commands for humans and replaceable agents.&quot;,
           receives: &quot;Task, claim, heartbeat, plan, progress, verify, complete, block, and decision requests.&quot;,
           produces: &quot;Validated state changes plus live and replayable events.&quot;,
           boundary: &quot;The current prototype is single-user and has no authentication.&quot;
         },
-        &quot;appdeck-store&quot;: {
-          title: &quot;AppDeck workflow store&quot;,
+        &quot;deck-store&quot;: {
+          title: &quot;Deck workflow store&quot;,
           status: &quot;works now&quot;,
           plain: &quot;This layer enforces the rules: only ready work can be claimed, leases expire, plans can wait for approval, and completion follows verification.&quot;,
           receives: &quot;Validated domain commands from HTTP handlers or the demo agent.&quot;,
           produces: &quot;Atomic database mutations and append-only events.&quot;,
           boundary: &quot;Task state and run-attempt state remain separate.&quot;
         },
-        &quot;appdeck-db&quot;: {
-          title: &quot;appdeck.db = the human ledger&quot;,
+        &quot;deck-db&quot;: {
+          title: &quot;deck.db = the human ledger&quot;,
           status: &quot;works now&quot;,
           plain: &quot;SQLite preserves what the human cares about across restarts: desired work, attempts, decisions, visible artifacts, and history.&quot;,
-          receives: &quot;Transactions from AppDeck&#x27;s store layer.&quot;,
+          receives: &quot;Transactions from Deck&#x27;s store layer.&quot;,
           produces: &quot;Canonical tasks, runs, agents, decisions, artifacts, and events.&quot;,
           boundary: &quot;Single-host WAL design; move to PostgreSQL before multiple writers.&quot;
         },
-        &quot;appdeck-loops&quot;: {
-          title: &quot;AppDeck background loops&quot;,
+        &quot;deck-loops&quot;: {
+          title: &quot;Deck background loops&quot;,
           status: &quot;works now&quot;,
           plain: &quot;The lease reaper returns abandoned work to ready. Atlas is only a demo agent that proves the visible lifecycle survives restart.&quot;,
           receives: &quot;Clock ticks and durable active-run state.&quot;,
@@ -1565,14 +1565,14 @@ html&gt;body{padding:0}&lt;/style&gt;
           title: &quot;Marina service and triggers&quot;,
           status: &quot;works now&quot;,
           plain: &quot;The Go service opens its journal, reconciles unfinished runs before startup succeeds, then repeats a non-overlapping cycle every ten seconds.&quot;,
-          receives: &quot;Configuration, AppDeck connectivity, journal state, and shutdown signals.&quot;,
+          receives: &quot;Configuration, Deck connectivity, journal state, and shutdown signals.&quot;,
           produces: &quot;Recovery cycles, structured logs, liveness, and dependency-aware readiness.&quot;,
-          boundary: &quot;Readiness checks AppDeck and the journal; liveness only checks the process.&quot;
+          boundary: &quot;Readiness checks Deck and the journal; liveness only checks the process.&quot;
         },
         &quot;marina-controller&quot;: {
           title: &quot;Marina recovery controller&quot;,
           status: &quot;works now&quot;,
-          plain: &quot;It decides the next safe recovery action, verifies the exact AppDeck task/run/agent relationship, and renews or stops the same run.&quot;,
+          plain: &quot;It decides the next safe recovery action, verifies the exact Deck task/run/agent relationship, and renews or stops the same run.&quot;,
           receives: &quot;Active journal records and current provider state.&quot;,
           produces: &quot;Confirmed leases, budget stops, or converged terminal state.&quot;,
           boundary: &quot;It never invents replacement work after a restart.&quot;
@@ -1580,15 +1580,15 @@ html&gt;body{padding:0}&lt;/style&gt;
         &quot;workcontrol-port&quot;: {
           title: &quot;Work-control port = the plug between products&quot;,
           status: &quot;works now&quot;,
-          plain: &quot;Marina talks to a small provider-neutral interface. AppDeck is the first adapter, but a CLI, Git provider, or another control plane could replace it.&quot;,
+          plain: &quot;Marina talks to a small provider-neutral interface. Deck is the first adapter, but a CLI, Git provider, or another control plane could replace it.&quot;,
           receives: &quot;Normalized work, run, agent, lease, progress, and block operations.&quot;,
-          produces: &quot;Provider-specific REST calls through the AppDeck adapter today.&quot;,
+          produces: &quot;Provider-specific REST calls through the Deck adapter today.&quot;,
           boundary: &quot;Exactly one provider is authoritative per project to avoid split-brain state.&quot;
         },
         &quot;marina-db&quot;: {
           title: &quot;marina.db = the execution ledger&quot;,
           status: &quot;works now&quot;,
-          plain: &quot;This separate SQLite journal stores machine recovery facts that do not belong in AppDeck&#x27;s human product model.&quot;,
+          plain: &quot;This separate SQLite journal stores machine recovery facts that do not belong in Deck&#x27;s human product model.&quot;,
           receives: &quot;Version-guarded execution, lease, checkpoint, evidence, and transition writes.&quot;,
           produces: &quot;Restart intents and an auditable internal history.&quot;,
           boundary: &quot;Completion requires source-bound evidence; duplicate external runs and keys are idempotent.&quot;
@@ -1606,13 +1606,13 @@ html&gt;body{padding:0}&lt;/style&gt;
           status: &quot;works now&quot;,
           plain: &quot;A task describes a specific outcome and how to prove it, rather than giving the factory open-ended permission.&quot;,
           receives: &quot;Human intent, context, constraints, acceptance criteria, priority, and budget.&quot;,
-          produces: &quot;A durable AppDeck task in backlog or ready state.&quot;,
+          produces: &quot;A durable Deck task in backlog or ready state.&quot;,
           boundary: &quot;The task outlives every individual run attempt.&quot;
         },
         &quot;step-2&quot;: {
           title: &quot;2 · Create a leased run&quot;,
           status: &quot;partly wired&quot;,
-          plain: &quot;AppDeck can atomically let one agent claim ready work. Marina&#x27;s automatic discovery-and-claim controller has not been built yet.&quot;,
+          plain: &quot;Deck can atomically let one agent claim ready work. Marina&#x27;s automatic discovery-and-claim controller has not been built yet.&quot;,
           receives: &quot;Ready task, agent identity, and requested lease duration.&quot;,
           produces: &quot;A unique planning run with exclusive, expiring ownership.&quot;,
           boundary: &quot;No two agents should unknowingly execute the same claim.&quot;
@@ -1628,7 +1628,7 @@ html&gt;body{padding:0}&lt;/style&gt;
         &quot;step-4&quot;: {
           title: &quot;4 · Plan and decide&quot;,
           status: &quot;partly wired&quot;,
-          plain: &quot;AppDeck already supports plan submission, approval, change requests, and explicit start. Marina does not yet orchestrate those calls.&quot;,
+          plain: &quot;Deck already supports plan submission, approval, change requests, and explicit start. Marina does not yet orchestrate those calls.&quot;,
           receives: &quot;A proposed plan and whether policy requires approval.&quot;,
           produces: &quot;Running state or a recorded human decision.&quot;,
           boundary: &quot;Repeated safe decisions should eventually become policy, not permanent approval toil.&quot;
@@ -1660,7 +1660,7 @@ html&gt;body{padding:0}&lt;/style&gt;
         &quot;step-8&quot;: {
           title: &quot;8 · Return truth to the human&quot;,
           status: &quot;next&quot;,
-          plain: &quot;AppDeck should show one truthful account of what changed, what was checked, what failed, what it cost, and what still needs judgment.&quot;,
+          plain: &quot;Deck should show one truthful account of what changed, what was checked, what failed, what it cost, and what still needs judgment.&quot;,
           receives: &quot;Normalized state, artifacts, costs, evidence, and unresolved decisions from Marina.&quot;,
           produces: &quot;A clear completed, blocked, failed, or decision-needed outcome.&quot;,
           boundary: &quot;The first proof ends at merge-ready or a focused escalation.&quot;
@@ -1668,7 +1668,7 @@ html&gt;body{padding:0}&lt;/style&gt;
       };
 
       var defaults = {
-        overview: &quot;appdeck-role&quot;,
+        overview: &quot;deck-role&quot;,
         inside: &quot;workcontrol-port&quot;,
         journey: &quot;step-1&quot;
       };

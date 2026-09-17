@@ -3,7 +3,7 @@ kind: Kustomization
 resources:
   - ../first-release
   - marina-egress.yaml
-  - appdeck-host-ingress.yaml
+  - deck-host-ingress.yaml
 patches:
   - path: marina.yaml
-  - path: appdeck-service.yaml
+  - path: deck-service.yaml

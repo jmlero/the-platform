@@ -56,8 +56,8 @@ type serviceIdentityContextKey struct{}
 type operatorSessionContextKey struct{}
 
 const (
-	operatorSessionCookieName = "appdeck_operator_session"
-	operatorCSRFCookieName    = "appdeck_operator_csrf"
+	operatorSessionCookieName = "deck_operator_session"
+	operatorCSRFCookieName    = "deck_operator_csrf"
 	operatorCSRFHeader        = "X-CSRF-Token"
 	defaultOperatorSessionTTL = 12 * time.Hour
 )
@@ -554,7 +554,7 @@ func (s *Server) exportProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Content-Disposition", `attachment; filename="appdeck-export.json"`)
+	w.Header().Set("Content-Disposition", `attachment; filename="deck-export.json"`)
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(encoded)
 }
@@ -591,7 +591,7 @@ func stringSliceFromAny(value any) []string {
 
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
-		"status": "ok", "service": "appdeck", "time": time.Now().UTC().Format(time.RFC3339),
+		"status": "ok", "service": "deck", "time": time.Now().UTC().Format(time.RFC3339),
 	})
 }
 
@@ -629,7 +629,7 @@ func (s *Server) readiness(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, status, map[string]any{
-		"status": state, "service": "appdeck", "readiness": checks,
+		"status": state, "service": "deck", "readiness": checks,
 		"time": time.Now().UTC().Format(time.RFC3339),
 	})
 }
@@ -1139,7 +1139,7 @@ func (s *Server) streamEvents(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	fmt.Fprint(w, ": appdeck event stream\n\n")
+	fmt.Fprint(w, ": deck event stream\n\n")
 	flusher.Flush()
 
 	keepAlive := time.NewTicker(15 * time.Second)
@@ -1329,7 +1329,7 @@ func readRunGuard(r *http.Request) (*store.RunGuard, error) {
 func (s *Server) writeServiceAuthError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, ErrServiceUnauthenticated):
-		w.Header().Set("WWW-Authenticate", `Bearer realm="appdeck"`)
+		w.Header().Set("WWW-Authenticate", `Bearer realm="deck"`)
 		s.writeAPIError(w, http.StatusUnauthorized, errorCodeUnauthenticated, "service authentication required", false)
 	case errors.Is(err, ErrServiceForbidden):
 		s.writeAPIError(w, http.StatusForbidden, errorCodeForbidden, "service operation is not authorized", false)

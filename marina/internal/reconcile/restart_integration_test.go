@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jmlero/the-platform/marina/internal/appdeck"
+	"github.com/jmlero/the-platform/marina/internal/deck"
 	"github.com/jmlero/the-platform/marina/internal/execution"
 	"github.com/jmlero/the-platform/marina/internal/journal/sqlite"
 	"github.com/jmlero/the-platform/marina/internal/reconcile"
@@ -26,7 +26,7 @@ func TestRestartCycleRenewsExactPersistedRunWithoutClaiming(t *testing.T) {
 		t.Fatalf("open journal: %v", err)
 	}
 	record, _, err := store.EnsureExecution(ctx, execution.NewExecution{
-		WorkProvider:   "appdeck",
+		WorkProvider:   "deck",
 		ExternalWorkID: "task-1",
 		ExternalRunID:  "run-1",
 		AgentID:        "marina-1",
@@ -63,12 +63,12 @@ func TestRestartCycleRenewsExactPersistedRunWithoutClaiming(t *testing.T) {
 	providerVersion := int64(1)
 	heartbeatSeen := false
 	calls := make([]string, 0, 4)
-	client, err := appdeck.New("http://appdeck.test", &http.Client{Transport: integrationRoundTripFunc(func(request *http.Request) (*http.Response, error) {
+	client, err := deck.New("http://deck.test", &http.Client{Transport: integrationRoundTripFunc(func(request *http.Request) (*http.Response, error) {
 		calls = append(calls, request.Method+" "+request.URL.Path)
 		switch request.Method + " " + request.URL.Path {
 		case "GET /api/v1/provider":
 			return integrationJSONResponse(http.StatusOK, map[string]any{
-				"provider":         "appdeck",
+				"provider":         "deck",
 				"protocol_version": "1.0",
 				"capabilities": []string{
 					"provider.info", "agent.register", "work.ready.list", "work.inspect",
@@ -120,7 +120,7 @@ func TestRestartCycleRenewsExactPersistedRunWithoutClaiming(t *testing.T) {
 		}
 	})})
 	if err != nil {
-		t.Fatalf("create AppDeck adapter: %v", err)
+		t.Fatalf("create Deck adapter: %v", err)
 	}
 
 	planner, err := reconcile.NewPlanner(store, 10*time.Second)

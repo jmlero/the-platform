@@ -19,7 +19,7 @@ func TestModelReservationSurvivesUnknownResponseAndPreventsOverspend(t *testing.
 	}
 	defer store.Close()
 	now := time.Now().UTC()
-	record, _, err := store.EnsureExecution(ctx, execution.NewExecution{WorkProvider: "appdeck", ExternalWorkID: "task", ExternalRunID: "run", AgentID: "agent", LeaseExpiresAt: now.Add(time.Minute), Budget: execution.Budget{DeadlineAt: now.Add(time.Hour), MaxAttempts: 3, MaxTokens: 100, MaxCostMicros: 100}})
+	record, _, err := store.EnsureExecution(ctx, execution.NewExecution{WorkProvider: "deck", ExternalWorkID: "task", ExternalRunID: "run", AgentID: "agent", LeaseExpiresAt: now.Add(time.Minute), Budget: execution.Budget{DeadlineAt: now.Add(time.Hour), MaxAttempts: 3, MaxTokens: 100, MaxCostMicros: 100}})
 	if err != nil {
 		t.Fatal(err)
 	}

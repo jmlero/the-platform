@@ -12,7 +12,7 @@ spec:
   egress:
     - to:
         - podSelector:
-            matchLabels: {app.kubernetes.io/name: appdeck}
+            matchLabels: {app.kubernetes.io/name: deck}
       ports: [{protocol: TCP, port: 8080}]
     - to:
         - namespaceSelector:

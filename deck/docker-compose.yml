@@ -1,13 +1,13 @@
 services:
-  appdeck:
+  deck:
     build: .
     ports:
       - "8080:8080"
     environment:
-      APPDECK_DEMO_AGENT: "true"
+      DECK_DEMO_AGENT: "true"
     volumes:
-      - appdeck-data:/data
+      - deck-data:/data
     restart: unless-stopped
 
 volumes:
-  appdeck-data:
+  deck-data:

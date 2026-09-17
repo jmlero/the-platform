@@ -2,7 +2,7 @@ package httpapi
 
 const (
 	protocolVersion = "1.0"
-	providerName    = "appdeck"
+	providerName    = "deck"
 
 	capabilityAgentRegister   = "agent.register"
 	capabilityDecisionAnswer  = "decision.answer"

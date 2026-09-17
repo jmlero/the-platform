@@ -1,4 +1,4 @@
-# Working on AppDeck
+# Working on Deck
 
 ## Scope
 
@@ -6,7 +6,7 @@ This file applies to `deck/`. Root [AGENTS.md](../AGENTS.md) also applies.
 
 ## Read first
 
-Before changing AppDeck, read:
+Before changing Deck, read:
 
 1. [README.md](README.md)
 2. [../VISION_DECK.md](../VISION_DECK.md)
@@ -15,13 +15,13 @@ Before changing AppDeck, read:
 
 ## Boundary
 
-AppDeck owns human steering and the authoritative work-control ledger. It does not schedule runtimes, construct Kubernetes Jobs, check out repositories, prompt models, or duplicate Marina's execution journal.
+Deck owns human steering and the authoritative work-control ledger. It does not schedule runtimes, construct Kubernetes Jobs, check out repositories, prompt models, or duplicate Marina's execution journal.
 
 Keep the OpenAPI document, advertised capabilities, canonical fixtures, handlers, store behavior, and Marina conformance expectations synchronized. Future fixture schemas do not make a behavior available; advertise a capability only after its persistence, authorization, failure semantics, and tests exist.
 
 Do not import Marina packages. The HTTP/JSON contract is the only integration boundary.
 
-The supported Marina repository workflow reaches a PR ready for human review or a blocker. AppDeck can record more command types than that workflow executes: only cancellation is currently supported. Headless packaging, pause/resume, automatic revisions, semantic review, and merge/deploy authority remain future work.
+The supported Marina repository workflow reaches a PR ready for human review or a blocker. Deck can record more command types than that workflow executes: only cancellation is currently supported. Headless packaging, pause/resume, automatic revisions, semantic review, and merge/deploy authority remain future work.
 
 ## Verification
 

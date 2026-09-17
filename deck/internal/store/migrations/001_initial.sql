@@ -95,8 +95,8 @@ CREATE INDEX idx_events_created ON events(id DESC);
 INSERT INTO projects (id, name, slug, description, created_at)
 VALUES (
     'prj_default',
-    'AppDeck',
-    'appdeck',
+    'Deck',
+    'deck',
     'The local human-agent work control plane.',
     CAST(unixepoch('subsec') * 1000 AS INTEGER)
 );

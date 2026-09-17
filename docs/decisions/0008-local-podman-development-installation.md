@@ -2,7 +2,7 @@
 
 - Status: Accepted for local development
 - Date: 2026-09-09
-- Scope: AppDeck and Marina installation
+- Scope: Deck and Marina installation
 
 The operator requested a real local Kubernetes installation using the existing
 Podman setup on macOS and the Podman CLI.
@@ -13,9 +13,9 @@ connection. Preserve the rootless default connection and its containers. Allocat
 to enforce the existing worker network policies. Separate product PVCs, service
 identities, TLS, and operator authentication remain in place.
 
-Expose only AppDeck through a loopback-bound host port, with a narrowly scoped
+Expose only Deck through a loopback-bound host port, with a narrowly scoped
 ingress rule for the observed Podman forwarding gateway. Store installation
-credentials outside the repository. Trust only the AppDeck leaf certificate for
+credentials outside the repository. Trust only the Deck leaf certificate for
 localhost in the operator's user keychain. A user LaunchAgent can start the
 existing VM and cluster independently of an interactive terminal.
 

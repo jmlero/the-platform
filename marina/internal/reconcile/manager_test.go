@@ -169,7 +169,7 @@ func TestLeaseManagerPersistsAndProjectsPermanentExternalFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer journal.Close()
-	record, _, err := journal.EnsureExecution(ctx, execution.NewExecution{WorkProvider: "appdeck", ProjectID: "project-1",
+	record, _, err := journal.EnsureExecution(ctx, execution.NewExecution{WorkProvider: "deck", ProjectID: "project-1",
 		ExternalWorkID: "task-manager", ExternalRunID: "run-manager", AgentID: "agent-manager",
 		ExternalRunVersion: 1, FenceToken: 1, TaskVersion: 1, TaskDigest: "digest", BindingVersion: 1,
 		LeaseExpiresAt: now.Add(time.Minute), Budget: execution.Budget{DeadlineAt: now.Add(time.Hour), MaxAttempts: 5, MaxTokens: 1}})
@@ -215,7 +215,7 @@ func TestLeaseManagerBoundsExternalOperationAndPersistsBackoff(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer journal.Close()
-	record, _, err := journal.EnsureExecution(ctx, execution.NewExecution{WorkProvider: "appdeck", ProjectID: "project-1",
+	record, _, err := journal.EnsureExecution(ctx, execution.NewExecution{WorkProvider: "deck", ProjectID: "project-1",
 		ExternalWorkID: "task-timeout", ExternalRunID: "run-timeout", AgentID: "agent-timeout",
 		ExternalRunVersion: 1, FenceToken: 1, TaskVersion: 1, TaskDigest: "digest", BindingVersion: 1,
 		LeaseExpiresAt: now.Add(time.Minute), Budget: execution.Budget{DeadlineAt: now.Add(time.Hour), MaxAttempts: 5, MaxTokens: 1}})

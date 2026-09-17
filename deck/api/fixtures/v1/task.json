@@ -1,7 +1,7 @@
 {
   "id": "task_fixture_001",
   "project_id": "prj_default",
-  "title": "Verify the AppDeck work-control contract",
+  "title": "Verify the Deck work-control contract",
   "description": "Exercise one bounded task through the real provider process.",
   "acceptance_criteria": "Marina observes one task and one fenced lifecycle without shape drift.",
   "status": "ready",

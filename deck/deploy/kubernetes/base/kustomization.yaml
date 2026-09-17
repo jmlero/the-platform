@@ -9,12 +9,12 @@ resources:
   - service.yaml
 
 images:
-  - name: appdeck
-    newName: ghcr.io/jmlero/the-platform-appdeck
+  - name: deck
+    newName: ghcr.io/jmlero/the-platform-deck
     newTag: dev
 
 labels:
   - pairs:
-      app.kubernetes.io/name: appdeck
+      app.kubernetes.io/name: deck
       app.kubernetes.io/part-of: the-platform
     includeSelectors: true

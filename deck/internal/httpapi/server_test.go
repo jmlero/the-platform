@@ -69,7 +69,7 @@ func TestProviderInfoAdvertisesDeterministicContract(t *testing.T) {
 	if err := json.NewDecoder(response.Body).Decode(&info); err != nil {
 		t.Fatalf("decode provider info: %v", err)
 	}
-	if info.Provider != providerName || info.ProtocolVersion != protocolVersion || !info.Ready {
+	if info.Provider != "deck" || info.ProtocolVersion != protocolVersion || !info.Ready {
 		t.Fatalf("provider info = %#v", info)
 	}
 	if info.ServerTime <= 0 || info.Readiness["store"] != "available" {
@@ -123,13 +123,13 @@ func TestOpenAPIDeclaresIdempotencyForEveryClaimAndRunMutation(t *testing.T) {
 }
 
 func TestProviderInfoRemainsReadableWhenStoreIsUnavailable(t *testing.T) {
-	appStore, err := store.Open(context.Background(), filepath.Join(t.TempDir(), "closed-appdeck.db"))
+	appStore, err := store.Open(context.Background(), filepath.Join(t.TempDir(), "closed-deck.db"))
 	if err != nil {
-		t.Fatalf("open AppDeck store: %v", err)
+		t.Fatalf("open Deck store: %v", err)
 	}
 	handler := New(appStore, slog.New(slog.NewTextHandler(io.Discard, nil))).Handler()
 	if err := appStore.Close(); err != nil {
-		t.Fatalf("close AppDeck store: %v", err)
+		t.Fatalf("close Deck store: %v", err)
 	}
 
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/provider", nil)
@@ -149,9 +149,9 @@ func TestProviderInfoRemainsReadableWhenStoreIsUnavailable(t *testing.T) {
 }
 
 func TestReadinessReflectsStoreAndServiceAuthorizationHealth(t *testing.T) {
-	appStore, err := store.Open(context.Background(), filepath.Join(t.TempDir(), "appdeck-readiness.db"))
+	appStore, err := store.Open(context.Background(), filepath.Join(t.TempDir(), "deck-readiness.db"))
 	if err != nil {
-		t.Fatalf("open AppDeck store: %v", err)
+		t.Fatalf("open Deck store: %v", err)
 	}
 	policyPath := filepath.Join(t.TempDir(), "service-auth.json")
 	writeServiceAuthPolicy(
@@ -210,7 +210,7 @@ func TestReadinessReflectsStoreAndServiceAuthorizationHealth(t *testing.T) {
 		[]string{"prj_default"},
 	)
 	if err := appStore.Close(); err != nil {
-		t.Fatalf("close AppDeck store: %v", err)
+		t.Fatalf("close Deck store: %v", err)
 	}
 	status, checks = readiness()
 	if status != http.StatusServiceUnavailable || checks["store"] != "unavailable" {
@@ -335,13 +335,13 @@ func TestClaimAPIReplaysOriginalResultAndRejectsChangedPayload(t *testing.T) {
 }
 
 func TestServiceAPIAuthenticatesCapabilityAndProjectScopes(t *testing.T) {
-	appStore, err := store.Open(context.Background(), filepath.Join(t.TempDir(), "appdeck-auth-http-test.db"))
+	appStore, err := store.Open(context.Background(), filepath.Join(t.TempDir(), "deck-auth-http-test.db"))
 	if err != nil {
-		t.Fatalf("open AppDeck store: %v", err)
+		t.Fatalf("open Deck store: %v", err)
 	}
 	t.Cleanup(func() {
 		if err := appStore.Close(); err != nil {
-			t.Errorf("close AppDeck store: %v", err)
+			t.Errorf("close Deck store: %v", err)
 		}
 	})
 	task, err := appStore.CreateTask(context.Background(), domain.CreateTaskInput{
@@ -450,13 +450,13 @@ func newTestHandler(t *testing.T) http.Handler {
 
 func newTestStoreAndHandler(t *testing.T) (*store.Store, http.Handler) {
 	t.Helper()
-	appStore, err := store.Open(context.Background(), filepath.Join(t.TempDir(), "appdeck-http-test.db"))
+	appStore, err := store.Open(context.Background(), filepath.Join(t.TempDir(), "deck-http-test.db"))
 	if err != nil {
-		t.Fatalf("open AppDeck store: %v", err)
+		t.Fatalf("open Deck store: %v", err)
 	}
 	t.Cleanup(func() {
 		if err := appStore.Close(); err != nil {
-			t.Errorf("close AppDeck store: %v", err)
+			t.Errorf("close Deck store: %v", err)
 		}
 	})
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))

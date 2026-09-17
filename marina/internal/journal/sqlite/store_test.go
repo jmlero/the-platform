@@ -367,7 +367,7 @@ func openStore(t *testing.T, ctx context.Context, path string, now *time.Time) *
 
 func validExecution(now time.Time, runID string) execution.NewExecution {
 	return execution.NewExecution{
-		WorkProvider:   "appdeck",
+		WorkProvider:   "deck",
 		ExternalWorkID: "task-1",
 		ExternalRunID:  runID,
 		AgentID:        "marina-1",

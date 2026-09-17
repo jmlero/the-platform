@@ -7,7 +7,7 @@
   "risk_class": "medium",
   "verification_strategy": "Compare decoded values with the canonical fixtures and confirm one exact run remains attached.",
   "expected_side_effects": [
-    "One temporary AppDeck task and run are written to an isolated test database."
+    "One temporary Deck task and run are written to an isolated test database."
   ],
   "rollback_approach": "Delete the temporary database after the conformance process exits.",
   "source_revision": "6be7d803a65a5667e9c9b91f649ec8c01c901bd9",

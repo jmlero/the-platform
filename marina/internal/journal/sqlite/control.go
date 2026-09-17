@@ -382,7 +382,7 @@ func (store *Store) CompleteOutboxPublication(
 	leaseExpiresAt time.Time,
 	reason string,
 ) (execution.Execution, error) {
-	// AppDeck hashes the mutation guard into the idempotency digest, so the
+	// Deck hashes the mutation guard into the idempotency digest, so the
 	// authority advance and published mark must commit together. Otherwise a
 	// retry sends the same key with a new guard and stalls the stream.
 	tx, err := store.db.BeginTx(ctx, nil)

@@ -10,7 +10,7 @@ data/
 *.db-wal
 
 # Go
-/appdeck
+/deck
 /bin/
 coverage.out
 

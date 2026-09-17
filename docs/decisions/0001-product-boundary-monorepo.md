@@ -2,11 +2,11 @@
 
 - Status: accepted
 - Date: 2026-07-19
-- Scope: AppDeck and Marina source control
+- Scope: Deck and Marina source control
 
 ## Context
 
-AppDeck and Marina are distinct products and deployable services, but the first proof requires them to evolve one protocol together. Separate private repositories made atomic contract changes, canonical fixture consumption, real-binary CI, and coordinated failure testing depend on cross-repository credentials and synchronized pull requests. One operator currently owns both products and their release direction.
+Deck and Marina are distinct products and deployable services, but the first proof requires them to evolve one protocol together. Separate private repositories made atomic contract changes, canonical fixture consumption, real-binary CI, and coordinated failure testing depend on cross-repository credentials and synchronized pull requests. One operator currently owns both products and their release direction.
 
 ## Decision
 
@@ -21,7 +21,7 @@ The monorepo is a source-control and verification boundary, not a runtime merge:
 
 - Each product retains its own Go module, binary, frontend or service assets, container image, database, migrations, identity, deployment, and release version.
 - Neither product imports the other's internal packages.
-- AppDeck owns the provider-specific OpenAPI contract and canonical wire fixtures.
+- Deck owns the provider-specific OpenAPI contract and canonical wire fixtures.
 - Marina owns provider-neutral work-control ports and the consumer conformance suite.
 - Root tooling runs independent product checks and a paired real-process protocol test.
 - Cross-product contract changes that must remain compatible land atomically.

@@ -4,7 +4,7 @@ GOARCH ?= $(shell go env GOARCH)
 DIST_DIR ?= $(CURDIR)/dist
 PACKAGE_VERSION := $(patsubst v%,%,$(VERSION))
 
-.PHONY: conformance-appdeck build check clean fmt package package-test test vet
+.PHONY: conformance-deck build check clean fmt package package-test test vet
 
 build:
 	mkdir -p bin
@@ -44,5 +44,5 @@ test:
 vet:
 	go vet ./...
 
-conformance-appdeck:
-	APPDECK_REPO="$(APPDECK_REPO)" sh scripts/test-appdeck.sh
+conformance-deck:
+	DECK_REPO="$(DECK_REPO)" sh scripts/test-deck.sh

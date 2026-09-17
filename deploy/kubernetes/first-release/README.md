@@ -3,7 +3,7 @@
 This release implements a bounded repository fix: explicit task authorization →
 immutable plan and optional approval → isolated coding Job → scoped branch and
 commit → independent verification Job at that commit → one PR → required CI and
-review checks → evidence-backed completion in AppDeck. Completion means ready
+review checks → evidence-backed completion in Deck. Completion means ready
 for human review. It does not mean merged, deployed, or production-approved.
 
 The real-process suite restarts Marina's journal between workflow steps and
@@ -22,12 +22,12 @@ and credentials still need configuration; these choices do not enable intake.
 
 ## Boundaries
 
-AppDeck and Marina have separate images, service accounts and SQLite PVCs.
-Marina owns artifact bytes on its volume; AppDeck downloads registered evidence
+Deck and Marina have separate images, service accounts and SQLite PVCs.
+Marina owns artifact bytes on its volume; Deck downloads registered evidence
 through an authenticated, digest-checking proxy. Workers have disposable disks,
 no Kubernetes API token, no Git write token and no upstream model credential.
 They receive a credential restricted to one attempt. Marina checks the live
-AppDeck lease/fence on gateway requests and repeatedly during long streams.
+Deck lease/fence on gateway requests and repeatedly during long streams.
 Worker processes stop when the authority watchdog loses contact.
 
 Both service connections and the worker gateway use TLS. Worker network policy
@@ -66,7 +66,7 @@ The command explicitly disables web search and image attachments for the text-on
 gateway, using the [Codex configuration contract](https://learn.chatgpt.com/docs/config-file/config-reference).
 
 ```sh
-podman build -f deck/Dockerfile -t YOUR_REGISTRY/appdeck:YOUR_RELEASE deck
+podman build -f deck/Dockerfile -t YOUR_REGISTRY/deck:YOUR_RELEASE deck
 podman build -f marina/Dockerfile -t YOUR_REGISTRY/marina:YOUR_RELEASE marina
 podman build -f marina/Dockerfile.worker --build-arg CODEX_VERSION=YOUR_TESTED_VERSION -t YOUR_REGISTRY/marina-worker:YOUR_RELEASE marina
 python3 scripts/prepare-installation.py /private/tmp/marina-install
@@ -83,7 +83,7 @@ certificates; keep the installation CA in the same bundle.
 
 Edit `workflow.json`: Git locations and identity, model location/name/rates,
 worker image **digest**, trusted commands, allowed paths, required CI names and
-budget. Set the independently built AppDeck and Marina images in the generated
+budget. Set the independently built Deck and Marina images in the generated
 `kustomization.yaml`. Push/load your images using your registry's normal process.
 The worker cannot download dependencies from the internet. Vendor dependencies
 in the repository or extend the image with pre-fetched dependencies and tools.
@@ -126,14 +126,14 @@ them horizontally. When you choose to install on the selected cluster:
 
 ```sh
 kubectl --context YOUR_CONTEXT apply -k /private/tmp/marina-install
-kubectl --context YOUR_CONTEXT -n marina-system rollout status deployment/appdeck
+kubectl --context YOUR_CONTEXT -n marina-system rollout status deployment/deck
 kubectl --context YOUR_CONTEXT -n marina-system rollout status deployment/marina
-kubectl --context YOUR_CONTEXT -n marina-system port-forward service/appdeck 8080:8080
+kubectl --context YOUR_CONTEXT -n marina-system port-forward service/deck 8080:8080
 ```
 
 Trust the generated CA locally, open `https://localhost:8080`, and sign in using
 `operator-token`. For a permanent URL, configure your ingress with TLS and its
-upstream trust for AppDeck; label its namespace `marina.dev/operator-ingress=true`.
+upstream trust for Deck; label its namespace `marina.dev/operator-ingress=true`.
 No public ingress is created by the sample. Keep secure cookies enabled.
 
 ## Installation acceptance
@@ -162,7 +162,7 @@ Backup/restore is outside the current pilot's acceptance scope. When activated,
 back up each SQLite database **with its WAL consistently**, and Marina's artifact
 directory and identity/configuration separately. For this initial single-replica
 release, stop new tasks, wait for active work to finish, stop the deployments and
-take volume snapshots before restoring to an isolated environment. AppDeck's
+take volume snapshots before restoring to an isolated environment. Deck's
 logical export is useful but does not replace Marina's journal/artifact backup.
 Verify a restore before treating that backup as a recovery mechanism.
 
