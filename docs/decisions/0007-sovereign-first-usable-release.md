@@ -29,6 +29,15 @@ permitted network destinations. Hosted inference is an operator-selected data
 boundary, never an implicit dependency or a claim of fully local processing.
 Private endpoints must be supportable without a hosted Marina control plane.
 
+### Deployment-target clarification — 2026-09-17
+
+The product targets vanilla Kubernetes through standard APIs, without requiring
+a particular cloud provider or distribution. Each installation supplies the
+documented storage, DNS, and network-policy capabilities. Use the operator's
+local Podman/Kind Kubernetes for development tests; no hosting-vendor choice is
+needed to proceed. Record local evidence separately from the eventual laptop-off
+demonstration on a host independent of the Mac.
+
 ## First implementation
 
 One configured Codex CLI image uses one explicit Responses-compatible model

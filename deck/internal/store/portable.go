@@ -275,7 +275,7 @@ func (s *Store) exportChannelMessages(ctx context.Context, projectID string) ([]
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, channel_id, project_id, author_type, author_id, body,
 			references_json, promoted_task_id, created_at
-		FROM channel_messages WHERE project_id = ? ORDER BY channel_id, created_at, id
+		FROM channel_messages WHERE project_id = ? ORDER BY channel_id, rowid
 	`, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("export channel messages: %w", err)

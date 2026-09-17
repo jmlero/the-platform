@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -102,7 +103,12 @@ func (s *Store) PostChannelMessage(ctx context.Context, input domain.ChannelMess
 		AuthorType: input.AuthorType, AuthorID: input.AuthorID, Body: input.Body,
 		References: input.References, CreatedAt: nowMillis(),
 	}
-	if _, err := s.db.ExecContext(ctx, `
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return domain.ChannelMessage{}, err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO channel_messages (
 			id, channel_id, project_id, author_type, author_id, body, references_json, created_at
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -110,6 +116,14 @@ func (s *Store) PostChannelMessage(ctx context.Context, input domain.ChannelMess
 		message.AuthorID, message.Body, marshalJSON(message.References), message.CreatedAt); err != nil {
 		return domain.ChannelMessage{}, fmt.Errorf("post channel message: %w", err)
 	}
+	event, err := insertEventTx(ctx, tx, nil, nil, nil, "channel.message.created", "Channel message posted", map[string]any{"project_id": channel.ProjectID, "channel_id": channel.ID, "message_id": message.ID})
+	if err != nil {
+		return domain.ChannelMessage{}, err
+	}
+	if err = tx.Commit(); err != nil {
+		return domain.ChannelMessage{}, err
+	}
+	s.publish(event)
 	return message, nil
 }
 
@@ -161,29 +175,58 @@ func scanChannelMessage(scanner interface{ Scan(...any) error }) (domain.Channel
 	return message, nil
 }
 
+// Channel cursors name a persisted message, never a transient row offset.
+// SQLite insertion order keeps concurrent appends and equal timestamps stable.
+type ChannelMessagePage struct {
+	Items      []domain.ChannelMessage `json:"items"`
+	NextCursor string                  `json:"next_cursor,omitempty"`
+}
+
 func (s *Store) ListChannelMessages(ctx context.Context, channelID string, limit int) ([]domain.ChannelMessage, error) {
+	page, err := s.PageChannelMessages(ctx, channelID, limit, "")
+	return page.Items, err
+}
+
+func (s *Store) PageChannelMessages(ctx context.Context, channelID string, limit int, cursor string) (ChannelMessagePage, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 100
 	}
+	var after int64
+	if cursor != "" {
+		id, err := base64.RawURLEncoding.DecodeString(cursor)
+		if err != nil {
+			return ChannelMessagePage{}, fmt.Errorf("invalid channel cursor: %w", domain.ErrInvalidInput)
+		}
+		if err = s.db.QueryRowContext(ctx, "SELECT rowid FROM channel_messages WHERE id = ? AND channel_id = ?", string(id), channelID).Scan(&after); err != nil {
+			if err == sql.ErrNoRows {
+				return ChannelMessagePage{}, fmt.Errorf("cursor does not belong to this channel: %w", domain.ErrInvalidInput)
+			}
+			return ChannelMessagePage{}, err
+		}
+	}
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, channel_id, project_id, author_type, author_id, body,
-			references_json, promoted_task_id, created_at
-		FROM channel_messages WHERE channel_id = ?
-		ORDER BY created_at, id LIMIT ?
-	`, channelID, limit)
+ SELECT id, channel_id, project_id, author_type, author_id, body, references_json, promoted_task_id, created_at
+ FROM channel_messages WHERE channel_id = ? AND rowid > ? ORDER BY rowid LIMIT ?`, channelID, after, limit+1)
 	if err != nil {
-		return nil, fmt.Errorf("list channel messages: %w", err)
+		return ChannelMessagePage{}, fmt.Errorf("list channel messages: %w", err)
 	}
 	defer rows.Close()
-	messages := make([]domain.ChannelMessage, 0)
+	page := ChannelMessagePage{Items: make([]domain.ChannelMessage, 0)}
 	for rows.Next() {
-		message, scanErr := scanChannelMessage(rows)
-		if scanErr != nil {
-			return nil, fmt.Errorf("scan channel message: %w", scanErr)
+		message, err := scanChannelMessage(rows)
+		if err != nil {
+			return ChannelMessagePage{}, err
 		}
-		messages = append(messages, message)
+		page.Items = append(page.Items, message)
 	}
-	return messages, rows.Err()
+	if err = rows.Err(); err != nil {
+		return ChannelMessagePage{}, err
+	}
+	if len(page.Items) > limit {
+		page.Items = page.Items[:limit]
+		page.NextCursor = base64.RawURLEncoding.EncodeToString([]byte(page.Items[limit-1].ID))
+	}
+	return page, nil
 }
 
 func (s *Store) PromoteChannelMessage(ctx context.Context, messageID string, input domain.CreateTaskInput) (domain.Task, error) {

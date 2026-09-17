@@ -39,13 +39,21 @@ The CLI reads these options before the command:
 | Flag | Environment | Default | Purpose |
 | --- | --- | --- | --- |
 | `--appdeck-url` | `APPDECK_URL` | `http://localhost:8080` | AppDeck base URL |
-| `--token-file` | `APPDECK_TOKEN_FILE` | none | File containing a bearer token |
+| `--token-file` | `APPDECK_TOKEN_FILE` | none | Protected file containing an operator login token |
 | `--timeout` | — | `10s` | Request deadline |
 | `--json` | — | off | Machine-readable output |
 
-`APPDECK_TOKEN` is also accepted when no token file is configured. Prefer a protected token file so the credential is not persisted in shell history or CLI configuration. Bearer credentials must only be sent over a protected transport outside local development.
+Use the raw operator token configured by `APPDECK_OPERATOR_AUTH_FILE`, not Marina's service token. The CLI exchanges it at `POST /api/v1/operator/session`, keeps session cookies only in memory, and echoes the CSRF cookie in `X-CSRF-Token` on mutations. It attempts logout when the command ends; interrupted or unavailable logout leaves a session valid until its server expiry. No credentials or cookies are written to CLI configuration.
 
-AppDeck's current prototype still lacks human authentication. Until that boundary exists, keep both AppDeck and this operator client on a trusted local network.
+Prefer `--token-file /path/to/operator-token` (or `APPDECK_TOKEN_FILE`). On Unix the file must be regular and accessible only to its owner, for example mode `0600`; on Windows protect it with the account's file ACL. `APPDECK_TOKEN` remains a fallback when no file is configured. Avoid entering tokens as command arguments or into shell history. HTTPS is required outside loopback, and authenticated requests never follow redirects. An expired session fails the command without replaying a mutation; rerun intentionally with a valid token.
+
+Without a token, the CLI supports AppDeck's unauthenticated local development mode. `health` calls the public health endpoint without exchanging or sending a token. For authenticated use:
+
+```bash
+export APPDECK_URL=https://appdeck.example
+export APPDECK_TOKEN_FILE=/private/path/operator-token
+./bin/platformctl tasks list
+```
 
 ## Usage
 
@@ -67,7 +75,7 @@ Inspect a task and its runs:
 ./bin/platformctl tasks get tsk_example
 ```
 
-Create ready work:
+Create generic ready work (repository PR budgets and permissions are configured in the web task form):
 
 ```bash
 ./bin/platformctl tasks create \
@@ -81,26 +89,12 @@ Create ready work:
 Request a durable run command with an explicit reason:
 
 ```bash
-./bin/platformctl runs pause \
-  --reason "Hold external changes while I review the plan" \
-  run_example
-
-./bin/platformctl runs resume \
-  --reason "Review is complete" \
-  run_example
-
 ./bin/platformctl runs cancel \
   --reason "The requested outcome is no longer needed" \
   run_example
-
-./bin/platformctl runs replan \
-  --reason "Account for the updated compatibility constraint" \
-  run_example
-
-./bin/platformctl runs retry \
-  --reason "The external dependency is healthy again" \
-  run_example
 ```
+
+The configured repository workflow supports cancellation, which waits for worker termination. AppDeck can also record `pause`, `resume`, `replan`, and `retry` commands, and the CLI retains those protocol operations for other consumers. Marina's current repository workflow rejects them; they do not pause/resume or revise the coding Job.
 
 The successful response confirms that AppDeck durably recorded a pending command. It does not claim that Marina has already acknowledged or completed it. Use `--json` when a script needs the command ID, sequence, fence, or status.
 

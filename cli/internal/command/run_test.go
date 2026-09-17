@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -74,11 +75,35 @@ func TestTasksCreateUsesTokenFile(t *testing.T) {
 		t.Fatalf("write token: %v", err)
 	}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v1/operator/session" {
+			if r.Method == http.MethodDelete {
+				w.WriteHeader(204)
+				return
+			}
+			var login struct {
+				Token string `json:"token"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&login); err != nil || login.Token != "operator-secret" {
+				t.Error("invalid login")
+				w.WriteHeader(401)
+				return
+			}
+			http.SetCookie(w, &http.Cookie{Name: "appdeck_operator_session", Value: "session", Path: "/"})
+			http.SetCookie(w, &http.Cookie{Name: "appdeck_operator_csrf", Value: "csrf", Path: "/"})
+			w.WriteHeader(201)
+			return
+		}
 		if r.Method != http.MethodPost || r.URL.Path != "/api/v1/tasks" {
 			t.Fatalf("request = %s %s", r.Method, r.URL.Path)
 		}
-		if authorization := r.Header.Get("Authorization"); authorization != "Bearer operator-secret" {
-			t.Fatalf("Authorization = %q", authorization)
+		if r.Header.Get("X-CSRF-Token") != "csrf" {
+			t.Error("missing CSRF")
+		}
+		if cookie, err := r.Cookie("appdeck_operator_session"); err != nil || cookie.Value != "session" {
+			t.Error("missing session")
+		}
+		if r.Header.Get("Authorization") != "" {
+			t.Error("bearer credential sent")
 		}
 		var input appdeck.CreateTaskInput
 		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
@@ -201,7 +226,7 @@ func TestRunCommandRequiresReasonBeforeCallingAppDeck(t *testing.T) {
 
 func TestHealthUsesEnvironmentConfiguration(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if authorization := r.Header.Get("Authorization"); authorization != "Bearer from-env" {
+		if authorization := r.Header.Get("Authorization"); authorization != "" {
 			t.Fatalf("Authorization = %q", authorization)
 		}
 		writeCommandJSON(t, w, http.StatusOK, appdeck.Health{Service: "appdeck", Status: "ok", Time: "now"})
@@ -247,5 +272,25 @@ func writeCommandJSON(t *testing.T, w http.ResponseWriter, status int, value any
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(value); err != nil {
 		t.Fatalf("encode response: %v", err)
+	}
+}
+
+func TestReadableByOthersTokenFileIsRejectedBeforeNetwork(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix file-mode protection; Windows uses ACLs")
+	}
+	path := filepath.Join(t.TempDir(), "token")
+	if err := os.WriteFile(path, []byte("protected-operator-secret"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(path, 0644); err != nil {
+		t.Fatal(err)
+	}
+	code, out, diagnostic := runForTest(t, []string{"--token-file", path, "tasks", "list"}, emptyEnvironment)
+	if code != 1 || !strings.Contains(diagnostic, "chmod 600") {
+		t.Fatalf("unsafe token file accepted: %d %s", code, diagnostic)
+	}
+	if strings.Contains(out+diagnostic, "protected-operator-secret") {
+		t.Fatal("token leaked")
 	}
 }

@@ -14,7 +14,13 @@ The current release focuses on one outcome: an authorized repository fix becomes
 a verified pull request for human review, running on Kubernetes infrastructure
 you control. AppDeck opens with attention, active work and results. Marina runs
 one coding Job and a separate verification Job, with explicit Git/model endpoints,
-durable artifacts and bounded authority. See the [paired installation and
+durable artifacts and bounded authority. The supported pair communicates over
+HTTP/JSON; standalone headless and in-process packaging are future work. The
+repository workflow supports cancellation, one implementation and one separate
+verification attempt. Failed checks or requested changes block; pause/resume,
+automatic revision loops, semantic review, merge and deployment authority are
+not implemented. A completed PR is ready for human review, not automatically
+approved for merge. See the [paired installation and
 acceptance guide](deploy/kubernetes/first-release/README.md).
 
 For a Mac development installation, use the [local Podman profile](deploy/kubernetes/local-podman/README.md).

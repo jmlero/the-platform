@@ -21,6 +21,8 @@ Keep the OpenAPI document, advertised capabilities, canonical fixtures, handlers
 
 Do not import Marina packages. The HTTP/JSON contract is the only integration boundary.
 
+The supported Marina repository workflow reaches a PR ready for human review or a blocker. AppDeck can record more command types than that workflow executes: only cancellation is currently supported. Headless packaging, pause/resume, automatic revisions, semantic review, and merge/deploy authority remain future work.
+
 ## Verification
 
 Run focused Go or frontend tests while iterating, then:

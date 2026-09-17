@@ -71,6 +71,7 @@
   let decisions: Decision[] = [];
   let events: AppEvent[] = [];
   let channels: Channel[] = [];
+  let channelRefreshVersion = 0;
   let providerStatus: ProviderStatus = {
     project_id: 'prj_default', connectivity: 'unknown', sync_state: 'unknown', sync_lag_millis: 0,
     lease_state: 'none', degraded_dependencies: [], stale_projection_count: 0, rejected_projection_count: 0
@@ -160,7 +161,10 @@
 
 	function startLiveUpdates() {
 		unsubscribeLiveEvents?.();
-		unsubscribeLiveEvents = subscribeToEvents(handleLiveEvent, (state) => (connected = state));
+		unsubscribeLiveEvents = subscribeToEvents(handleLiveEvent, (state) => {
+      connected = state;
+      if (state) { channelRefreshVersion++; void loadWorkspace({ quiet: true }); }
+    });
 	}
 
 	function resetAuthenticatedWorkspace() {
@@ -196,6 +200,7 @@
   }
 
   function handleLiveEvent(event: AppEvent) {
+    if (event.type === 'channel.message.created' || event.type === 'task.promoted_from_channel') channelRefreshVersion++;
     connected = true;
     if (event.id > 0) {
       events = [event, ...events.filter((candidate) => candidate.id !== event.id)].slice(0, 80);
@@ -549,7 +554,7 @@
                   </button>
                   <span class="backlog-budget">{task.budget_minutes}m</span>
                   <span class="backlog-date">{formatDate(task.created_at)}</span>
-                  <button class="promote" type="button" on:click={() => moveTask(task, 'ready')} title="Move to ready queue">
+                  <button class="promote" type="button" on:click={() => moveTask(task, 'ready').catch((caught) => { error = caught instanceof Error ? caught.message : 'Could not move the task.'; })} title="Move to ready queue">
                     Ready <ArrowRight size={14} />
                   </button>
                 </article>
@@ -575,7 +580,7 @@
           </aside>
         </div>
       {:else if activeView === 'channels'}
-        <ChannelsView {channels} onpromoted={handlePromotedTask} />
+        <ChannelsView {channels} refreshVersion={channelRefreshVersion} onpromoted={handlePromotedTask} />
       {:else}
         <DecisionInbox {decisions} {tasks} onanswer={answerDecision} onselect={openTask} />
       {/if}

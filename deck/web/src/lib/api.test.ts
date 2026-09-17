@@ -50,3 +50,41 @@ describe('operator API requests', () => {
     expect(fetchMock.mock.calls[0][1].headers).not.toHaveProperty('X-CSRF-Token');
   });
 });
+
+// Exercise the browser transport contract without requiring a native browser.
+describe('live channel notifications', () => {
+  it('delivers message events and every reconnect so an open history can refresh', async () => {
+    const { subscribeToEvents } = await import('./api');
+    let source: FakeSource;
+    class FakeSource {
+      onopen?: () => void;
+      onerror?: () => void;
+      onmessage?: (message: { data: string }) => void;
+      close = vi.fn();
+      constructor(public url: string) { source = this; }
+    }
+    vi.stubGlobal('EventSource', FakeSource);
+    const events = vi.fn();
+    const connections = vi.fn();
+    const stop = subscribeToEvents(events, connections);
+    expect(source!.url).toBe('/api/v1/operator/events/stream');
+    source!.onopen!();
+    const message = { id: 42, type: 'channel.message.created', payload: { channel_id: 'channel', message_id: 'message' } };
+    source!.onmessage!({ data: JSON.stringify(message) });
+    source!.onmessage!({ data: 'broken delivery' });
+    source!.onerror!();
+    source!.onopen!();
+    source!.onmessage!({ data: JSON.stringify(message) });
+    expect(connections.mock.calls).toEqual([[true], [false], [true]]);
+    expect(events.mock.calls).toEqual([[message], [message]]);
+    stop();
+    expect(source!.close).toHaveBeenCalledOnce();
+  });
+
+  it('encodes the opaque channel cursor without interpreting it', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ items: [], next_cursor: 'next' })));
+    vi.stubGlobal('fetch', fetchMock);
+    expect(await api.channelMessages('channel', 'cursor+/=')).toEqual({ items: [], next_cursor: 'next' });
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/operator/channels/channel/messages?cursor=cursor%2B%2F%3D');
+  });
+});

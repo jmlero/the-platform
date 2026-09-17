@@ -11,6 +11,15 @@ checks completion, lost commit-response recovery, failed verification, changed
 heads, missing CI and missing authority. A selected cluster, worker image,
 repository and model still require the installation acceptance procedure below.
 
+For the current pilot, [decision 0010](../../../docs/decisions/0010-initial-installation-services.md)
+selects OpenRouter, GitHub/GHCR, and the existing Kubernetes-volume-backed SQLite
+and artifact stores. Backups and restore drills are deferred for this pilot.
+The generic configuration instructions below remain applicable to other installations.
+Image builds and cluster setup may download required dependencies normally; the
+running platform requires only GitHub services and OpenRouter externally. Package
+worker/check dependencies before execution. The exact OpenRouter model, repository,
+and credentials still need configuration; these choices do not enable intake.
+
 ## Boundaries
 
 AppDeck and Marina have separate images, service accounts and SQLite PVCs.
@@ -149,12 +158,13 @@ No public ingress is created by the sample. Keep secure cookies enabled.
 8. Test provider outage and expired task budget. They must not permit continued
    model or publication authority. Inspect retained artifacts after Job cleanup.
 
-Back up each SQLite database **with its WAL consistently**, and Marina's artifact
+Backup/restore is outside the current pilot's acceptance scope. When activated,
+back up each SQLite database **with its WAL consistently**, and Marina's artifact
 directory and identity/configuration separately. For this initial single-replica
 release, stop new tasks, wait for active work to finish, stop the deployments and
 take volume snapshots before restoring to an isolated environment. AppDeck's
 logical export is useful but does not replace Marina's journal/artifact backup.
-Verify a restore before relying on unattended operation.
+Verify a restore before treating that backup as a recovery mechanism.
 
 Repository checks: `make check`, `make conformance`, `make build`. Passing these
 does not replace the selected installation's network, model and recovery checks.

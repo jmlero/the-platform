@@ -42,7 +42,7 @@ func TestRealRepositoryWorkflow(t *testing.T) {
 	if err = waitForProvider(ctx, client); err != nil {
 		t.Fatal(err)
 	}
-	for _, scenario := range []string{"completed", "verification_failed", "head_changed", "pr_closed", "ci_missing", "missing_authority"} {
+	for _, scenario := range []string{"completed", "promoted_completed", "verification_failed", "head_changed", "pr_closed", "ci_missing", "missing_authority"} {
 		t.Run(scenario, func(t *testing.T) {
 			directory := t.TempDir()
 			db := filepath.Join(directory, "journal.db")
@@ -66,9 +66,30 @@ func TestRealRepositoryWorkflow(t *testing.T) {
 			var taskResponse taskDTO
 			authority := []string{"source.read", "source.write", "pull_request.create"}
 			if scenario == "missing_authority" {
-				authority = []string{"source.read"}
+				authority = []string{} // Generic/legacy work still exercises Marina's own authority check.
 			}
-			err = client.do(ctx, "POST", "/api/v1/tasks", map[string]any{"project_id": "prj_default", "title": "Fix bounded fixture " + scenario, "description": "Keep the public interface unchanged", "acceptance_criteria": "Configured regression check passes", "status": "ready", "priority": "medium", "budget_minutes": 30, "budget": map[string]any{"time_minutes": 30, "max_attempts": 2, "max_tokens": 100000, "max_cost_minor": 0, "currency": "EUR", "max_concurrency": 1, "authority": authority}}, &taskResponse)
+			input := map[string]any{"project_id": "prj_default", "title": "Fix bounded fixture " + scenario, "description": "Keep the public interface unchanged", "acceptance_criteria": "Configured regression check passes", "status": "ready", "priority": "medium", "budget_minutes": 30, "budget": map[string]any{"time_minutes": 30, "max_attempts": 2, "max_tokens": 100000, "max_cost_minor": 0, "currency": "EUR", "max_concurrency": 1, "authority": authority}}
+			if scenario == "promoted_completed" {
+				var channel struct {
+					ID string `json:"id"`
+				}
+				var message struct {
+					ID string `json:"id"`
+				}
+				if err = client.do(ctx, "POST", "/api/v1/operator/channels", map[string]any{"project_id": "prj_default", "name": "workflow-promotion"}, &channel); err != nil {
+					t.Fatal(err)
+				}
+				if err = client.do(ctx, "POST", "/api/v1/operator/channels/"+channel.ID+"/messages", map[string]any{"body": "Fix the bounded fixture"}, &message); err != nil {
+					t.Fatal(err)
+				}
+				input["status"] = "backlog"
+				if err = client.do(ctx, "POST", "/api/v1/operator/messages/"+message.ID+"/promote", input, &taskResponse); err != nil {
+					t.Fatal(err)
+				}
+				err = client.do(ctx, "POST", "/api/v1/tasks/"+taskResponse.ID+"/move", map[string]string{"status": "ready"}, &taskResponse)
+			} else {
+				err = client.do(ctx, "POST", "/api/v1/tasks", input, &taskResponse)
+			}
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -137,7 +158,7 @@ func TestRealRepositoryWorkflow(t *testing.T) {
 			want := execution.StateCompleted
 			if scenario == "ci_missing" {
 				want = execution.StateRunning
-			} else if scenario != "completed" {
+			} else if scenario != "completed" && scenario != "promoted_completed" {
 				want = execution.StateBlocked
 			}
 			if e.State != want {
@@ -147,7 +168,7 @@ func TestRealRepositoryWorkflow(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if scenario == "completed" {
+			if scenario == "completed" || scenario == "promoted_completed" {
 				if detail.Runs[0].Status != workcontrol.RunCompleted || !strings.Contains(detail.Runs[0].ResultSummary, "https://git.internal/pr/1") {
 					t.Fatalf("result not projected: %#v", detail.Runs)
 				}

@@ -5,8 +5,12 @@
   export let onclose: () => void;
   export let oncreate: (input: CreateTaskInput) => Promise<void>;
 
-  let title = '';
-  let description = '';
+  export let initialTitle = '';
+  export let initialDescription = '';
+  export let requireCriteria = false;
+
+  let title = initialTitle;
+  let description = initialDescription;
   let acceptanceCriteria = '';
   let priority: Priority = 'medium';
   let budgetMinutes = 30;
@@ -26,6 +30,10 @@
     error = '';
     if (!title.trim()) {
       error = 'Give the task a clear outcome.';
+      return;
+    }
+    if (requireCriteria && !acceptanceCriteria.trim()) {
+      error = 'A promoted task needs observable acceptance criteria.';
       return;
     }
     submitting = true;

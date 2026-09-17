@@ -13,6 +13,28 @@ expansion are deferred under [decision 0007](docs/decisions/0007-sovereign-first
 
 AppDeck is not intended to be a "main brain" that understands or executes everything. It is the shared contract between humans and replaceable agent runtimes: a dependable place to coordinate, observe, steer, and verify work.
 
+## Supported release boundary
+
+AppDeck and Marina run as separate services over HTTP/JSON. The current repository
+workflow supports cancellation, one implementation and one separate deterministic
+verification attempt, and ends at a PR ready for human review or a blocker.
+AppDeck's broader command ledger does not implement pause/resume in Marina.
+Headless/in-process packaging, automatic CI/review revisions, independent semantic
+review, merge and deployment authority remain future work. The broader controls
+and integrations below describe product direction, not supported runtime behavior.
+
+## Proposed way of working
+
+AppDeck and Marina should feel like one product: define work on a board or discuss it in a project web conversation, delegate to a configured agent, and return later to progress, a result, or a focused question. Marina executes the work on operator-controlled Kubernetes infrastructure. AppDeck keeps the task, conversation, decisions, and result accessible across devices.
+
+The board organizes work; conversation develops intent and supports delegation; an inbox brings back results awaiting review and decisions requiring attention. All three refer to the same task and history. Operators should be able to use either a task or a conversation as their starting point.
+
+An explicit request such as `@codex implement the agreed fix` should be able to initiate authorized work with the relevant discussion and project context. The resulting task should expose the interpreted outcome and scope without requiring duplicate data entry. Questions, ordinary mentions, and quoted instructions do not grant coding authority. Further approval is needed only for missing authority; unclear intent requires clarification.
+
+Project knowledge and decisions should be reusable across tasks. The agent should receive relevant context without the operator rebuilding it in every conversation. Updates should highlight meaningful progress, actionable questions, and reviewable results, while detailed activity remains available on demand.
+
+This target is described in [decision 0009](docs/decisions/0009-asynchronous-agent-work.md). Automatic conversational dispatch remains proposed behavior. The current release still uses explicit task authorization and channel promotion under decision 0007; this vision update does not claim that mention-triggered execution is implemented.
+
 ## Product principles
 
 ### The board is a view, not the data model
@@ -91,8 +113,8 @@ The product should begin as one application process with:
 - Markdown task descriptions combined with structured metadata.
 - An append-only activity history.
 - Server-sent events or WebSockets for live updates.
-- A small agent-facing API and CLI.
-- An artifact directory for plans, logs, patches, reports, and evidence.
+- A versioned agent-facing HTTP API and a separate operator CLI; an agent MCP adapter remains future work.
+- Artifact metadata and authenticated downloads; Marina owns workflow artifact bytes on separate storage.
 - Deterministic export and import using readable Markdown and JSON.
 
 ```text
@@ -112,9 +134,9 @@ The first release should prove one complete workflow:
 1. A human creates a task with an outcome, constraints, acceptance criteria, priority, and budget.
 2. One agent atomically claims the task with a lease.
 3. The agent submits a versioned plan.
-4. The human approves the plan or requests changes.
+4. The human approves the plan or requests changes; the current Marina workflow blocks on a change request, preserving the decision for follow-up work.
 5. The agent emits heartbeats and progress events while executing.
-6. The agent completes the run with artifacts and verification evidence.
+6. Marina completes with artifacts and verification evidence for a PR ready for human review, or reports a blocker. Merge/deploy authority stays with the human.
 7. The complete state and history survive an application restart.
 
 ## Initial non-goals

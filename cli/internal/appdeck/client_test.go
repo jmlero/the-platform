@@ -12,20 +12,45 @@ import (
 func TestClientUsesOperatorAPI(t *testing.T) {
 	t.Helper()
 	mux := http.NewServeMux()
+	logins, logouts := 0, 0
+	mux.HandleFunc("POST /api/v1/operator/session", func(w http.ResponseWriter, r *http.Request) {
+		logins++
+		var input struct {
+			Token string `json:"token"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&input); err != nil || input.Token != "secret" {
+			t.Errorf("invalid login")
+			w.WriteHeader(401)
+			return
+		}
+		if r.Header.Get("Authorization") != "" {
+			t.Error("bearer credential sent")
+		}
+		http.SetCookie(w, &http.Cookie{Name: "appdeck_operator_session", Value: "session", Path: "/", HttpOnly: true})
+		http.SetCookie(w, &http.Cookie{Name: "appdeck_operator_csrf", Value: "csrf", Path: "/"})
+		writeTestJSON(t, w, 201, map[string]any{"authenticated": true})
+	})
+	mux.HandleFunc("DELETE /api/v1/operator/session", func(w http.ResponseWriter, r *http.Request) {
+		logouts++
+		requireOperatorSession(t, r)
+		w.WriteHeader(204)
+	})
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
-		requireBearer(t, r, "secret")
+		if r.Header.Get("Authorization") != "" || r.Header.Get("Cookie") != "" {
+			t.Error("health leaked credentials")
+		}
 		writeTestJSON(t, w, http.StatusOK, Health{Status: "ok", Service: "appdeck", Time: "now"})
 	})
 	mux.HandleFunc("GET /api/v1/bootstrap", func(w http.ResponseWriter, r *http.Request) {
-		requireBearer(t, r, "secret")
+		requireOperatorSession(t, r)
 		writeTestJSON(t, w, http.StatusOK, Bootstrap{Tasks: []Task{{ID: "tsk_1", Title: "First"}}})
 	})
 	mux.HandleFunc("GET /api/v1/operator/tasks/tsk_1", func(w http.ResponseWriter, r *http.Request) {
-		requireBearer(t, r, "secret")
+		requireOperatorSession(t, r)
 		writeTestJSON(t, w, http.StatusOK, TaskDetail{Task: Task{ID: "tsk_1", Title: "First"}})
 	})
 	mux.HandleFunc("POST /api/v1/tasks", func(w http.ResponseWriter, r *http.Request) {
-		requireBearer(t, r, "secret")
+		requireOperatorSession(t, r)
 		if contentType := r.Header.Get("Content-Type"); contentType != "application/json" {
 			t.Fatalf("Content-Type = %q", contentType)
 		}
@@ -39,7 +64,7 @@ func TestClientUsesOperatorAPI(t *testing.T) {
 		writeTestJSON(t, w, http.StatusCreated, Task{ID: "tsk_2", Title: input.Title})
 	})
 	mux.HandleFunc("POST /api/v1/operator/runs/run_1/commands", func(w http.ResponseWriter, r *http.Request) {
-		requireBearer(t, r, "secret")
+		requireOperatorSession(t, r)
 		var input CreateCommandInput
 		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 			t.Fatalf("decode command: %v", err)
@@ -97,6 +122,16 @@ func TestClientUsesOperatorAPI(t *testing.T) {
 	if command.ID != "cmd_1" || command.Sequence != 1 || command.Status != "pending" {
 		t.Fatalf("command = %#v", command)
 	}
+	if logins != 1 {
+		t.Fatalf("logins = %d", logins)
+	}
+	if err := client.Close(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if logouts != 1 {
+		t.Fatal("operator session was not revoked")
+	}
+
 }
 
 func TestClientReturnsStructuredAPIError(t *testing.T) {
@@ -125,6 +160,7 @@ func TestClientReturnsStructuredAPIError(t *testing.T) {
 	if apiError.RequestID != "req_header" {
 		t.Fatalf("request ID = %q", apiError.RequestID)
 	}
+
 }
 
 func TestNewRejectsUnsafeBaseURLs(t *testing.T) {
@@ -207,13 +243,20 @@ func TestTaskRejectsPathCharacters(t *testing.T) {
 	}
 }
 
-func requireBearer(t *testing.T, r *http.Request, token string) {
+func requireOperatorSession(t *testing.T, r *http.Request) {
 	t.Helper()
-	if authorization := r.Header.Get("Authorization"); authorization != "Bearer "+token {
-		t.Fatalf("Authorization = %q", authorization)
+	cookie, err := r.Cookie("appdeck_operator_session")
+	if err != nil || cookie.Value != "session" {
+		t.Error("missing operator session")
 	}
-	if userAgent := r.Header.Get("User-Agent"); userAgent != "platformctl" {
-		t.Fatalf("User-Agent = %q", userAgent)
+	if r.Header.Get("Authorization") != "" {
+		t.Error("operator request sent bearer credential")
+	}
+	if r.Method != http.MethodGet && r.Header.Get("X-CSRF-Token") != "csrf" {
+		t.Error("missing CSRF token")
+	}
+	if r.Header.Get("User-Agent") != "platformctl" {
+		t.Error("missing user agent")
 	}
 }
 

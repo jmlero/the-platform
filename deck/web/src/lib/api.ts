@@ -91,8 +91,8 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ name, project_id: projectID })
     }),
-  channelMessages: (channelID: string) =>
-    request<{ items: ChannelMessage[] }>(`/api/v1/operator/channels/${channelID}/messages`),
+  channelMessages: (channelID: string, cursor = '') =>
+    request<{ items: ChannelMessage[]; next_cursor?: string }>(`/api/v1/operator/channels/${channelID}/messages${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`),
   postChannelMessage: (channelID: string, body: string, references: CanonicalReferences = {}) =>
     request<ChannelMessage>(`/api/v1/operator/channels/${channelID}/messages`, {
       method: 'POST',

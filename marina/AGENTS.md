@@ -29,9 +29,9 @@ The goal is not faster typing or more pull requests. The goal is safe, useful, e
 - Carry forward the creator's experience from `platform-marina`, not its architecture, code, backlog, layer model, providers, or assumptions.
 - Design for one operator and personal repositories first. Do not add multi-tenancy, organization administration, team RBAC, or billing without an explicit requirement.
 - Use Kubernetes as Marina's native installation and first execution substrate, but do not expose Kubernetes-specific concepts as Marina's public product model.
-- Treat AppDeck as the default pluggable human-steering component, not as a mandatory dependency of the factory core.
+- Use AppDeck over HTTP/JSON as the supported work-control provider. Keep the core provider-neutral; alternative providers and headless packaging remain future work.
 - Keep work-control surfaces, agent harnesses, models, workflow engines, runtimes, context sources, policy and verification systems, delivery integrations, and platform services replaceable behind explicit governed contracts.
-- Use a merge-ready pull request as the conservative initial autonomy boundary unless the user explicitly authorizes more.
+- Stop at a pull request ready for human review. Merge/deploy authority needs a separately implemented and authorized workflow.
 
 ## Vocabulary and boundaries
 
@@ -70,7 +70,7 @@ Marina owns internal execution and reconciliation state. The configured work-con
 - Define narrow ports around work control, runtime execution, source control, delivery, observability, identity, secrets, artifacts, and notifications.
 - Standardize inputs, outputs, lifecycle, events, and evidence—not an agent's private reasoning process.
 - Avoid speculative abstraction. Prove one implementation before generalizing, then validate portability with a genuinely different adapter.
-- AppDeck may run in-process or as a service; Marina must also remain operable through a headless interface.
+- Keep the supported pair as separate HTTP/JSON services. Do not describe future in-process or headless packaging as available.
 
 ### Context is infrastructure
 
@@ -85,9 +85,9 @@ Marina owns internal execution and reconciliation state. The configured work-con
 
 - Make authority explicit and versioned per project, change class, environment, and risk level.
 - Every run needs limits for time, attempts, tokens or cost, concurrency, and blast radius.
-- Low-risk work may proceed unattended within policy. Ambiguous, novel, irreversible, or high-impact work must pause and escalate.
+- Low-risk work may proceed unattended within policy. Ambiguous, novel, irreversible, or high-impact work must stop and escalate.
 - Every action must have an identity, scope, policy decision, and audit event.
-- Every autonomy level must support pause, cancellation, and reduction by the human operator.
+- The current repository workflow supports cancellation and rejects other control commands. Pause/resume and authority reduction are future execution capabilities; do not advertise them from ledger support alone.
 
 ### Evidence before lifecycle state
 
@@ -116,7 +116,7 @@ Do not assume:
 - A production alert is a correct diagnosis or an instruction to mutate production.
 - Marina should replace Git, CI, CD, incident management, or observability systems.
 - Fully autonomous production mutation is required for the first proof.
-- The implementation language, framework, database, queue, or workflow engine has already been chosen.
+- A new workflow needs a new language, framework, database, queue, or engine; reuse the existing Go/SQLite services unless evidence requires a change.
 
 Every new dependency or architectural commitment must earn its place against the first proof and the product principles.
 
@@ -127,11 +127,11 @@ Unless the user changes the direction, prefer work that advances this complete l
 1. The operator creates a bounded task through the AppDeck plugin.
 2. Always-on Marina claims it with a lease and persists the plan and execution state.
 3. A runtime adapter starts an isolated Kubernetes workload at a pinned repository revision.
-4. The agent receives a versioned context package and implements the change.
-5. Deterministic checks and risk-appropriate independent review produce evidence.
-6. The agent creates a pull request and handles bounded CI or review revision loops.
+4. The agent receives the frozen task and pinned repository and implements the change; the broader context-package helpers still need workflow integration.
+5. A separate clean verification Job produces deterministic check evidence. Independent semantic review is future work.
+6. Marina creates a pull request and observes required CI at its current head. Failed checks or requested changes block; automatic revision loops remain future work.
 7. AppDeck shows truthful state, cost, decisions, artifacts, and evidence across restarts.
-8. The run stops at a merge-ready pull request or escalates a focused decision.
+8. The run stops at a PR ready for human review or reports a focused blocker. It does not merge or deploy.
 
 Prefer one working vertical slice over broad scaffolding for later maturity stages.
 
@@ -185,7 +185,7 @@ The following remain deliberately unresolved. Keep choices local and reversible 
 - Which runtime will validate portability after the first Kubernetes-hosted harness.
 - Which production feedback source will close the first operational loop.
 - Which actions must always require a human decision.
-- Which evidence and operating history permit autonomy beyond a merge-ready pull request.
+- Which evidence and operating history permit autonomy beyond a PR ready for human review.
 
 When a task requires one of these decisions, present the concrete trade-off and a recommendation. Do not let a library, framework, or provider selection decide it accidentally.
 

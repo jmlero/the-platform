@@ -35,7 +35,7 @@ This directory contains the first working prototype. Read the root [AppDeck visi
 - Monotonic run versions and ownership fence tokens required on every service mutation.
 - Frozen task-version and acceptance-criteria digests on claimed runs.
 - Claim recovery and paginated active-run discovery for stable Marina controllers.
-- Durable pause, resume, cancel, replan, retry, and reduce-authority commands with ordered acknowledgements.
+- Durable command records and ordered acknowledgements. The configured Marina repository workflow implements cancel and rejects pause/resume, replan, retry, and reduce-authority; recording a command does not establish runtime support.
 - Producer-event and per-execution sequence deduplication for Marina projections.
 - A restart-resumable demo agent named **Atlas**.
 - A compiled frontend embedded in one Go application binary.
@@ -95,7 +95,7 @@ The image runs as an unprivileged user and stores its SQLite database in the `/d
 
 For an initial Kubernetes deployment, run a single replica with a persistent volume mounted at `/data`. SQLite WAL mode is intentionally a single-host design. A future multi-replica mode should introduce PostgreSQL rather than share the SQLite file across hosts.
 
-The hardened single-replica base is under [deploy/kubernetes/](deploy/kubernetes/). Render it with `make manifests`; use an environment overlay to select an immutable image, storage class, service-authentication Secret, encrypted transport, backup mechanism, and eventual authenticated human ingress.
+The hardened single-replica base is under [deploy/kubernetes/](deploy/kubernetes/). Render it with `make manifests`; use an environment overlay to select an immutable image, storage class, service-authentication Secret, encrypted transport, backup mechanism, and authenticated human ingress.
 
 ## Configuration
 
@@ -175,11 +175,15 @@ Every active-run mutation also requires the stable logical agent ID, exact run v
 3. Atomically claim one task with a lease.
 4. Send heartbeats while holding the lease.
 5. Submit an immutable structured plan revision and optionally request approval.
-6. Wait for the revision-bound decision and explicitly start the approved run; a change request creates the next revision loop.
+6. Wait for the revision-bound decision and explicitly start the approved run. AppDeck preserves plan revisions; the configured Marina repository workflow blocks on requested changes rather than automatically revising.
 7. Report durable progress and provider-neutral operational state.
 8. Enter verification, record current structured evidence, and complete by referencing its IDs.
 
 Operator commands are durable resources rather than direct lifecycle-column edits. Marina lists them after its persisted cursor and acknowledges each result idempotently. Projected events are deduplicated by producer event ID and execution sequence before entering AppDeck's visible timeline. Provider state and display states are derived from admitted records, lease timestamps, evidence freshness, and synchronization lag; missing facts remain visibly unknown.
+
+Task creation and channel promotion use the same budget and PR-permission form, with two attempts by default. Tasks declaring `source.*` or `pull_request.*` authority identify repository work: entering or editing Ready requires acceptance criteria, at least two attempts, and explicit `source.read`, `source.write`, and `pull_request.create` permission. Save incomplete work in Backlog. AppDeck does not infer repository intent from prose; generic work remains compatible, and Marina independently checks every claimed repository task. This admission check does not grant permissions or guarantee cluster/model readiness.
+
+Channel history uses opaque, channel-scoped `cursor` / `next_cursor` pagination in append order (100 messages by default, maximum 200 per page). The browser follows every page and refreshes on message/promotion events and SSE reconnect, deduplicating by message ID. Reopening a channel recovers history even if live notifications were missed.
 
 Channels are conversation, not execution authority. Messages may reference canonical tasks, runs, decisions, artifacts, and evidence, but only an explicit operator promotion with acceptance criteria and a structured budget creates a task. Project export includes ledger records and artifact metadata in stable order while excluding credentials and artifact bytes; import refuses a non-empty target instead of inventing last-write-wins reconciliation.
 

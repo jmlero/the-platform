@@ -26,6 +26,12 @@ Before planning or changing cross-product behavior, read:
 - Marina owns provider-neutral ports and the reusable consumer conformance suite under `marina/internal/workcontrol/`.
 - A joint contract item is complete only when both product checks and the real-process conformance test pass.
 
+## Current supported behavior
+
+- The supported AppDeck–Marina pair uses HTTP/JSON and separate stores. Headless and in-process packaging remain future work.
+- The repository workflow ends at a PR ready for human review or a blocker, with one implementation and one separate deterministic verification attempt. It supports cancellation; pause/resume, automatic revision loops, independent semantic review, merge and deploy authority remain future work.
+- Distinguish AppDeck's command records and Marina's reusable foundations from behavior supported by the configured workflow.
+
 ## Workflow
 
 - Preserve unrelated user changes and inspect the complete root Git state before editing.
@@ -34,6 +40,12 @@ Before planning or changing cross-product behavior, read:
 - Run the narrowest relevant checks first, then `make check` and `make conformance` for joint protocol changes.
 - Update [TODO.md](TODO.md) only when acceptance criteria are genuinely satisfied.
 - Record consequential cross-product decisions under `docs/decisions/`.
+
+## Local Kubernetes testing
+
+- The user authorizes using their local Podman installation and Kubernetes for development testing. Use the existing [local Podman/Kind profile](deploy/kubernetes/local-podman/README.md) for relevant integration and runtime checks; an always-on host is not a prerequisite for local validation.
+- Inspect and reuse the dedicated `kind-marina-local` context on `podman-machine-default-root`. Preserve unrelated containers, contexts, credentials, and persistent data.
+- Record local test evidence separately from always-on acceptance. Local Kubernetes can validate Jobs, persistence, recovery, cancellation, and network isolation; the laptop-off proof requires a host independent of the Mac.
 
 ## External effects
 

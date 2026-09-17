@@ -28,7 +28,7 @@ func TestStructuredTaskBudgetRoundTrips(t *testing.T) {
 		Authority: []string{"source.read", "source.write", "pull_request.create"},
 	}
 	task, err := appStore.CreateTask(ctx, domain.CreateTaskInput{
-		Title: "Bounded delivery", Status: domain.TaskReady, Priority: "high", Budget: &want,
+		Title: "Bounded delivery", AcceptanceCriteria: "Verified delivery", Status: domain.TaskReady, Priority: "high", Budget: &want,
 	})
 	if err != nil {
 		t.Fatalf("create task: %v", err)

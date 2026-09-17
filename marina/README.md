@@ -7,7 +7,7 @@ The broader software-factory vision remains the long-term direction.
 
 This project starts from scratch as a new Kubernetes-based concept. Experience from the earlier AWS-native `platform-marina` informs the creator's technical judgment, but Marina inherits neither its architecture nor its code and is not a port or rewrite of it.
 
-It is single-operator first. AppDeck is its default pluggable human-steering component, while work-control surfaces, agent harnesses, runtimes, context sources, policy and verification systems, delivery integrations, and platform services remain replaceable behind governed contracts.
+It is single-operator first. AppDeck over HTTP/JSON is the supported work-control provider. Headless and in-process alternatives remain future packaging; work-control surfaces, agent harnesses, runtimes, context sources, policy and verification systems, delivery integrations, and platform services remain replaceable behind governed contracts.
 
 Read the root [Marina vision](../VISION.md) for the product vision, its relationship with AppDeck, the experience brought from `platform-marina`, the Kubernetes-native platform and extensibility thesis, and the questions still to resolve.
 
@@ -17,7 +17,7 @@ Read [the root architecture](../ARCHITECTURE.md) for the joint AppDeck–Marina 
 
 ## Current implementation
 
-The first executable foundation is now present:
+The following implementations and reusable foundations are present; the configured repository workflow below uses a narrower subset:
 
 - A dependency-light Go control-service binary.
 - A narrow, provider-neutral work-control port.
@@ -51,7 +51,11 @@ repository workflow: frozen task budget/authority, immutable plan, optional
 approval, Kubernetes coding Job, scoped Git publication, independent verification
 Job, PR/CI observation and structured evidence completion. It supports one active
 task, one implementation and one verification attempt. Failed verification or
-requested changes block the task. Cancellation waits for observed termination.
+requested changes block the task. Cancellation waits for observed termination. Pause, resume, replan, retry and
+reduce-authority commands are rejected in this workflow; ledger support for
+those command types is not an execution capability. The separate verification
+Job runs deterministic checks, not independent semantic review. Completion means
+a PR ready for human review; merge and deployment remain human-controlled.
 
 The worker uses a configured Codex CLI image and an explicit Responses-compatible
 model endpoint. GitHub/GHES is the first source adapter. Workers receive neither

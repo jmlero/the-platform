@@ -18,6 +18,13 @@ endpoint are chosen. No model credential or Git credential is inferred from the
 operator's development tools. No external coding run is implied by a healthy
 local installation.
 
+The pilot now selects OpenRouter and GitHub/GHCR under
+[decision 0010](../../../docs/decisions/0010-initial-installation-services.md).
+The exact model, repository, and credentials remain to be configured and tested;
+this decision does not change the existing disabled-intake installation. SQLite
+databases and artifacts stay on their existing Kubernetes volumes. Backup/restore
+work is deferred for now.
+
 ## Inspect and start
 
 ```sh

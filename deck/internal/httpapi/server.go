@@ -487,12 +487,12 @@ func (s *Server) listChannelMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	messages, err := s.store.ListChannelMessages(r.Context(), channel.ID, limit)
+	messages, err := s.store.PageChannelMessages(r.Context(), channel.ID, limit, r.URL.Query().Get("cursor"))
 	if err != nil {
 		s.writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": messages})
+	writeJSON(w, http.StatusOK, messages)
 }
 
 func (s *Server) postChannelMessage(w http.ResponseWriter, r *http.Request) {

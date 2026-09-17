@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/cookiejar"
 	"net/url"
 	"strings"
 )
@@ -15,9 +16,10 @@ import (
 const maxResponseBytes = 4 << 20
 
 type Client struct {
-	baseURL    *url.URL
-	token      string
-	httpClient *http.Client
+	baseURL       *url.URL
+	token         string
+	httpClient    *http.Client
+	authenticated bool
 }
 
 type APIError struct {
@@ -72,20 +74,17 @@ func New(rawBaseURL, token string, httpClient *http.Client) (*Client, error) {
 	baseURL.RawPath = ""
 	token = strings.TrimSpace(token)
 	if token != "" && baseURL.Scheme != "https" && !isLoopbackHost(baseURL.Hostname()) {
-		return nil, fmt.Errorf("AppDeck bearer tokens require https outside loopback")
+		return nil, fmt.Errorf("AppDeck operator tokens require https outside loopback")
 	}
 	if httpClient == nil {
 		httpClient = http.DefaultClient
 	}
-	if token != "" {
-		// Refuse redirects so net/http cannot forward Authorization on a
-		// same-host HTTPS to HTTP hop.
-		credentialClient := *httpClient
-		credentialClient.CheckRedirect = func(_ *http.Request, _ []*http.Request) error {
-			return http.ErrUseLastResponse
-		}
-		httpClient = &credentialClient
-	}
+	// Each invocation owns an in-memory cookie jar. Never reuse a caller's jar.
+	credentialClient := *httpClient
+	credentialClient.Jar, _ = cookiejar.New(nil)
+	credentialClient.CheckRedirect = func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }
+	httpClient = &credentialClient
+
 	return &Client{
 		baseURL:    baseURL,
 		token:      token,
@@ -151,7 +150,43 @@ func resourceID(value string) (string, error) {
 	return value, nil
 }
 
+// Close revokes this invocation's session. Callers use a short independent
+// context so an expired command deadline does not prevent best-effort logout.
+func (c *Client) Close(ctx context.Context) error {
+	if !c.authenticated {
+		return nil
+	}
+	err := c.request(ctx, http.MethodDelete, "/api/v1/operator/session", nil, nil)
+	c.authenticated = false
+	c.token = ""
+	c.httpClient.Jar, _ = cookiejar.New(nil)
+	return err
+}
+
 func (c *Client) do(ctx context.Context, method, requestPath string, input, output any) error {
+	if requestPath != "/healthz" && c.token != "" && !c.authenticated {
+		if err := c.request(ctx, http.MethodPost, "/api/v1/operator/session", map[string]string{"token": c.token}, nil); err != nil {
+			// Authentication responses must never echo submitted credentials in diagnostics.
+			if apiErr, ok := err.(*APIError); ok {
+				return &APIError{StatusCode: apiErr.StatusCode, Code: apiErr.Code, Message: "operator login failed", RequestID: apiErr.RequestID}
+			}
+			return fmt.Errorf("operator login failed: %w", err)
+		}
+		session, csrf := false, false
+		for _, cookie := range c.httpClient.Jar.Cookies(c.baseURL) {
+			session = session || cookie.Name == "appdeck_operator_session" && cookie.Value != ""
+			csrf = csrf || cookie.Name == "appdeck_operator_csrf" && cookie.Value != ""
+		}
+		if !session || !csrf {
+			return fmt.Errorf("operator login did not provide usable session and CSRF cookies; check HTTPS and cookie configuration")
+		}
+		c.authenticated = true
+		c.token = ""
+	}
+	return c.request(ctx, method, requestPath, input, output)
+}
+
+func (c *Client) request(ctx context.Context, method, requestPath string, input, output any) error {
 	var requestBody io.Reader
 	if input != nil {
 		var encoded bytes.Buffer
@@ -172,8 +207,12 @@ func (c *Client) do(ctx context.Context, method, requestPath string, input, outp
 	if input != nil {
 		request.Header.Set("Content-Type", "application/json")
 	}
-	if c.token != "" {
-		request.Header.Set("Authorization", "Bearer "+c.token)
+	if method != http.MethodGet && method != http.MethodHead {
+		for _, cookie := range c.httpClient.Jar.Cookies(&endpoint) {
+			if cookie.Name == "appdeck_operator_csrf" {
+				request.Header.Set("X-CSRF-Token", cookie.Value)
+			}
+		}
 	}
 
 	response, err := c.httpClient.Do(request)

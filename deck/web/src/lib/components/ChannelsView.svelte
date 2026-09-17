@@ -1,36 +1,48 @@
 <script lang="ts">
   import { ArrowRight, CheckCircle2, MessageSquare, Plus, Send } from '@lucide/svelte';
+  import { onDestroy } from 'svelte';
   import { api } from '$lib/api';
+  import { createChannelHistory } from '$lib/channel-history';
+  import CreateTaskModal from './CreateTaskModal.svelte';
   import { formatDate } from '$lib/format';
   import type { Channel, ChannelMessage, CreateTaskInput, Task } from '$lib/types';
 
   export let channels: Channel[] = [];
   export let onpromoted: (task: Task) => Promise<void>;
 
+  export let refreshVersion = 0;
+
+  let loading = false;
   let selectedID = '';
   let messages: ChannelMessage[] = [];
   let body = '';
   let channelName = '';
   let busy = false;
   let error = '';
-  let promoting = '';
-  let promotionTitle = '';
-  let acceptanceCriteria = '';
-  let timeMinutes = 30;
-  let authority = 'source.read';
+  let promoting: ChannelMessage | null = null;
+
+  const history = createChannelHistory(
+    (items) => { messages = items; },
+    (message) => { error = message; },
+    (state) => { loading = state; }
+  );
 
   $: if (!selectedID && channels.length) {
     void selectChannel(channels[0]);
   }
 
-  async function selectChannel(channel: Channel) {
+  $: if (selectedID) { refreshVersion; void refreshMessages(selectedID); }
+  onDestroy(() => history.close());
+
+  function selectChannel(channel: Channel) {
     selectedID = channel.id;
+    messages = [];
+    promoting = null;
     error = '';
-    try {
-      messages = (await api.channelMessages(channel.id)).items;
-    } catch (caught) {
-      error = caught instanceof Error ? caught.message : 'Could not load channel messages.';
-    }
+  }
+
+  function refreshMessages(channelID: string) {
+    return history.refresh(channelID);
   }
 
   async function createChannel() {
@@ -54,9 +66,12 @@
     busy = true;
     error = '';
     try {
-      const message = await api.postChannelMessage(selectedID, body.trim());
-      messages = [...messages, message];
-      body = '';
+      const channelID = selectedID;
+      await api.postChannelMessage(channelID, body.trim());
+      if (selectedID === channelID) {
+        body = '';
+        await refreshMessages(channelID);
+      }
     } catch (caught) {
       error = caught instanceof Error ? caught.message : 'Could not post the message.';
     } finally {
@@ -64,42 +79,12 @@
     }
   }
 
-  function startPromotion(message: ChannelMessage) {
-    promoting = message.id;
-    promotionTitle = message.body.length > 80 ? `${message.body.slice(0, 77)}…` : message.body;
-    acceptanceCriteria = '';
-  }
-
-  async function promote(message: ChannelMessage) {
-    if (!promotionTitle.trim() || !acceptanceCriteria.trim()) {
-      error = 'A promoted task needs a clear outcome and observable acceptance criteria.';
-      return;
-    }
-    busy = true;
-    error = '';
-    const input: CreateTaskInput = {
-      title: promotionTitle.trim(),
-      description: '',
-      acceptance_criteria: acceptanceCriteria.trim(),
-      status: 'backlog',
-      priority: 'medium',
-      budget_minutes: Number(timeMinutes),
-      budget: {
-        time_minutes: Number(timeMinutes), max_attempts: 1, max_tokens: 0,
-        max_cost_minor: 0, currency: 'USD', max_concurrency: 1,
-        authority: authority.split(',').map((item) => item.trim()).filter(Boolean)
-      }
-    };
-    try {
-      const task = await api.promoteMessage(message.id, input);
-      messages = messages.map((item) => item.id === message.id ? { ...item, promoted_task_id: task.id } : item);
-      promoting = '';
-      await onpromoted(task);
-    } catch (caught) {
-      error = caught instanceof Error ? caught.message : 'Could not promote the message.';
-    } finally {
-      busy = false;
-    }
+  async function promote(input: CreateTaskInput) {
+    if (!promoting) return;
+    const task = await api.promoteMessage(promoting.id, input);
+    promoting = null;
+    await refreshMessages(selectedID);
+    await onpromoted(task);
   }
 
   function referenceCount(message: ChannelMessage): number {
@@ -130,7 +115,8 @@
       <div><span class="eyebrow">Conversation, not authority</span><h2>{channels.find((channel) => channel.id === selectedID)?.name ?? 'Select a channel'}</h2></div>
       <p>Messages may reference canonical records. Execution starts only after promotion into a bounded, versioned task.</p>
     </header>
-    {#if error}<div class="channel-error">{error}</div>{/if}
+    {#if error}<div class="channel-error" role="alert">{error} <button type="button" on:click={() => refreshMessages(selectedID)}>Retry</button></div>{/if}
+    {#if loading}<p class="loading-history" role="status">Loading channel history…</p>{/if}
     <div class="messages">
       {#each messages as message (message.id)}
         <article class:agent={message.author_type === 'agent'}>
@@ -141,17 +127,10 @@
             {#if message.promoted_task_id}
               <span class="promoted"><CheckCircle2 size={13} /> Task {message.promoted_task_id.slice(-6)}</span>
             {:else}
-              <button type="button" on:click={() => startPromotion(message)}>Promote to bounded task <ArrowRight size={13} /></button>
+              <button type="button" on:click={() => (promoting = message)}>Promote to bounded task <ArrowRight size={13} /></button>
             {/if}
           </footer>
-          {#if promoting === message.id}
-            <div class="promotion-form">
-              <label>Outcome<input bind:value={promotionTitle} /></label>
-              <label>Acceptance criteria<textarea bind:value={acceptanceCriteria} rows="2"></textarea></label>
-              <div><label>Minutes<input type="number" min="1" bind:value={timeMinutes} /></label><label>Authority<input bind:value={authority} /></label></div>
-              <button type="button" disabled={busy} on:click={() => promote(message)}>Create versioned task</button>
-            </div>
-          {/if}
+
         </article>
       {:else}
         <div class="empty"><MessageSquare size={25} /><p>No messages in this channel.</p></div>
@@ -166,7 +145,18 @@
   </div>
 </section>
 
+{#if promoting}
+  <CreateTaskModal
+    initialTitle={promoting.body.length > 80 ? `${promoting.body.slice(0, 77)}…` : promoting.body}
+    initialDescription={promoting.body}
+    requireCriteria={true}
+    onclose={() => (promoting = null)}
+    oncreate={promote}
+  />
+{/if}
+
 <style>
+  .loading-history { margin: 8px 16px; color: var(--subtle); font-size: .65rem; }
   .channels-layout { display: grid; min-height: 0; flex: 1; grid-template-columns: 240px 1fr; gap: 12px; }
   .channel-list, .conversation { min-height: 0; border-radius: 15px; }
   .channel-list { display: flex; flex-direction: column; padding: 15px; }
@@ -191,10 +181,6 @@
   .messages article > p { margin: 8px 0; color: var(--muted); font-size: 0.71rem; line-height: 1.5; white-space: pre-wrap; }
   .messages footer button { display: inline-flex; align-items: center; gap: 5px; color: var(--acid); font-size: 0.6rem; background: transparent; border: 0; cursor: pointer; }
   .promoted { display: inline-flex; align-items: center; gap: 5px; color: var(--acid) !important; }
-  .promotion-form { display: grid; gap: 8px; margin-top: 10px; padding: 10px; background: rgba(0,0,0,.16); border-radius: 8px; }
-  .promotion-form label { display: grid; gap: 4px; color: var(--subtle); font-size: 0.57rem; }
-  .promotion-form > div { display: grid; grid-template-columns: 120px 1fr; gap: 8px; }
-  .promotion-form > button { height: 34px; color: #10140c; font-weight: 700; background: var(--acid); border: 0; border-radius: 8px; cursor: pointer; }
   .composer { display: grid; grid-template-columns: 1fr 90px; gap: 8px; padding: 12px; border-top: 1px solid var(--line); }
   .channel-error { margin: 10px 16px 0; padding: 8px; color: var(--red); font-size: .64rem; background: var(--red-soft); border-radius: 8px; }
   .empty { display: grid; flex: 1; color: var(--subtle); place-content: center; justify-items: center; font-size: .68rem; }

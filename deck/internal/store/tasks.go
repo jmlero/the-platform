@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/jmlero/the-platform/deck/internal/domain"
@@ -88,7 +89,39 @@ func validateTaskInput(input domain.CreateTaskInput) (domain.CreateTaskInput, er
 	if !validPriority(input.Priority) {
 		return input, fmt.Errorf("unknown priority %q: %w", input.Priority, domain.ErrInvalidInput)
 	}
+	if input.Status == domain.TaskReady {
+		if err := validateRepositoryReadiness(input.AcceptanceCriteria, budget); err != nil {
+			return input, err
+		}
+	}
 	return input, nil
+}
+
+// Source/PR permissions identify repository work without interpreting prose or
+// imposing Marina's workflow on general work-control clients.
+func validateRepositoryReadiness(criteria string, budget domain.Budget) error {
+	repository := slices.ContainsFunc(budget.Authority, func(permission string) bool {
+		return strings.HasPrefix(permission, "source.") || strings.HasPrefix(permission, "pull_request.")
+	})
+	if !repository {
+		return nil
+	}
+	var missing []string
+	if strings.TrimSpace(criteria) == "" {
+		missing = append(missing, "observable acceptance criteria")
+	}
+	if budget.MaxAttempts < 2 {
+		missing = append(missing, "at least two attempts for implementation and verification")
+	}
+	for _, permission := range []string{"source.read", "source.write", "pull_request.create"} {
+		if !slices.Contains(budget.Authority, permission) {
+			missing = append(missing, "explicit "+permission+" authority")
+		}
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("repository work is not ready: needs %s; save in backlog to refine: %w", strings.Join(missing, "; "), domain.ErrInvalidInput)
+	}
+	return nil
 }
 
 func normalizeBudget(budget domain.Budget, legacyMinutes int) (domain.Budget, error) {
@@ -335,6 +368,11 @@ func (s *Store) UpdateTask(ctx context.Context, id string, input domain.UpdateTa
 	if task.Title == "" || task.BudgetMinutes <= 0 || !validPriority(task.Priority) {
 		return domain.Task{}, fmt.Errorf("invalid task fields: %w", domain.ErrInvalidInput)
 	}
+	if task.Status == domain.TaskReady {
+		if err := validateRepositoryReadiness(task.AcceptanceCriteria, task.Budget); err != nil {
+			return domain.Task{}, err
+		}
+	}
 
 	now := nowMillis()
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -411,6 +449,11 @@ func (s *Store) MoveTask(ctx context.Context, id, target string) (domain.Task, e
 	if !manualTransitionAllowed(task.Status, target) {
 		return domain.Task{}, fmt.Errorf("cannot move task from %s to %s: %w", task.Status, target, domain.ErrInvalidTransition)
 	}
+	if target == domain.TaskReady {
+		if err := validateRepositoryReadiness(task.AcceptanceCriteria, task.Budget); err != nil {
+			return domain.Task{}, err
+		}
+	}
 
 	now := nowMillis()
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -421,8 +464,8 @@ func (s *Store) MoveTask(ctx context.Context, id, target string) (domain.Task, e
 	result, err := tx.ExecContext(ctx, `
 		UPDATE tasks
 		SET status = ?, assigned_agent_id = NULL, version = version + 1, updated_at = ?
-		WHERE id = ? AND status = ?
-	`, target, now, id, task.Status)
+		WHERE id = ? AND status = ? AND version = ?
+	`, target, now, id, task.Status, task.Version)
 	if err != nil {
 		return domain.Task{}, fmt.Errorf("move task: %w", err)
 	}

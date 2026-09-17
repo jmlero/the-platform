@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 
@@ -64,7 +65,7 @@ func Run(
 	flags := flag.NewFlagSet("platformctl", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	flags.StringVar(&r.appDeckURL, "appdeck-url", r.appDeckURL, "AppDeck base URL")
-	flags.StringVar(&r.tokenFile, "token-file", r.tokenFile, "file containing an AppDeck bearer token")
+	flags.StringVar(&r.tokenFile, "token-file", r.tokenFile, "file containing an AppDeck operator login token")
 	flags.DurationVar(&r.timeout, "timeout", r.timeout, "request timeout")
 	flags.BoolVar(&r.jsonOutput, "json", false, "write JSON output")
 	showVersion := flags.Bool("version", false, "print version")
@@ -320,7 +321,13 @@ func (r runner) client(ctx context.Context) (*appdeck.Client, context.Context, c
 		return nil, nil, nil, err
 	}
 	commandContext, cancel := context.WithTimeout(ctx, r.timeout)
-	return client, commandContext, cancel, nil
+	cleanup := func() {
+		defer cancel()
+		logoutContext, stop := context.WithTimeout(context.Background(), min(r.timeout, 2*time.Second))
+		defer stop()
+		_ = client.Close(logoutContext)
+	}
+	return client, commandContext, cleanup, nil
 }
 
 func (r runner) token() (string, error) {
@@ -332,6 +339,16 @@ func (r runner) token() (string, error) {
 		return "", fmt.Errorf("open token file: %w", err)
 	}
 	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		return "", fmt.Errorf("inspect token file: %w", err)
+	}
+	if !info.Mode().IsRegular() {
+		return "", fmt.Errorf("token file must be a regular file")
+	}
+	if runtime.GOOS != "windows" && info.Mode().Perm()&0077 != 0 {
+		return "", fmt.Errorf("token file must be accessible only to its owner (chmod 600)")
+	}
 	contents, err := io.ReadAll(io.LimitReader(file, maxTokenFileBytes+1))
 	if err != nil {
 		return "", fmt.Errorf("read token file: %w", err)
@@ -425,7 +442,7 @@ Commands:
 
 Global options:
   --appdeck-url URL    AppDeck base URL (default: APPDECK_URL or http://localhost:8080)
-  --token-file PATH    Bearer-token file (default: APPDECK_TOKEN_FILE)
+  --token-file PATH    Operator-token file (default: APPDECK_TOKEN_FILE)
   --timeout DURATION   Request timeout (default: 10s)
   --json               Write JSON output
   --version            Print version

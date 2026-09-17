@@ -16,6 +16,7 @@ check-installation:
 	python3 -m unittest discover -s scripts -p 'test_*.py'
 
 conformance:
+	$(MAKE) -C cli conformance-appdeck APPDECK_REPO="$(APPDECK_REPO)"
 	$(MAKE) -C marina conformance-appdeck APPDECK_REPO="$(APPDECK_REPO)"
 
 fmt:

@@ -2,7 +2,7 @@
 
 - Status: Target architecture for the first laptop-off proof
 - Scope: `cli/`, `deck/`, and `marina/` in the `the-platform` monorepo
-- Last reviewed: 2026-08-16
+- Last reviewed: 2026-09-17
 
 ## Purpose
 
@@ -11,7 +11,7 @@ AppDeck and Marina are separate products that should evolve together through an 
 - **AppDeck is the operator control room and authoritative human-facing ledger.** It owns work intent, priorities, approval boundaries, decisions, commands, visible run state, and the evidence presented to the operator.
 - **Marina is the always-on factory engine.** It claims authorized work, persists execution state, assembles context, applies policy, drives runtimes, verifies outcomes, reconciles failures, and publishes normalized state and evidence.
 
-Neither product should absorb the other. AppDeck must remain useful with different agent systems, and Marina must remain operable with another work-control provider or a headless adapter. Their default combination should nevertheless feel like one dependable system rather than two databases that happen to exchange HTTP requests.
+Neither product should absorb the other. AppDeck must remain useful with different agent systems, and Marina should preserve the future option of another work-control provider or a headless adapter. Their default combination should nevertheless feel like one dependable system rather than two databases that happen to exchange HTTP requests.
 
 `platformctl` is a separate, stateless operator client. It sends human intent to AppDeck and renders AppDeck's authoritative state through supported HTTP/JSON endpoints; it does not call Marina directly or own a third ledger.
 
@@ -35,7 +35,14 @@ branch/commit → separate verification Job at the published revision → PR →
 required CI and current-head checks → structured evidence and completion.
 Failed verification, closed/changed PRs and requested changes produce a blocker.
 One implementation and one verification attempt are supported; cancellation
-waits for observed Job termination. Automatic revision loops are deferred.
+waits for observed Job termination. The configured workflow rejects pause,
+resume, replan, retry and reduce-authority commands. Automatic revision loops and
+independent semantic review are deferred; separate verification runs deterministic
+checks. Completion means a PR ready for human review, with no merge or deployment.
+
+The supported pair is two HTTP/JSON services. Alternative providers, standalone
+headless execution and in-process packaging remain future work. The operator CLI
+uses AppDeck's session/CSRF API and is not a headless Marina provider.
 
 The fixed workflow is under `marina/internal/flow/`; its Kubernetes, GitHub/GHES,
 worker, model/source gateway and content-addressed artifact implementations remain
@@ -68,6 +75,13 @@ the current workflow above; the rest of this document also describes later targe
 At that gate, work was claimed only into the durable control ledger. That mode
 remains available without workflow configuration; configured installations now
 enable the narrower repository workflow described above.
+
+## Scope of the architecture below
+
+The following invariants and component/lifecycle designs include future targets.
+The current workflow above defines implemented behavior. In particular, descriptions
+of retry, pause/resume, context assembly, semantic review, delivery and production
+feedback do not establish those capabilities in the one-pass repository workflow.
 
 ## Non-negotiable invariants
 
@@ -285,11 +299,11 @@ Progress delivery uses a durable outbox. If AppDeck is unavailable, Marina may r
 
 A timeout after step 6 is harmless: replaying the same idempotency key returns the original result. Missing, stale, mismatched, or failed evidence leaves the run in verification, triggers a bounded revision attempt, or creates a focused escalation.
 
-### 5. Cancel, pause, and replan
+### 5. Cancellation now; pause and replan targets
 
 AppDeck assigns every command a durable sequence. Marina processes commands in order, checkpoints before acting, stops new side effects, invokes the runtime adapter, revokes or lets scoped credentials expire, and records an acknowledgement. Cancellation and authority reduction take precedence over ordinary progress.
 
-Pause is cooperative and bounded: if a runtime cannot safely pause, Marina checkpoints available state and cancels it. Resume creates or resumes a runtime attempt only while the original run, plan, lease, budget, and policy remain valid.
+Future pause support must be cooperative and bounded: if a runtime cannot safely pause, Marina checkpoints available state and cancels it. Resume creates or resumes a runtime attempt only while the original run, plan, lease, budget, and policy remain valid.
 
 ## Work-control protocol
 
@@ -391,7 +405,7 @@ It should not add runtime scheduling, Kubernetes Job construction, repository ch
 
 ## Runtime adapter
 
-The provider-neutral runtime boundary supports:
+The provider-neutral runtime boundary defines the following operations. Resume requires an adapter capability; the current Kubernetes repository workflow cannot pause/resume a coding session:
 
 - `Start` with an idempotency key and immutable run specification;
 - `Inspect` returning observed lifecycle, heartbeat, usage, and output references;
@@ -435,7 +449,7 @@ The package starts small and permits bounded retrieval through trusted tools. Ra
 
 Verification is a policy evaluation over an evidence set tied to one source revision. Evidence classes include build, test, lint, security, review, pull-request, delivery, and operational observation.
 
-The minimum merge-ready-PR gate requires:
+The target merge-ready-PR gate (beyond the current PR-review boundary) requires:
 
 - the produced diff and commit identity;
 - repository-defined deterministic checks with exit status and command provenance;
@@ -560,9 +574,13 @@ Both services run with separate durable stores, backups, probes, identities, and
 
 Marina starts, inspects, cancels, and cleans an isolated Job at a pinned revision. Checkpoints and artifacts survive Job replacement, and authority cannot outlive the fenced lease or budget.
 
-### Gate D: unattended merge-ready pull request
+### Gate D: unattended PR ready for human review
 
-A versioned plan, decision, context package, implementation, deterministic checks, independent review, CI revision loop, structured evidence set, and merge-ready pull request complete while the operator is offline.
+A frozen task and repository revision, versioned plan/decision, one implementation,
+separate deterministic verification, PR/CI observation and structured evidence
+complete while the operator is offline, or report a blocker. Installation-specific
+acceptance is still required. Automatic CI/review revisions, full context assembly,
+independent semantic review, and merge authority are later gates, not release claims.
 
 ### Gate E: bounded delivery and feedback
 
@@ -581,7 +599,7 @@ The following defaults are now explicit for the first proof:
 - Bind one AppDeck run to one Marina execution and allow bounded runtime attempts underneath it.
 - Use separate SQLite databases and single replicas until measured triggers justify independent PostgreSQL migrations.
 - Store artifact bytes outside both databases and exchange immutable references and digests.
-- Use a merge-ready pull request as the default authority boundary.
+- Stop at a PR ready for human review; the current workflow has no merge/deploy authority.
 - Use scoped opaque credentials as the first Marina-to-AppDeck service-authentication mechanism while preserving authorization semantics for a later OIDC replacement.
 - Add controllers inside the Marina process before considering extra services or a Kubernetes operator.
 
@@ -590,12 +608,12 @@ The following defaults are now explicit for the first proof:
 Before the relevant implementation becomes irreversible, record decisions for:
 
 - the first always-on cluster, storage class, backup mechanism, and namespace topology;
-- the first artifact-store implementation and retention policy;
-- the first real harness and its source-control credential mechanism;
-- the initial policy representation and evaluator;
+- artifact retention policy (content-addressed Marina-owned storage is implemented);
+- additional harnesses and credential models (Codex Jobs and the scoped Git/model gateway are implemented);
+- future policy/context integration beyond the current fixed repository rules;
 - the first alternate runtime used to prove portability;
 - the first production-feedback source and observation window;
 - actions that always require a human decision;
-- evidence and operating history required to move beyond merge-ready-PR authority.
+- evidence and operating history required to move beyond PR-review authority.
 
 The architecture is successful when either product can evolve internally without corrupting the other's state, while their combined system can lose responses, restart processes, replace agent compute, and still produce one evidence-backed account of one bounded outcome.

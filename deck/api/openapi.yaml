@@ -870,7 +870,15 @@ paths:
       x-capability: channel.message.list
       security:
         - serviceBearer: []
-      summary: List ordered channel messages and canonical references
+      summary: List channel messages in append order with canonical references
+      description: >-
+        Pages follow durable append order, including equal timestamps. Pass next_cursor
+        as cursor to continue. Cursors are opaque, exclusive, and channel-scoped.
+        The operator endpoint uses the same pagination. Appends emit a durable
+        channel.message.created event with project_id, channel_id, and message_id.
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 100 } }
+        - { name: cursor, in: query, schema: { type: string } }
       responses:
         "200":
           description: Channel messages
@@ -883,6 +891,8 @@ paths:
                   items:
                     type: array
                     items: { $ref: "#/components/schemas/ChannelMessage" }
+                  next_cursor: { type: string }
+        "422": { $ref: "#/components/responses/InvalidInput" }
         "401": { $ref: "#/components/responses/AuthenticationRequired" }
         "403": { $ref: "#/components/responses/Forbidden" }
     post:
@@ -1757,6 +1767,12 @@ components:
           type: integer
           minimum: 1
         authority:
+          description: >-
+            Explicit permissions; never inferred from prose. Operator admission of
+            tasks with source.* or pull_request.* permissions into Ready requires
+            acceptance criteria, max_attempts >= 2, and source.read, source.write,
+            pull_request.create. Incomplete tasks can remain in Backlog. Consumers
+            independently enforce their workflow prerequisites after claiming.
           type: array
           uniqueItems: true
           items:
