@@ -114,6 +114,13 @@ Inspect the local journal without serving internal state as an API:
 
 The export omits raw signal text and free-form journal messages, redacts arbitrary payload strings, sanitizes URLs, and fingerprints provider handles. It contains operational metadata only; Deck remains the authoritative human-facing work-control ledger.
 
+After draining work and stopping Marina, `marina artifact-retention --journal-path
+/data/marina.db --artifact-directory /data/artifacts` reports expired unreferenced
+artifacts without deleting them. Apply only a reviewed report with `--apply-plan`.
+All historical journal references remain protected; seven days and 100 files are
+the default age and batch size. See the [operations runbook](../deploy/kubernetes/first-release/OPERATIONS.md)
+for the maintenance lock, Kubernetes procedure and recovery cases.
+
 For an authenticated Deck service API, set `MARINA_DECK_TOKEN_FILE` to the file containing the raw opaque token. Marina reads the file for every request so a projected or atomically replaced secret rotates without changing the stable installation, logical agent, or run identity. Do not put the token in an environment variable, command argument, URL, or repository file.
 
 Mutating work-control requests carry `Idempotency-Key`. The intake controller persists its claim key before calling Deck; lease, budget, command, and projection operations derive repeatable keys from durable journal identity. Direct adapter callers that omit a key receive a one-shot compatibility key, which is unsuitable for ambiguous-response recovery.

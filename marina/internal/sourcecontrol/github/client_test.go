@@ -5,10 +5,49 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/jmlero/the-platform/marina/internal/sourcecontrol"
 )
+
+func TestCredentialRotationReloadsAndEmptyCredentialStopsBeforeProvider(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "token")
+	want, calls := "first-private-token", 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if r.Header.Get("Authorization") != "Bearer "+want {
+			t.Error("unexpected credential")
+		}
+		_, _ = w.Write([]byte(`{"object":{"sha":"head"}}`))
+	}))
+	defer server.Close()
+	client, err := New(Config{APIURL: server.URL, Repository: "owner/repo", TokenFile: path}, server.Client())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, token := range []string{"first-private-token", "replacement-private-token", ""} {
+		want = token
+		if err := os.WriteFile(path, []byte(token), 0600); err != nil {
+			t.Fatal(err)
+		}
+		_, err := client.CurrentHead(context.Background(), sourcecontrol.HeadRequest{Repository: "owner/repo", Ref: "main"})
+		if token != "" && err != nil {
+			t.Fatal(err)
+		}
+		if token == "" && err == nil {
+			t.Fatal("empty credential reached provider")
+		}
+		if err != nil && strings.Contains(err.Error(), "private-token") {
+			t.Fatal("credential leaked in error")
+		}
+	}
+	if calls != 2 {
+		t.Fatalf("provider calls=%d, want 2", calls)
+	}
+}
 
 func TestPullRequestRecoveryFindsExistingRunWithoutCreatingDuplicate(t *testing.T) {
 	writes := 0

@@ -17,6 +17,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jmlero/the-platform/marina/internal/artifacts"
 	"github.com/jmlero/the-platform/marina/internal/deck"
 	"github.com/jmlero/the-platform/marina/internal/execution"
 	"github.com/jmlero/the-platform/marina/internal/flow"
@@ -59,6 +60,8 @@ func run(arguments []string, stdout io.Writer, stderr io.Writer) int {
 		return 0
 	case "diagnostics":
 		return runDiagnostics(arguments[1:], stdout, stderr)
+	case "artifact-retention":
+		return runArtifactRetention(arguments[1:], stdout, stderr)
 	case "doctor":
 		return runDoctor(arguments[1:], stdout, stderr)
 	case "serve":
@@ -241,6 +244,14 @@ func runServe(arguments []string, stderr io.Writer) int {
 			"protocol_version", providerInfo.ProtocolVersion,
 			"capability_count", len(providerInfo.Capabilities),
 		)
+	}
+	if *configPath != "" {
+		lock, err := artifacts.Lock(workflowConfig.ArtifactDirectory)
+		if err != nil {
+			logger.Error("lock artifact store", "error", err)
+			return 1
+		}
+		defer lock.Close()
 	}
 	journal, err := sqlite.Open(startupCtx, *journalPath)
 	if err != nil {
@@ -532,6 +543,7 @@ func writeUsage(writer io.Writer) {
 	_, _ = fmt.Fprintln(writer)
 	_, _ = fmt.Fprintln(writer, "Commands:")
 	_, _ = fmt.Fprintln(writer, "  diagnostics  Export a deterministic, redacted view of the local journal")
+	_, _ = fmt.Fprintln(writer, "  artifact-retention  Plan or apply offline cleanup of expired unreferenced artifacts")
 	_, _ = fmt.Fprintln(writer, "  doctor   Check the configured work-control dependency")
 	_, _ = fmt.Fprintln(writer, "  serve    Run Marina's HTTP liveness and readiness service")
 	_, _ = fmt.Fprintln(writer, "  version  Print the Marina version")

@@ -422,7 +422,7 @@ func (client *Client) request(ctx context.Context, method, path string, body, re
 	request.Header.Set("Content-Type", "application/json")
 	if client.config.TokenFile != "" {
 		token, err := os.ReadFile(client.config.TokenFile)
-		if err != nil {
+		if err != nil || strings.TrimSpace(string(token)) == "" {
 			return 0, errors.New("read Git provider credential")
 		}
 		request.Header.Set("Authorization", "Bearer "+strings.TrimSpace(string(token)))

@@ -93,6 +93,15 @@ func (server *Server) model(w http.ResponseWriter, r *http.Request) {
 	requestBody["store"] = false
 	requestBody["max_output_tokens"] = model.MaxOutputTokens
 	encoded, _ := json.Marshal(requestBody)
+	var credential string
+	if model.TokenFile != "" {
+		token, err := os.ReadFile(model.TokenFile)
+		credential = strings.TrimSpace(string(token))
+		if err != nil || credential == "" {
+			http.Error(w, "model credential unavailable", 503)
+			return
+		}
+	}
 	// Byte-count reservation is conservative for the supported text tokenizers.
 	// Unknown responses keep their reservation; final upstream usage is recorded.
 	inputReservation := int64(len(encoded)) + 1024
@@ -113,12 +122,7 @@ func (server *Server) model(w http.ResponseWriter, r *http.Request) {
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Accept", "text/event-stream, application/json")
 	if model.TokenFile != "" {
-		token, err := os.ReadFile(model.TokenFile)
-		if err != nil {
-			http.Error(w, "model credential unavailable", 503)
-			return
-		}
-		request.Header.Set("Authorization", "Bearer "+strings.TrimSpace(string(token)))
+		request.Header.Set("Authorization", "Bearer "+credential)
 	}
 	response, err := server.client.Do(request)
 	if err != nil {

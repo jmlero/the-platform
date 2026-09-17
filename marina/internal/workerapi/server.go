@@ -316,7 +316,7 @@ func (server *Server) source(w http.ResponseWriter, r *http.Request) {
 	request.Header.Set("Git-Protocol", r.Header.Get("Git-Protocol"))
 	if server.config.SourceTokenFile != "" {
 		token, err := os.ReadFile(server.config.SourceTokenFile)
-		if err != nil {
+		if err != nil || strings.TrimSpace(string(token)) == "" {
 			http.Error(w, "source credential unavailable", 503)
 			return
 		}

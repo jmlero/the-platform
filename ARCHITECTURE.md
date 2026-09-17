@@ -608,7 +608,7 @@ The following defaults are now explicit for the first proof:
 Before the relevant implementation becomes irreversible, record decisions for:
 
 - the first always-on cluster, storage class, backup mechanism, and namespace topology;
-- artifact retention policy (content-addressed Marina-owned storage is implemented);
+- broader task-history expiry or online collection beyond the [conservative offline artifact retention policy](docs/decisions/0013-conservative-artifact-retention.md);
 - additional harnesses and credential models (Codex Jobs and the scoped Git/model gateway are implemented);
 - future policy/context integration beyond the current fixed repository rules;
 - the first alternate runtime used to prove portability;

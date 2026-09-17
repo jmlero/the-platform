@@ -28,6 +28,12 @@ live-run prerequisites. The private disposable repository is
 here. [NETWORK.md](NETWORK.md) enumerates the selected destinations, data flows,
 DNS/IP enforcement limits and reproducible local probes.
 
+Use the [named live acceptance exercises](ACCEPTANCE.md) for RUN-09–18 and the
+[operations runbook](OPERATIONS.md) for certificate renewal, credential rotation,
+artifact retention and failure recovery. `python3 scripts/check-installation.py
+<private-installation>` reports configuration blockers without exposing Secret
+data or changing intake. A passing preflight does not replace live acceptance.
+
 ## Boundaries
 
 Deck and Marina have separate images, service accounts and SQLite PVCs.

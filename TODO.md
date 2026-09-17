@@ -91,10 +91,18 @@ Use the same first installation. OPS-01/02 are deferred until backup recovery be
 | --- | --- | --- | --- | --- |
 | OPS-01 | Later | Ops | Automate a consistent quiesced backup when required. | After the operator reactivates backup work, one documented command backs up both databases with their WAL state, artifacts, identities, and required private configuration to the chosen destination. |
 | OPS-02 | Later | Joint | Restore that backup into an isolated installation. | After OPS-01, services recover the same identities and work records, artifact digests validate, and reconciliation creates no duplicate external work. |
-| OPS-03 | Open | Ops | Rehearse certificate renewal. | The installation can replace expiring certificates and trust without recreating operator/service identities or losing work. |
+| OPS-03 | Done | Ops | Rehearse certificate renewal. | The installation can replace expiring certificates and trust without recreating operator/service identities or losing work. [Local renewal and identity evidence](docs/validation/first-release-operations-2026-09-17.md). |
 | OPS-04 | Verify | Joint | Rehearse credential rotation. | Operator, service, and Git/model credential changes take effect with the documented session/revocation behavior; no credential appears in evidence or diagnostics. |
-| OPS-05 | Open | Marina | Implement bounded artifact retention. | Retention rules and a dry-run report precede deletion; referenced/current evidence is preserved and expired unreferenced artifacts can be removed safely. |
-| OPS-06 | Open | Ops | Write a short recovery runbook from acceptance failures. | Disk-full, unavailable provider, stuck cancellation, and failed worker cases each have detection and recovery steps; no direct ledger editing is required. Add restored-storage procedures when OPS-01/02 are activated. |
+| OPS-05 | Done | Marina | Implement bounded artifact retention. | Retention rules and a dry-run report precede deletion; referenced/current evidence is preserved and expired unreferenced artifacts can be removed safely. [Implementation and verification](docs/validation/first-release-operations-2026-09-17.md). |
+| OPS-06 | Done | Ops | Write a short recovery runbook from acceptance failures. | Disk-full, unavailable provider, stuck cancellation, and failed worker cases each have detection and recovery steps; no direct ledger editing is required. [Recovery runbook](deploy/kubernetes/first-release/OPERATIONS.md). Add restored-storage procedures when OPS-01/02 are activated. |
+
+**2026-09-17 operations follow-up:** OPS-03/05/06 are complete. Operator/service
+credential rotation passed locally; OPS-04 retains its live Git/model requirement.
+A private model-key file is populated, but exact model/rates, test spend and scoped
+Git credentials remain pending. The operator confirmed only local Podman/Kind is
+available. RUN-03/05/08–18 remain open or awaiting live evidence; the
+[per-item follow-up report](docs/validation/first-release-operations-2026-09-17.md)
+records progress and blockers. Intake remains disabled.
 
 ## 4. Reuse project context
 

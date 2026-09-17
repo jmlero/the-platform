@@ -105,6 +105,7 @@ Clients using their own trust store should supply
 `--cacert ~/.local/share/the-platform/marina-local/installation/ca.crt`.
 The leaf certificates last 90 days. Renew them before expiry and update the
 Secrets and local leaf trust; do not regenerate operator/service credentials.
+Use the tested [certificate renewal and rotation procedures](../first-release/OPERATIONS.md).
 
 ## Verify
 
@@ -137,6 +138,13 @@ the real coding, cancellation and recovery acceptance checks before relying on
 autonomous work.
 
 ## Verified on 2026-09-17
+
+The [operations follow-up](../../../docs/validation/first-release-operations-2026-09-17.md)
+records renewed TLS, operator/service credential rotation and the locally loaded
+`ops-20260917` Marina image with offline artifact retention and stricter provider
+credential handling. Original credentials and persistent identities were
+preserved; new task intake remains disabled. The private model-key file is now
+populated, while model/rates/spend and scoped Git credentials remain pending.
 
 The current Deck and Marina images were built and loaded locally, then the
 existing installation was upgraded while preserving its two bound PVCs,
