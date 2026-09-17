@@ -20,6 +20,14 @@ running platform requires only GitHub services and OpenRouter externally. Packag
 worker/check dependencies before execution. The exact OpenRouter model, repository,
 and credentials still need configuration; these choices do not enable intake.
 
+The [2026-09-17 local acceptance report](../../../docs/validation/run-01-18-2026-09-17.md)
+records completed installation/image/network/restart checks and the remaining
+live-run prerequisites. The private disposable repository is
+[jmlero/marina-acceptance](https://github.com/jmlero/marina-acceptance); its
+[fixture source](acceptance-repository/) and pinned CI workflow are maintained
+here. [NETWORK.md](NETWORK.md) enumerates the selected destinations, data flows,
+DNS/IP enforcement limits and reproducible local probes.
+
 ## Boundaries
 
 Deck and Marina have separate images, service accounts and SQLite PVCs.

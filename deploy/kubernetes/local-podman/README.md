@@ -13,14 +13,16 @@ pbcopy < ~/.local/share/the-platform/marina-local/installation/operator-token
 ```
 
 This profile runs authenticated TLS services with **new task intake disabled**.
-The mounted `workflow.json` is an inactive template until a repository and model
-endpoint are chosen. No model credential or Git credential is inferred from the
+The mounted `workflow.json` now selects the disposable
+[acceptance repository](https://github.com/jmlero/marina-acceptance), its offline
+checks and a pinned worker image. The model and provider credentials remain
+unconfigured. No model credential or Git credential is inferred from the
 operator's development tools. No external coding run is implied by a healthy
 local installation.
 
 The pilot now selects OpenRouter and GitHub/GHCR under
 [decision 0010](../../../docs/decisions/0010-initial-installation-services.md).
-The exact model, repository, and credentials remain to be configured and tested;
+The exact model, test spend and scoped credentials remain to be configured and tested;
 this decision does not change the existing disabled-intake installation. SQLite
 databases and artifacts stay on their existing Kubernetes volumes. Backup/restore
 work is deferred for now.
@@ -134,7 +136,28 @@ API and chosen Git/model endpoints. Preserve worker isolation. Then complete
 the real coding, cancellation and recovery acceptance checks before relying on
 autonomous work.
 
-## Verified on 2026-09-09
+## Verified on 2026-09-17
+
+The current Deck and Marina images were built and loaded locally, then the
+existing installation was upgraded while preserving its two bound PVCs,
+credentials, CA, task IDs and Marina identity. Deck intentionally continues to
+mount the original `appdeck-data` claim. Keep that override in the private overlay.
+The quiesced pre-upgrade snapshot is private under
+`~/.local/share/the-platform/marina-local/pre-deck-upgrade-20260917`.
+
+Authentication, TLS, session/task/identity persistence through both service
+restarts, disabled intake, worker isolation, controller egress and offline fixture
+checks passed. The local controller uses a paired IP allowlist and `hostAliases`
+snapshot for the selected GitHub/OpenRouter endpoints. See the
+[network preparation and probe procedure](../first-release/NETWORK.md) before
+refreshing those destinations or enabling execution.
+
+The [RUN-01–18 report](../../../docs/validation/run-01-18-2026-09-17.md) records
+image digests, exact results and remaining prerequisites. The model and provider
+credentials are still TBD, and only local Kubernetes is available. No real coding
+run, model inference, verification PR or laptop-off acceptance is claimed.
+
+## Earlier verification on 2026-09-09
 
 The local installation has running Deck/Marina Deployments, bound PVCs and a
 loaded worker image. Real worker tools and network isolation, authenticated TLS,
