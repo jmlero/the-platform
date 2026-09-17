@@ -1,6 +1,6 @@
 # Deck and Marina Architecture
 
-- Status: Target architecture for the first laptop-off proof
+- Status: Target architecture for the first usable repository workflow
 - Scope: `cli/`, `deck/`, and `marina/` in the `the-platform` monorepo
 - Last reviewed: 2026-09-17
 
@@ -575,7 +575,7 @@ The product modules remain independently buildable, but their releases need shar
 5. A paired local environment tests real binaries and databases over HTTP.
 6. Crash tests cover lost requests and responses at every dual-write boundary.
 7. Kubernetes tests cover controller and Job restarts, cancellation, deadline, eviction, and orphan cleanup.
-8. The laptop-off proof restarts Deck, Marina, and an agent Job at controlled points and still produces one truthful outcome or focused escalation.
+8. Local installation acceptance restarts Deck, Marina, and an agent Job at controlled points and still produces one truthful outcome or focused escalation. The Mac remains running because it hosts the test cluster; a laptop-off proof is not a first-release gate.
 
 Mocks prove local logic; they are not sufficient evidence for the cross-product milestone.
 

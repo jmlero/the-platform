@@ -150,4 +150,5 @@ new dry run. Do not widen deletion to make a full disk fit.
 Confirm both services are ready, stable IDs and original task states remain,
 cancelled Jobs stay stopped, and current evidence still downloads with matching
 digests. Restore the previous intake setting only when live execution configuration
-and authority are ready. Keep local evidence separate from laptop-off acceptance.
+and authority are ready. Identify the local environment in the evidence; the
+current pilot does not require laptop-off or second-device acceptance.

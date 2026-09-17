@@ -6,6 +6,9 @@ connection and its containers are preserved. Everything below uses the CLI.
 
 Open **https://localhost:8443**. The login token is in
 `~/.local/share/the-platform/marina-local/installation/operator-token`.
+This test installation remains localhost-only. The operator removed laptop-off
+acceptance and second-device/LAN testing; keep the Mac running because it hosts
+Kubernetes. See the [current local acceptance follow-up](../../../docs/validation/local-acceptance-follow-up-2026-09-17.md).
 To copy it without printing it in terminal history or logs:
 
 ```sh
@@ -47,8 +50,8 @@ manually is sufficient when no LaunchAgent is installed.
 Both databases use separate `standard` local-path PVCs inside the Kind node.
 They survive service and node restarts. Deleting the cluster or Podman VM removes
 this local storage; export/backup before doing either. A sleeping or powered-off
-Mac cannot execute work. This is a development installation, not the always-on
-production acceptance gate.
+Mac cannot execute work. This development installation is the current
+first-release acceptance environment; it does not claim always-on hosting.
 
 ## Reproduce on a Mac
 

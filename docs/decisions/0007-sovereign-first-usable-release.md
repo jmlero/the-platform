@@ -35,8 +35,24 @@ The product targets vanilla Kubernetes through standard APIs, without requiring
 a particular cloud provider or distribution. Each installation supplies the
 documented storage, DNS, and network-policy capabilities. Use the operator's
 local Podman/Kind Kubernetes for development tests; no hosting-vendor choice is
-needed to proceed. Record local evidence separately from the eventual laptop-off
-demonstration on a host independent of the Mac.
+needed to proceed.
+
+### Local acceptance scope clarification — 2026-09-17
+
+The operator removed the laptop-off acceptance task (RUN-10). The current test
+cluster runs on the Mac, so the Mac stays running during acceptance. An independent
+host and a disconnected-laptop demonstration are not first-release prerequisites.
+RUN-09 retains the real repository outcome: one review-ready PR, a separate
+verification Job, current required CI and downloadable evidence. Recovery,
+cancellation, failure and budget exercises run against that same local installation.
+The operator also clarified that this test installation is localhost-only, not a
+LAN service. RUN-08 verifies trusted TLS and operator authentication through the
+existing `https://localhost:8443` Podman/Kind mapping, without an interactive
+port-forward. LAN exposure and a second-device sign-in are not required.
+
+Keep the remaining task IDs stable and retire RUN-10 without reusing its ID.
+The broader always-on product direction is unchanged; local evidence must identify
+its host and does not claim operation while that host is asleep or powered off.
 
 ## First implementation
 

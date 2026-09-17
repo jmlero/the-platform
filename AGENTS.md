@@ -75,7 +75,7 @@ Run the narrowest relevant checks first, from the owning Go module or frontend d
 
 A joint contract item is complete only when both product checks and real-process conformance pass. Root `make conformance` exercises the CLI and Marina against real Deck processes; deterministic Git/runtime doubles do not establish live model, Git-provider, Kubernetes, or browser acceptance.
 
-For documentation-only changes, verify links, referenced commands, and `git diff --check`. Report checks actually run and distinguish deterministic checks, local runtime evidence, and laptop-off acceptance. Store redacted installation evidence under `docs/validation/`.
+For documentation-only changes, verify links, referenced commands, and `git diff --check`. Report checks actually run and distinguish deterministic checks from live local runtime evidence. Store redacted installation evidence under `docs/validation/`.
 
 ## Installation and local Kubernetes testing
 
@@ -84,7 +84,8 @@ For documentation-only changes, verify links, referenced commands, and `git diff
 - Follow [decision 0010](docs/decisions/0010-initial-installation-services.md): vanilla Kubernetes, OpenRouter inference, GitHub/GHCR, separate SQLite stores, and artifact files on persistent volumes. Backup automation and restore drills are deferred for the pilot; persistence and restart recovery remain required.
 - Keep build/setup downloads separate from runtime egress. Prepackage worker and verification dependencies; preserve gateway-mediated model/source access and worker isolation.
 - Inspect current private configuration and the installation guide before live tests. Do not infer cluster credentials from developer logins, enable new task intake, or spend beyond existing authorization merely because the local services are healthy.
-- Record local test evidence separately from always-on acceptance. Local Kubernetes can validate Jobs, persistence, recovery, cancellation, and network isolation; the laptop-off proof requires a host independent of the Mac.
+- First-release acceptance uses local Kubernetes with the Mac running. The operator removed RUN-10; do not require an independent host or laptop-off proof. Identify the local environment when recording Jobs, persistence, recovery, cancellation, and network-isolation evidence.
+- Keep this test installation accessible through `https://localhost:8443`; LAN exposure and second-device sign-in are outside the current acceptance scope.
 
 ## Git identity and external effects
 

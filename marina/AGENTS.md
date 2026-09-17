@@ -122,10 +122,12 @@ Every new dependency or architectural commitment must earn its place against the
 
 ## Prioritize the first proof
 
-Unless the user changes the direction, prefer work that advances this complete laptop-off slice:
+Prefer work that advances this complete repository workflow. Current acceptance
+uses local Podman/Kind with the Mac running and Deck on localhost; RUN-10 and
+second-device testing were removed from the local acceptance scope by the operator.
 
 1. The operator creates a bounded task through the Deck plugin.
-2. Always-on Marina claims it with a lease and persists the plan and execution state.
+2. Marina claims it with a lease and persists the plan and execution state.
 3. A runtime adapter starts an isolated Kubernetes workload at a pinned repository revision.
 4. The agent receives the frozen task and pinned repository and implements the change; the broader context-package helpers still need workflow integration.
 5. A separate clean verification Job produces deterministic check evidence. Independent semantic review is future work.

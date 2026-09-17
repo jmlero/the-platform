@@ -478,10 +478,14 @@ Autonomy is successful only when it improves these measures without hiding risk 
 
 ## The first proof
 
-The first release must prove this complete laptop-off loop before attempting a general platform:
+The first release must prove this complete repository workflow before attempting
+a general platform. Current acceptance uses the local Podman/Kind cluster with
+the Mac running and Deck accessed through localhost. The operator removed the
+laptop-off gate and second-device requirement for this installation; see
+[decision 0007](docs/decisions/0007-sovereign-first-usable-release.md).
 
-1. A human defines a bounded task and acceptance criteria through the installed Deck plugin, then disconnects.
-2. Always-on Marina claims the task with a lease and persists a plan.
+1. A human defines a bounded task and acceptance criteria through the installed Deck plugin.
+2. Marina claims the task with a lease and persists a plan.
 3. Marina starts an isolated Kubernetes job through a runtime adapter.
 4. The worker receives the frozen task and pinned repository and implements the change. Full project-context assembly remains future integration.
 5. A separate clean verification Job runs deterministic checks and produces source-bound evidence. Independent semantic review is deferred.

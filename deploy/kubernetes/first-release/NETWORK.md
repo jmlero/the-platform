@@ -9,7 +9,7 @@ traffic, node image loading, and build/setup downloads.
 
 | Caller | Destination | Data and purpose |
 | --- | --- | --- |
-| Operator browser | `https://localhost:8443` for the local installation | Login token exchange, session cookies, task intent, decisions, results and evidence. Bound to loopback; not a second-device or laptop-off URL. |
+| Operator browser | `https://localhost:8443` for the local installation | Login token exchange, session cookies, task intent, decisions, results and evidence. Bound to loopback; the current test scope does not require LAN or second-device access. |
 | Marina | `https://deck.marina-system.svc:8080` | Scoped service authentication, task/lease/authority reads and ledger projections. |
 | Deck and isolated workers | `https://marina.marina-system.svc:8090` | Authenticated artifacts, attempt inputs/results, source reads and model requests; TLS uses the installation CA. |
 | Marina | `https://kubernetes.default.svc:443` and its observed API endpoint | Job/Pod/configuration lifecycle under Marina's service identity. The local endpoint is `10.89.0.2:6443`; the service is `10.96.0.1:443`. Workers have neither this access nor an API token. |
