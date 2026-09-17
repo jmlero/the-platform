@@ -106,17 +106,18 @@ awaiting live evidence. Intake remains disabled.
 
 ## 4. Reuse project context
 
-This is proposed work after the first-release proof. Reuse the existing context-package and journal foundations. Start with explicit project sources; an automatic memory or retrieval framework is not a prerequisite.
+The product direction is accepted in [decision 0014](docs/decisions/0014-project-repository-and-knowledge.md): one GitHub repository per project, with reusable knowledge and custom instructions managed through Deck and assembled by Marina. Implementation remains work after the first-release proof. Reuse the existing project, binding, context-package, and journal foundations. Start with explicit project sources; an automatic memory or retrieval framework is not a prerequisite. Repository setup through Deck is tracked by CTX-08.
 
 | ID | State | Owner | Small task | Done when |
 | --- | --- | --- | --- | --- |
-| CTX-01 | Decide | Joint | Define the minimum project-context contract. | Ownership and references for repository instructions, selected documents, decisions, and conversation excerpts are recorded without creating a second authoritative ledger. |
-| CTX-02 | Open | Deck | Register and revise project context sources. | The operator can maintain a small set of sources with versions, provenance, and superseded/revoked state through the public API. |
+| CTX-01 | Done | Joint | Define the minimum project-context contract. | Ownership and references for repository instructions, selected documents, decisions, and conversation excerpts are recorded without creating a second authoritative ledger. [Accepted decision](docs/decisions/0014-project-repository-and-knowledge.md); implementation remains below. |
+| CTX-02 | Open | Deck | Register and revise project context sources. | The operator can maintain custom instructions, project goals, selected documents, and approved decision references with versions, provenance, and superseded/revoked state through the public API; Git-owned content retains its canonical source. |
 | CTX-03 | Open | Marina | Assemble the existing context package in the active workflow. | Task, pinned repository, policy, and selected project sources form a persisted package delivered to the worker and reconstructible after restart. |
 | CTX-04 | Open | Joint | Attach bounded conversation context to a task. | Selected message IDs/revisions are captured at delegation and included as task data; unrelated conversations and subsequent edits do not silently enter the run. |
 | CTX-05 | Open | Marina | Enforce freshness and trust when using assembled context. | Stale, conflicting, revoked, and injected input cases cause omission or a focused clarification; retrieved text cannot expand authority. |
 | CTX-06 | Open | Deck | Show the task's interpreted outcome and context sources. | The operator can inspect what the agent received, where it came from, and which decisions apply without reading raw execution logs. |
 | CTX-07 | Verify | Joint | Demonstrate context reuse across two tasks. | A second task uses an approved project decision without re-explanation; changing that decision affects only newly authorized work. |
+| CTX-08 | Open | Joint | Associate a project's repository through Deck. | The operator can associate one GitHub repository with an existing Deck project through a supported public contract; Marina owns the validated, versioned binding and credential references, Deck shows a safe summary, and active runs retain their original binding. |
 
 ## 5. Delegate from a web conversation
 

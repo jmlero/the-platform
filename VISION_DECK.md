@@ -33,6 +33,13 @@ An explicit request such as `@codex implement the agreed fix` should be able to 
 
 Project knowledge and decisions should be reusable across tasks. The agent should receive relevant context without the operator rebuilding it in every conversation. Updates should highlight meaningful progress, actionable questions, and reviewable results, while detailed activity remains available on demand.
 
+The accepted starting point is one GitHub repository per project. Deck should
+provide repository association and a persistent project knowledge base for
+custom instructions, goals, selected documents, and approved decision references.
+Marina owns the repository connection and assembles the exact context each task
+receives; Git remains authoritative for repository-owned files. These additions
+are pending implementation under [decision 0014](docs/decisions/0014-project-repository-and-knowledge.md).
+
 This target is described in [decision 0009](docs/decisions/0009-asynchronous-agent-work.md). Automatic conversational dispatch remains proposed behavior. The current release still uses explicit task authorization and channel promotion under decision 0007; this vision update does not claim that mention-triggered execution is implemented.
 
 ## Product principles

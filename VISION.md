@@ -24,6 +24,14 @@ These are complementary views of the same work:
 
 Context should accumulate at the project level through repository knowledge, documents, prior decisions, and linked work. The system should assemble the relevant parts with the selected conversation for each task, making its interpretation inspectable. Moving between tasks or devices should not require explaining the project again; conflicting or missing intent still needs clarification.
 
+The accepted starting point is one GitHub repository per project, with persistent
+custom instructions, project goals, selected documents, and approved decisions
+managed through Deck. Marina binds that same project to its repository and
+execution settings, then assembles versioned context for each task. Git remains
+authoritative for repository-owned knowledge. [Decision 0014](docs/decisions/0014-project-repository-and-knowledge.md)
+records this direction; knowledge management and workflow integration remain
+future implementation.
+
 An intentional delegation can authorize work within existing project limits without a second form or repeated approval. The system must distinguish a request to explain something from a request to change it, record the agreed outcome and scope, and ask only for missing information or additional authority. A casual mention or quoted instruction is not a delegation. `@codex` illustrates interaction with a configured coding agent; it does not require a hosted Codex execution service or a Slack dependency.
 
 This is the proposed interaction model recorded in [decision 0009](docs/decisions/0009-asynchronous-agent-work.md). Mention-triggered execution and automatic context assembly remain target behavior. The current first-release scope and implemented channel-promotion boundary remain governed by [decision 0007](docs/decisions/0007-sovereign-first-usable-release.md) until delivery priorities are revised explicitly.

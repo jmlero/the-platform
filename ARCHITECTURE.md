@@ -130,6 +130,8 @@ The first implementation remains a modular pair of services. Internal controller
 | --- | --- | --- |
 | Project name and human-facing description | Deck | Marina project binding references the provider project ID |
 | Repository, default branch, runtime, policy, and adapter configuration | Marina project binding | Deck displays safe summaries and active policy version |
+| Project knowledge, custom instructions, and selected context-source registrations (accepted direction; pending implementation) | Deck | Marina consumes explicit revisions; Git remains authoritative for repository-owned content |
+| Assembled task-context package (foundation exists; workflow integration pending) | Marina | Deck exposes source provenance and the immutable manifest reference |
 | Task outcome, constraints, acceptance criteria, priority, and authorized budget | Deck | Marina snapshots the claimed revision |
 | Task readiness and operator-visible status | Deck | Marina reads and reconciles it |
 | External run ID, task assignment, lease, and fence token | Deck | Marina persists an exact binding |
@@ -433,17 +435,36 @@ An external managed runtime implements the same lifecycle semantics without pret
 
 ## Context architecture
 
+[Decision 0014](docs/decisions/0014-project-repository-and-knowledge.md) defines
+the accepted project-context direction: one GitHub repository per project and
+persistent custom instructions, goals, selected documents, and approved decision
+references managed through Deck. Reuse the existing Deck project ID and Marina
+project binding. Repository configuration remains Marina-owned; Deck's future
+setup surface uses a supported public contract. Git-owned instructions and
+documents retain Git as their source of truth. Marina assembles the selected
+project knowledge and bounded conversation excerpts for each task. Knowledge
+management and workflow integration remain pending under CTX-02 through CTX-08.
+
 A context package is immutable and content-addressed. Its manifest records:
 
 - task snapshot and plan revision;
 - repository URL, commit, and relevant paths;
 - architecture decisions and repository instructions;
+- exact revisions of project instructions, selected documents, and conversation excerpts;
 - project policy and authority versions;
 - operational observations, if applicable;
 - tools and harness version;
 - source, digest, trust class, scope, freshness, and expiry for every input.
 
 The package starts small and permits bounded retrieval through trusted tools. Raw external text is labelled untrusted. Decisions and unresolved state are checkpoints, not conversational memory. A later run can reconstruct what an earlier runtime knew without copying private reasoning.
+
+Selected project-source revisions and conversation references are captured with
+authorized work. Routine source edits affect newly authorized work; recovery
+uses the recorded inputs rather than an unrecorded latest version. Revocation
+and conflicting instructions require explicit handling, and context never
+expands task authority. Deck's knowledge records remain authoritative; Marina's
+immutable packages preserve what the worker received without becoming another
+editable project ledger.
 
 ## Evidence and verification architecture
 
