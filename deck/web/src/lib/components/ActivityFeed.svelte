@@ -35,7 +35,7 @@
   }
 </script>
 
-<aside class="activity glass">
+<aside class="activity surface">
   <header>
     <div>
       <span class="eyebrow">Event log</span>
@@ -105,9 +105,9 @@
   .live-dot {
     width: 8px;
     height: 8px;
-    background: var(--acid);
+    background: var(--accent);
     border-radius: 999px;
-    box-shadow: 0 0 0 5px var(--acid-soft);
+    box-shadow: 0 0 0 5px var(--accent-soft);
   }
 
   .timeline {
@@ -134,7 +134,7 @@
   }
 
   .event:not(:disabled):hover {
-    background: rgba(255, 255, 255, 0.035);
+    background: var(--panel-soft);
   }
 
   .event::after {
@@ -165,13 +165,13 @@
   }
 
   .event.decision .event-icon {
-    color: var(--amber);
-    background: var(--amber-soft);
+    color: var(--warning);
+    background: var(--warning-soft);
   }
 
   .event.completed .event-icon {
-    color: var(--acid);
-    background: var(--acid-soft);
+    color: var(--accent);
+    background: var(--accent-soft);
   }
 
   .event-copy {
@@ -189,7 +189,7 @@
 
   .event-meta strong {
     overflow: hidden;
-    font-size: 0.68rem;
+    font-size: var(--text-sm);
     font-weight: 700;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -198,14 +198,14 @@
   time {
     flex: 0 0 auto;
     color: var(--subtle);
-    font-size: 0.59rem;
+    font-size: var(--text-xs);
   }
 
   .event-message {
     display: block;
     margin-top: 3px;
     color: var(--muted);
-    font-size: 0.67rem;
+    font-size: var(--text-sm);
     line-height: 1.45;
   }
 
@@ -214,7 +214,7 @@
     margin-top: 4px;
     overflow: hidden;
     color: var(--subtle);
-    font-size: 0.61rem;
+    font-size: var(--text-xs);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -226,7 +226,7 @@
     justify-content: center;
     gap: 8px;
     color: var(--subtle);
-    font-size: 0.71rem;
+    font-size: var(--text-sm);
   }
 
   @media (max-width: 1280px) {

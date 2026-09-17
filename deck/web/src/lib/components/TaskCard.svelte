@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Bot, Clock3, CornerDownRight, GitPullRequestArrow, ShieldCheck } from '@lucide/svelte';
+  import { Bot, Clock3, CheckCircle2, GitPullRequestArrow, ShieldCheck } from '@lucide/svelte';
   import { initials, timeAgo } from '$lib/format';
   import type { Agent, Task } from '$lib/types';
 
@@ -16,17 +16,17 @@
     urgent: 'priority-urgent'
   };
 
-  $: displayState = task.display_state ?? (task.status === 'done' ? 'completed' : task.status.replace('_', '-'));
+  $: displayState = task.display_state ?? (task.status === 'done' ? 'completed' : task.status === 'waiting_decision' ? 'waiting' : task.status.replace('_', '-'));
 
 </script>
 
 <button
   type="button"
   class="task-card"
-  class:is-waiting={task.status === 'waiting_decision'}
-  class:is-running={task.status === 'running'}
-  class:is-done={task.status === 'done'}
-  class:is-attention={task.status === 'blocked' || task.status === 'failed'}
+  class:is-waiting={displayState === 'waiting'}
+  class:is-running={displayState === 'running'}
+  class:is-done={displayState === 'completed'}
+  class:is-attention={displayState === 'blocked' || displayState === 'stale-evidence' || task.status === 'failed'}
   {draggable}
   on:click={() => onselect(task)}
   on:dragstart={(event) => ondrag(event, task)}
@@ -65,6 +65,10 @@
       <span class="mini-wave"><i></i><i></i><i></i></span>
       Agent executing
     </div>
+  {:else if task.status === 'done'}
+    <div class="signal signal-done"><CheckCircle2 size={13} /> Ready for review</div>
+  {:else if task.status === 'blocked' || task.status === 'failed'}
+    <div class="signal signal-attention"><ShieldCheck size={13} /> {task.status === 'blocked' ? 'Work is blocked' : 'Run failed'}</div>
   {/if}
 
   <footer>
@@ -83,24 +87,22 @@
     </div>
   </footer>
 
-  {#if task.status === 'done'}
-    <span class="done-mark"><CornerDownRight size={14} /></span>
-  {/if}
 </button>
 
 <style>
   .task-card {
     position: relative;
     width: 100%;
-    padding: 15px;
+    padding: 18px;
+    flex-shrink: 0;
     overflow: hidden;
     background: var(--panel-raised);
     border: 1px solid var(--line);
-    border-radius: 13px;
+    border-radius: var(--radius-md);
     cursor: pointer;
     color: inherit;
     text-align: left;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.13);
+    box-shadow: var(--shadow-card);
     transition:
       border-color 150ms ease,
       transform 150ms ease,
@@ -108,9 +110,9 @@
   }
 
   .task-card:hover {
-    background: #191e24;
+    background: var(--surface-hover);
     border-color: var(--line-strong);
-    transform: translateY(-2px);
+    transform: translateY(-1px);
   }
 
   .task-card[draggable='true'] {
@@ -122,20 +124,20 @@
   }
 
   .task-card.is-waiting {
-    background: linear-gradient(145deg, rgba(243, 184, 92, 0.085), var(--panel-raised) 55%);
-    border-color: rgba(243, 184, 92, 0.22);
+    background: var(--panel);
+    border-left: 3px solid color-mix(in srgb, var(--warning) 65%, var(--panel));
   }
 
   .task-card.is-running {
-    border-color: rgba(184, 243, 107, 0.19);
+    border-left: 3px solid var(--accent);
   }
 
   .task-card.is-attention {
-    border-color: rgba(255, 120, 111, 0.22);
+    border-left: 3px solid var(--danger);
   }
 
   .task-card.is-done {
-    opacity: 0.72;
+    border-left: 3px solid var(--success);
   }
 
   .card-topline,
@@ -155,8 +157,8 @@
 
   .priority-label {
     gap: 6px;
-    font-size: 0.64rem;
-    font-weight: 750;
+    font-size: .6875rem;
+    font-weight: 600;
     letter-spacing: 0.08em;
     text-transform: uppercase;
   }
@@ -173,36 +175,37 @@
   }
 
   .priority-medium {
-    color: var(--cyan);
+    color: var(--info);
   }
 
   .priority-high {
-    color: var(--violet);
+    color: var(--planning);
   }
 
   .priority-urgent {
-    color: var(--red);
+    color: var(--danger);
   }
 
   .task-age {
     color: var(--subtle);
-    font-size: 0.68rem;
+    font-size: var(--text-sm);
   }
 
   h3 {
+    overflow-wrap: anywhere;
     margin: 13px 0 7px;
     color: var(--text);
-    font-size: 0.91rem;
+    font-size: .9375rem;
     font-weight: 650;
     letter-spacing: -0.012em;
-    line-height: 1.35;
+    line-height: 1.45;
   }
 
   p {
     min-height: 2.7em;
     margin: 0 0 13px;
     color: var(--muted);
-    font-size: 0.76rem;
+    font-size: var(--text-sm);
     line-height: 1.55;
   }
 
@@ -212,35 +215,37 @@
     margin: 10px 0 12px;
     padding: 5px 8px;
     border-radius: 7px;
-    font-size: 0.67rem;
+    font-size: var(--text-sm);
     font-weight: 650;
   }
 
   .signal-decision {
-    color: var(--amber);
-    background: var(--amber-soft);
+    color: var(--warning);
+    background: var(--warning-soft);
   }
 
   .signal-running {
-    color: var(--acid);
-    background: var(--acid-soft);
+    color: var(--accent);
+    background: var(--accent-soft);
   }
 
   .signal-verify {
-    color: var(--cyan);
-    background: var(--cyan-soft);
+    color: var(--info);
+    background: var(--info-soft);
   }
 
+  .signal-done { color: var(--success); background: var(--success-soft); }
+
   .signal-attention {
-    color: var(--red);
-    background: var(--red-soft);
+    color: var(--danger);
+    background: var(--danger-soft);
   }
 
   footer {
     padding-top: 12px;
     border-top: 1px solid var(--line);
     color: var(--muted);
-    font-size: 0.68rem;
+    font-size: var(--text-sm);
   }
 
   .assignee,
@@ -252,30 +257,17 @@
     display: grid;
     width: 23px;
     height: 23px;
-    color: #0d1209;
-    font-size: 0.57rem;
+    color: var(--on-accent);
+    font-size: var(--text-xs);
     font-weight: 850;
-    background: var(--acid);
+    background: var(--accent);
     border-radius: 7px;
     place-items: center;
   }
 
   .avatar-empty {
     color: var(--subtle);
-    background: rgba(255, 255, 255, 0.055);
-  }
-
-  .done-mark {
-    position: absolute;
-    top: -1px;
-    right: -1px;
-    display: grid;
-    width: 31px;
-    height: 31px;
-    color: var(--acid);
-    background: var(--acid-soft);
-    border-bottom-left-radius: 12px;
-    place-items: center;
+    background: var(--panel-soft);
   }
 
   .mini-wave {

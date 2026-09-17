@@ -29,12 +29,12 @@
 </script>
 
 <section class="decision-view">
-  <div class="decision-intro glass">
+  <div class="decision-intro surface">
     <div class="intro-icon"><GitPullRequestArrow size={22} /></div>
     <div>
       <span class="eyebrow">Human attention queue</span>
       <h2>{decisions.length} blocking {decisions.length === 1 ? 'decision' : 'decisions'}</h2>
-      <p>Answering these questions is the fastest way to keep the agent floor moving.</p>
+      <p>Review the proposed approach, evidence, and consequences before deciding.</p>
     </div>
   </div>
 
@@ -43,7 +43,7 @@
   <div class="decision-grid">
     {#each decisions as decision (decision.id)}
       {@const task = taskFor(decision)}
-      <article class="decision-card glass">
+      <article class="decision-card surface">
         <header>
           <span class="waiting-badge"><span></span> Waiting {timeAgo(decision.created_at)}</span>
           {#if task}
@@ -99,9 +99,9 @@
         </footer>
       </article>
     {:else}
-      <div class="all-clear glass">
+      <div class="all-clear surface">
         <span class="clear-icon"><CheckCircle2 size={25} /></span>
-        <h3>The floor is unblocked</h3>
+        <h3>No decisions waiting</h3>
         <p>No agents are waiting for a human decision.</p>
       </div>
     {/each}
@@ -130,8 +130,8 @@
     width: 45px;
     height: 45px;
     flex: 0 0 auto;
-    color: var(--amber);
-    background: var(--amber-soft);
+    color: var(--warning);
+    background: var(--warning-soft);
     border-radius: 13px;
     place-items: center;
   }
@@ -146,21 +146,21 @@
   .all-clear p {
     margin: 0;
     color: var(--muted);
-    font-size: 0.71rem;
+    font-size: var(--text-sm);
   }
 
   .decision-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-    gap: 12px;
-    margin-top: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr));
+    gap: 20px;
+    margin-top: 20px;
     padding-bottom: 20px;
   }
 
   .decision-card {
     padding: 17px;
-    background: linear-gradient(145deg, rgba(243, 184, 92, 0.055), var(--panel) 40%);
-    border-color: rgba(243, 184, 92, 0.16);
+    background: var(--panel);
+    border-top: 3px solid color-mix(in srgb, var(--warning) 60%, var(--panel));
     border-radius: 15px;
   }
 
@@ -174,8 +174,8 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    color: var(--amber);
-    font-size: 0.62rem;
+    color: var(--warning);
+    font-size: var(--text-xs);
     font-weight: 700;
     letter-spacing: 0.05em;
     text-transform: uppercase;
@@ -184,9 +184,9 @@
   .waiting-badge span {
     width: 6px;
     height: 6px;
-    background: var(--amber);
+    background: var(--warning);
     border-radius: 999px;
-    box-shadow: 0 0 0 4px var(--amber-soft);
+    box-shadow: 0 0 0 4px var(--warning-soft);
   }
 
   header button {
@@ -204,8 +204,8 @@
   .task-label {
     display: block;
     margin-top: 20px;
-    color: var(--violet);
-    font-size: 0.65rem;
+    color: var(--planning);
+    font-size: var(--text-sm);
     font-weight: 650;
   }
 
@@ -218,14 +218,14 @@
 
   .context-block {
     padding: 11px 12px;
-    background: rgba(255, 255, 255, 0.025);
+    background: var(--panel-soft);
     border: 1px solid var(--line);
     border-radius: 10px;
   }
 
   .context-block span {
     color: var(--subtle);
-    font-size: 0.59rem;
+    font-size: var(--text-xs);
     font-weight: 750;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -234,7 +234,7 @@
   .context-block p {
     margin: 5px 0 0;
     color: var(--muted);
-    font-size: 0.69rem;
+    font-size: var(--text-sm);
     line-height: 1.48;
   }
 
@@ -244,11 +244,11 @@
     gap: 7px;
     margin-top: 13px;
     color: var(--muted);
-    font-size: 0.68rem;
+    font-size: var(--text-sm);
   }
 
   .recommendation :global(svg) {
-    color: var(--acid);
+    color: var(--accent);
   }
 
   .recommendation strong {
@@ -266,7 +266,7 @@
   .decision-facts span,
   .consequence {
     padding: 8px;
-    background: rgba(255, 255, 255, 0.022);
+    background: var(--panel-soft);
     border: 1px solid var(--line);
     border-radius: 8px;
   }
@@ -275,7 +275,7 @@
   .consequence > span {
     display: block;
     color: var(--subtle);
-    font-size: 0.55rem;
+    font-size: var(--text-xs);
     font-weight: 700;
     text-transform: uppercase;
   }
@@ -283,7 +283,7 @@
   .decision-facts strong {
     display: block;
     margin-top: 4px;
-    font-size: 0.64rem;
+    font-size: var(--text-xs);
     text-transform: capitalize;
   }
 
@@ -292,7 +292,7 @@
   }
 
   .consequence { margin-top: 8px; }
-  .consequence p { margin: 5px 0 0; color: var(--muted); font-size: 0.62rem; line-height: 1.4; }
+  .consequence p { margin: 5px 0 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.4; }
 
   footer {
     display: flex;
@@ -309,7 +309,7 @@
     gap: 7px;
     padding: 0 12px;
     color: var(--muted);
-    font-size: 0.69rem;
+    font-size: var(--text-sm);
     font-weight: 700;
     background: transparent;
     border: 1px solid var(--line-strong);
@@ -318,9 +318,9 @@
   }
 
   footer button.recommended {
-    color: #10140c;
-    background: var(--acid);
-    border-color: var(--acid);
+    color: var(--on-accent);
+    background: var(--accent);
+    border-color: var(--accent);
   }
 
   footer button:disabled {
@@ -339,8 +339,8 @@
   }
 
   .all-clear .clear-icon {
-    color: var(--acid);
-    background: var(--acid-soft);
+    color: var(--accent);
+    background: var(--accent-soft);
   }
 
   .all-clear h3 {
@@ -350,9 +350,9 @@
   .error {
     margin: 10px 0 0;
     padding: 9px 11px;
-    color: var(--red);
-    font-size: 0.7rem;
-    background: var(--red-soft);
+    color: var(--danger);
+    font-size: var(--text-sm);
+    background: var(--danger-soft);
     border-radius: 9px;
   }
 

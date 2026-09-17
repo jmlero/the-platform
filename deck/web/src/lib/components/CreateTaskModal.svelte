@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { modal } from '$lib/dialog';
   import { ArrowRight, Check, ClipboardPlus, X } from '@lucide/svelte';
   import type { CreateTaskInput, Priority } from '$lib/types';
 
@@ -63,15 +64,10 @@
     }
   }
 
-  function handleKeydown(event: KeyboardEvent) {
-    if (event.key === 'Escape') onclose();
-  }
 </script>
 
-<svelte:window on:keydown={handleKeydown} />
-
-<div class="modal-backdrop" role="presentation" on:click|self={onclose}>
-  <div class="modal glass" role="dialog" aria-modal="true" aria-labelledby="create-title" tabindex="-1">
+<dialog class="modal-backdrop" use:modal aria-labelledby="create-title" on:cancel|preventDefault={onclose} on:click|self={onclose}>
+  <div class="modal surface">
     <header>
       <div class="header-icon"><ClipboardPlus size={18} /></div>
       <div>
@@ -86,7 +82,7 @@
     <form on:submit|preventDefault={submit}>
       <label class="field field-wide">
         <span>Outcome</span>
-        <input bind:value={title} placeholder="What should be true when this is done?" />
+        <input data-dialog-focus bind:value={title} placeholder="What should be true when this is done?" />
       </label>
 
       <label class="field field-wide">
@@ -201,28 +197,36 @@
       </footer>
     </form>
   </div>
-</div>
+</dialog>
 
 <style>
-  .permission { display:flex; gap:12px; align-items:flex-start; padding:14px; border:1px solid var(--line); border-radius:10px; font-size:.78rem; }
-  .permission input { width:auto; margin-top:3px; }
+  .permission { display:flex; gap:12px; align-items:flex-start; padding:14px; border:1px solid var(--line); border-radius:10px; font-size: var(--text-sm); }
+  .permission input { width:18px; height:18px; flex-shrink:0; margin-top:3px; }
   .permission small { display:block; margin-top:6px; color:var(--subtle); line-height:1.5; }
   .modal-backdrop {
+    width: 100%;
+    max-width: none;
+    height: 100dvh;
+    max-height: none;
+    margin: 0;
+    border: 0;
+    color: var(--text);
     position: fixed;
     z-index: 80;
     inset: 0;
     display: grid;
     padding: 24px;
-    background: rgba(3, 4, 6, 0.72);
-    backdrop-filter: blur(8px);
+    background: transparent;
     place-items: center;
   }
 
+  .modal-backdrop::backdrop { background: var(--scrim); backdrop-filter: blur(3px); }
+
   .modal {
     width: min(620px, 100%);
-    max-height: calc(100vh - 48px);
+    max-height: calc(100dvh - 48px);
     overflow-y: auto;
-    background: #11151a;
+    background: var(--panel);
     border-radius: 18px;
     box-shadow: var(--shadow);
   }
@@ -239,8 +243,8 @@
     display: grid;
     width: 38px;
     height: 38px;
-    color: var(--acid);
-    background: var(--acid-soft);
+    color: var(--accent);
+    background: var(--accent-soft);
     border-radius: 11px;
     place-items: center;
   }
@@ -284,7 +288,7 @@
   .field > span,
   legend {
     color: var(--muted);
-    font-size: 0.67rem;
+    font-size: var(--text-sm);
     font-weight: 700;
     letter-spacing: 0.04em;
   }
@@ -294,7 +298,7 @@
   select {
     width: 100%;
     color: var(--text);
-    background: rgba(255, 255, 255, 0.035);
+    background: var(--panel-soft);
     border: 1px solid var(--line);
     border-radius: 10px;
     transition: border-color 150ms ease;
@@ -315,13 +319,13 @@
   input:focus,
   textarea:focus,
   select:focus {
-    border-color: rgba(184, 243, 107, 0.45);
+    border-color: color-mix(in srgb, var(--accent) 45%, transparent);
     outline: none;
   }
 
   input::placeholder,
   textarea::placeholder {
-    color: #5e6765;
+    color: var(--subtle);
   }
 
   .input-suffix {
@@ -337,7 +341,7 @@
     top: 50%;
     right: 12px;
     color: var(--subtle);
-    font-size: 0.65rem;
+    font-size: var(--text-sm);
     transform: translateY(-50%);
   }
 
@@ -348,14 +352,14 @@
 
   .budget-details {
     padding: 12px;
-    background: rgba(255, 255, 255, 0.02);
+    background: var(--panel-soft);
     border: 1px solid var(--line);
     border-radius: 11px;
   }
 
   .budget-details summary {
     color: var(--muted);
-    font-size: 0.68rem;
+    font-size: var(--text-sm);
     font-weight: 700;
     cursor: pointer;
   }
@@ -388,15 +392,15 @@
     align-items: center;
     gap: 10px;
     padding: 10px 12px;
-    background: rgba(255, 255, 255, 0.025);
+    background: var(--panel-soft);
     border: 1px solid var(--line);
     border-radius: 11px;
     cursor: pointer;
   }
 
   .destination-grid label.chosen {
-    background: var(--acid-soft);
-    border-color: rgba(184, 243, 107, 0.28);
+    background: var(--accent-soft);
+    border-color: color-mix(in srgb, var(--accent) 28%, transparent);
   }
 
   .destination-grid input {
@@ -412,14 +416,14 @@
     height: 31px;
     flex: 0 0 auto;
     color: var(--muted);
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--panel-soft);
     border-radius: 9px;
     place-items: center;
   }
 
   .chosen .choice-icon {
-    color: var(--acid);
-    background: rgba(184, 243, 107, 0.14);
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
   }
 
   .destination-grid strong,
@@ -428,26 +432,26 @@
   }
 
   .destination-grid strong {
-    font-size: 0.74rem;
+    font-size: var(--text-sm);
   }
 
   .destination-grid small {
     margin-top: 3px;
     color: var(--muted);
-    font-size: 0.62rem;
+    font-size: var(--text-xs);
   }
 
   .destination-grid :global(.check) {
     margin-left: auto;
-    color: var(--acid);
+    color: var(--accent);
   }
 
   .form-error {
     margin: -4px 0 0;
     padding: 9px 11px;
-    color: var(--red);
-    font-size: 0.7rem;
-    background: var(--red-soft);
+    color: var(--danger);
+    font-size: var(--text-sm);
+    background: var(--danger-soft);
     border-radius: 9px;
   }
 
@@ -466,7 +470,7 @@
     justify-content: center;
     gap: 7px;
     padding: 0 15px;
-    font-size: 0.72rem;
+    font-size: var(--text-sm);
     font-weight: 700;
     border-radius: 10px;
     cursor: pointer;
@@ -479,8 +483,8 @@
   }
 
   .primary-button {
-    color: #10140c;
-    background: var(--acid);
+    color: var(--on-accent);
+    background: var(--accent);
     border: 0;
   }
 
@@ -491,12 +495,19 @@
 
   @media (max-width: 560px) {
     .modal-backdrop {
+    width: 100%;
+    max-width: none;
+    height: 100dvh;
+    max-height: none;
+    margin: 0;
+    border: 0;
+    color: var(--text);
       padding: 0;
       place-items: end center;
     }
 
     .modal {
-      max-height: 94vh;
+      max-height: 94dvh;
       border-radius: 18px 18px 0 0;
     }
 

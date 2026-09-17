@@ -17,11 +17,11 @@
   }
 </script>
 
-<section class="agent-strip glass" aria-label="Agent floor">
+<section class="agent-strip surface" aria-label="Connected agents">
   <div class="strip-label">
     <span class="icon"><Cpu size={15} /></span>
     <div>
-      <span class="eyebrow">Agent floor</span>
+      <span class="eyebrow">Connected agents</span>
       <strong>{agents.filter((agent) => effectiveStatus(agent) !== 'offline').length} connected</strong>
     </div>
   </div>
@@ -89,8 +89,8 @@
     display: grid;
     width: 32px;
     height: 32px;
-    color: var(--acid);
-    background: var(--acid-soft);
+    color: var(--accent);
+    background: var(--accent-soft);
     border-radius: 10px;
     place-items: center;
   }
@@ -98,7 +98,7 @@
   .strip-label strong {
     display: block;
     margin-top: 3px;
-    font-size: 0.72rem;
+    font-size: var(--text-sm);
     font-weight: 600;
   }
 
@@ -120,7 +120,7 @@
     gap: 10px;
     padding: 9px 10px;
     text-align: left;
-    background: rgba(255, 255, 255, 0.025);
+    background: var(--panel-soft);
     border: 1px solid transparent;
     border-radius: 11px;
     transition: 150ms ease;
@@ -131,7 +131,7 @@
   }
 
   .agent:not(:disabled):hover {
-    background: rgba(255, 255, 255, 0.045);
+    background: var(--panel-soft);
     border-color: var(--line);
   }
 
@@ -145,32 +145,32 @@
     width: 39px;
     height: 39px;
     flex: 0 0 auto;
-    color: #0d1209;
-    font-size: 0.68rem;
+    color: var(--on-accent);
+    font-size: var(--text-sm);
     font-weight: 850;
-    background: var(--acid);
+    background: var(--accent);
     border-radius: 12px;
     place-items: center;
   }
 
   .agent:not(.active) .agent-avatar {
     color: var(--muted);
-    background: rgba(255, 255, 255, 0.07);
+    background: var(--panel-soft);
   }
 
   .agent.waiting .agent-avatar {
-    color: var(--amber);
-    background: var(--amber-soft);
+    color: var(--warning);
+    background: var(--warning-soft);
   }
 
   .agent.offline {
-    opacity: 0.48;
+    opacity: 1;
   }
 
   .pulse {
     position: absolute;
     inset: -4px;
-    border: 1px solid var(--acid);
+    border: 1px solid var(--accent);
     border-radius: 15px;
     animation: pulse-ring 1.8s ease-out infinite;
   }
@@ -183,20 +183,20 @@
     display: flex;
     align-items: center;
     gap: 7px;
-    font-size: 0.76rem;
+    font-size: var(--text-sm);
     font-weight: 700;
   }
 
   .agent-name small {
-    color: var(--acid);
-    font-size: 0.54rem;
+    color: var(--accent);
+    font-size: var(--text-xs);
     font-weight: 750;
     letter-spacing: 0.08em;
     text-transform: uppercase;
   }
 
   .waiting .agent-name small {
-    color: var(--amber);
+    color: var(--warning);
   }
 
   .offline .agent-name small {
@@ -207,7 +207,7 @@
     display: block;
     margin-top: 4px;
     color: var(--muted);
-    font-size: 0.66rem;
+    font-size: var(--text-sm);
     line-height: 1.35;
   }
 
@@ -215,7 +215,7 @@
     position: absolute;
     top: 8px;
     right: 8px;
-    color: var(--acid);
+    color: var(--accent);
   }
 
   .no-agents {
@@ -224,7 +224,7 @@
     gap: 8px;
     padding: 0 12px;
     color: var(--muted);
-    font-size: 0.75rem;
+    font-size: var(--text-sm);
   }
 
   @media (max-width: 800px) {

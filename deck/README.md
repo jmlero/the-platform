@@ -64,6 +64,13 @@ Runtime data is stored in `./data/deck.db` by default.
 When updating an existing installation, follow the [Deck naming upgrade](../docs/decisions/0012-deck-component-name.md)
 to retain its database, credentials and persistent volume.
 
+## Frontend design
+
+The frontend uses **Harbor**, a light workspace with navy navigation and ocean
+teal accents. The [design system and master page template](web/DESIGN.md) define
+the palette, typography, shared components, responsive layout, and interaction
+rules for Deck and the wider Deck–Marina visual identity.
+
 ## Development
 
 Run the backend and frontend in separate terminals:
