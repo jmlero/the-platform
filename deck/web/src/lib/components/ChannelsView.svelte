@@ -20,6 +20,7 @@
   let busy = false;
   let error = '';
   let promoting: ChannelMessage | null = null;
+  let selectedMessages: string[] = [];
 
   const history = createChannelHistory(
     (items) => { messages = items; },
@@ -36,6 +37,7 @@
 
   function selectChannel(channel: Channel) {
     selectedID = channel.id;
+    selectedMessages = [];
     messages = [];
     promoting = null;
     error = '';
@@ -81,8 +83,9 @@
 
   async function promote(input: CreateTaskInput) {
     if (!promoting) return;
-    const task = await api.promoteMessage(promoting.id, input);
+    const task = await api.promoteMessage(promoting.id, {...input, context_message_ids: [...new Set([...selectedMessages, promoting.id])]});
     promoting = null;
+    selectedMessages = [];
     await refreshMessages(selectedID);
     await onpromoted(task);
   }
@@ -113,7 +116,7 @@
   <div class="conversation surface">
     <header>
       <div><span class="eyebrow">Shared context</span><h2>{channels.find((channel) => channel.id === selectedID)?.name ?? 'Select a channel'}</h2></div>
-      <p>Discuss ideas here. To authorize work, promote a message into a task with clear criteria and limits.</p>
+      <p>{selectedMessages.length}/20 messages selected as context. Discuss ideas here. To authorize work, promote a message into a task with clear criteria and limits.</p>
     </header>
     {#if error}<div class="channel-error" role="alert">{error} <button type="button" on:click={() => refreshMessages(selectedID)}>Retry</button></div>{/if}
     {#if loading}<p class="loading-history" role="status">Loading channel history…</p>{/if}
@@ -123,11 +126,12 @@
           <header><strong>{message.author_id}</strong><time>{formatDate(message.created_at)}</time></header>
           <p>{message.body}</p>
           <footer>
+            <label class="context-select"><input type="checkbox" bind:group={selectedMessages} value={message.id} disabled={!selectedMessages.includes(message.id) && selectedMessages.length >= 20} /> Include as task context</label>
             {#if referenceCount(message)}<span>{referenceCount(message)} canonical references</span>{/if}
             {#if message.promoted_task_id}
               <span class="promoted"><CheckCircle2 size={13} /> Task {message.promoted_task_id.slice(-6)}</span>
             {:else}
-              <button type="button" on:click={() => (promoting = message)}>Create task <ArrowRight size={13} /></button>
+              <button type="button" disabled={selectedMessages.length >= 20 && !selectedMessages.includes(message.id)} on:click={() => (promoting = message)}>Create task <ArrowRight size={13} /></button>
             {/if}
           </footer>
 
@@ -156,6 +160,7 @@
 {/if}
 
 <style>
+  .context-select { display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--muted); }
   .loading-history { margin: 8px 16px; color: var(--subtle); font-size: var(--text-sm); }
   .channels-layout { display: grid; min-height: 0; flex: 1; grid-template-columns: 230px minmax(0, 1fr); gap: 20px; min-height: 500px; }
   .channel-list, .conversation { min-height: 0; border-radius: 15px; }

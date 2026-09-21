@@ -1,10 +1,25 @@
 package contextpack
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestContextCanBeFrozenBeforePlanningWithoutInventingUnselectedSources(t *testing.T) {
+	now := time.Now().UTC()
+	input := validBuildInput(now)
+	input.PlanRevisionID = ""
+	input.Inputs = slices.DeleteFunc(input.Inputs, func(i Input) bool { return i.Kind == KindRepositoryInstructions || i.Kind == KindArchitectureDecision })
+	manifest, err := Build(now, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(manifest.Inputs) != 4 {
+		t.Fatal("unexpected sources")
+	}
+}
 
 func TestBuildCreatesImmutableProvenanceRichContextPackage(t *testing.T) {
 	now := time.Date(2026, time.August, 16, 11, 0, 0, 0, time.UTC)

@@ -290,11 +290,24 @@ func (controller *ControlController) processAcquisition(ctx context.Context, int
 			budget.DeadlineAt = *task.Budget.DeadlineAt
 		}
 	}
+	bindingVersion := controller.binding.Version
+	var boundTask workcontrol.WorkItem
+	if intent.TaskSnapshot != "" {
+		if err := json.Unmarshal([]byte(intent.TaskSnapshot), &boundTask); err != nil {
+			return err
+		}
+	}
+	if boundTask.Context != nil && boundTask.Context.Repository != nil {
+		bindingVersion = boundTask.Context.Repository.Version
+		if bindingVersion < 1 {
+			return execution.ErrInvalidInput
+		}
+	}
 	record, _, err := controller.journal.EnsureExecution(ctx, execution.NewExecution{
 		WorkProvider: controller.binding.Provider, ProjectID: intent.ProjectID, ExternalWorkID: intent.WorkID,
 		ExternalRunID: intent.ExternalRunID, AgentID: intent.AgentID, ExternalRunVersion: intent.ExternalVersion,
 		FenceToken: intent.FenceToken, TaskVersion: intent.TaskVersion, TaskDigest: intent.TaskDigest,
-		BindingVersion: controller.binding.Version, LeaseExpiresAt: *intent.LeaseExpiresAt,
+		BindingVersion: bindingVersion, LeaseExpiresAt: *intent.LeaseExpiresAt,
 		Budget: budget,
 	})
 	if err != nil {

@@ -107,3 +107,47 @@ func validRuntimeSpecification(now time.Time) runtimeapi.Specification {
 		CredentialReferences: []runtimeapi.CredentialReference{{Kind: "source", Reference: "secret://source/task", ExpiresAt: now.Add(20 * time.Minute)}},
 	}
 }
+
+func TestRuntimeAttemptLimitSurvivesRestartAndAllowsIdempotentReplay(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, time.September, 21, 12, 0, 0, 0, time.UTC)
+	path := filepath.Join(t.TempDir(), "attempt-limit.db")
+	store := openStore(t, ctx, path, &now)
+	input := validExecution(now, "run-attempt-limit")
+	input.Budget.MaxAttempts = 2
+	record, _, err := store.EnsureExecution(ctx, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	specification := validRuntimeSpecification(now)
+	var last runtimeapi.Attempt
+	for _, key := range []string{"implementation", "verification"} {
+		specification.IdempotencyKey = key
+		var created bool
+		record, last, created, err = store.EnsureRuntimeAttempt(ctx, record.ID, record.Version, specification)
+		if err != nil || !created {
+			t.Fatalf("admit %s: created=%t err=%v", key, created, err)
+		}
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	store = openStore(t, ctx, path, &now)
+	t.Cleanup(func() { _ = store.Close() })
+	replayed, attempt, created, err := store.EnsureRuntimeAttempt(ctx, record.ID, 1, specification)
+	if err != nil || created || attempt.ID != last.ID || replayed.Version != record.Version {
+		t.Fatalf("replay at cap: execution=%#v attempt=%#v created=%t err=%v", replayed, attempt, created, err)
+	}
+	specification.IdempotencyKey = "third-attempt"
+	if _, _, _, err := store.EnsureRuntimeAttempt(ctx, record.ID, record.Version, specification); !errors.Is(err, execution.ErrBudgetExhausted) {
+		t.Fatalf("third attempt error=%v, want budget exhausted", err)
+	}
+	attempts, err := store.ListRuntimeAttempts(ctx, record.ID)
+	if err != nil || len(attempts) != 2 {
+		t.Fatalf("attempts after denial=%#v err=%v", attempts, err)
+	}
+	unchanged, err := store.GetExecution(ctx, record.ID)
+	if err != nil || unchanged.Attempt != 2 || unchanged.Version != record.Version {
+		t.Fatalf("denial changed execution: %#v err=%v", unchanged, err)
+	}
+}

@@ -13,9 +13,9 @@ traffic, node image loading, and build/setup downloads.
 | Marina | `https://deck.marina-system.svc:8080` | Scoped service authentication, task/lease/authority reads and ledger projections. |
 | Deck and isolated workers | `https://marina.marina-system.svc:8090` | Authenticated artifacts, attempt inputs/results, source reads and model requests; TLS uses the installation CA. |
 | Marina | `https://kubernetes.default.svc:443` and its observed API endpoint | Job/Pod/configuration lifecycle under Marina's service identity. The local endpoint is `10.89.0.2:6443`; the service is `10.96.0.1:443`. Workers have neither this access nor an API token. |
-| Marina | `https://api.github.com/repos/jmlero/marina-acceptance/...` | Git refs, trees/blobs, commits, PR publication, CI statuses and review observations. Repository-scoped controller credential; never mounted in workers. |
+| Marina | `https://api.github.com/repos/jmlero/marina-acceptance/...` | Git refs, trees/blobs, commits, PR publication, CI statuses and review observations. Controller-only credential, never mounted in workers. The local pilot uses the operator-approved [classic-token exception](../../../docs/validation/github-credential-2026-09-21.md). |
 | Marina source gateway | `https://github.com/jmlero/marina-acceptance.git/info/refs?service=git-upload-pack` and `/git-upload-pack` | Authenticated Git smart-HTTP reads of the pinned repository for workers. No Git LFS, submodule downloads or archive service is required by the fixture. |
-| Marina model gateway | `https://openrouter.ai/api/v1/responses` | Task/code/tool input, generated output and usage. OpenRouter credential stays in Marina. Exact model, rates and test budget are still TBD. |
+| Marina model gateway | `https://openrouter.ai/api/v1/responses` | Task/code/tool input, generated output and usage. OpenRouter credential stays in Marina. The local pilot uses `z-ai/glm-5.3-flash` within the €5 total test budget; [live evidence and accounting limits](../../../docs/validation/poc-mvp-2026-09-21.md). |
 | Platform Pods | Cluster DNS, UDP/TCP 53 in `kube-system` | Internal names and external DNS queries. This is a separate allowed channel, not a guarantee that workers cannot send data in DNS queries. |
 
 The source and GitHub API clients and model gateway reject redirects instead of
@@ -82,7 +82,7 @@ overlay with intake disabled and wait for Marina's rollout before probing.
 
 ```sh
 python3 scripts/verify-local-podman-acceptance.py \
-  localhost/the-platform/marina-worker@sha256:2ac47cfd4a6ea0dc81d478e507b68b21d5e50a49e9b29caa76d8c551dc7def47
+  localhost/the-platform/marina-worker@sha256:1f7217c2a81066b297a198daee855a3aabeee3469ed8726d8fac4765fc62b12b
 ```
 
 Three disposable Jobs establish an unrestricted baseline, test the actual

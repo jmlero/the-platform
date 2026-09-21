@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
@@ -14,14 +15,14 @@ const taskColumns = `
 	id, project_id, title, description, acceptance_criteria, status, priority,
 	budget_minutes, deadline_at, max_attempts, max_tokens, max_cost_minor,
 	currency, max_concurrency, authority_json,
-	assigned_agent_id, version, created_at, updated_at
+	assigned_agent_id, version, created_at, updated_at, context_json
 `
 
 func scanTask(scanner interface{ Scan(...any) error }) (domain.Task, error) {
 	var task domain.Task
 	var assignedAgentID sql.NullString
 	var deadlineAt sql.NullInt64
-	var authority string
+	var authority, contextJSON string
 	if err := scanner.Scan(
 		&task.ID,
 		&task.ProjectID,
@@ -42,7 +43,11 @@ func scanTask(scanner interface{ Scan(...any) error }) (domain.Task, error) {
 		&task.Version,
 		&task.CreatedAt,
 		&task.UpdatedAt,
+		&contextJSON,
 	); err != nil {
+		return domain.Task{}, err
+	}
+	if err := json.Unmarshal([]byte(contextJSON), &task.Context); err != nil {
 		return domain.Task{}, err
 	}
 	task.Budget.TimeMinutes = task.BudgetMinutes
@@ -195,13 +200,17 @@ func (s *Store) CreateTask(ctx context.Context, input domain.CreateTaskInput) (d
 		return domain.Task{}, fmt.Errorf("begin create task: %w", err)
 	}
 	defer tx.Rollback()
+	task.Context, err = selectTaskContext(ctx, tx, task.ProjectID, validated.ContextMessageIDs, task.Status == domain.TaskReady)
+	if err != nil {
+		return domain.Task{}, err
+	}
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO tasks (
 			id, project_id, title, description, acceptance_criteria, status,
 			priority, budget_minutes, deadline_at, max_attempts, max_tokens,
 			max_cost_minor, currency, max_concurrency, authority_json,
-			version, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			version, created_at, updated_at, context_json
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		task.ID,
 		task.ProjectID,
@@ -221,6 +230,7 @@ func (s *Store) CreateTask(ctx context.Context, input domain.CreateTaskInput) (d
 		task.Version,
 		task.CreatedAt,
 		task.UpdatedAt,
+		marshalJSON(task.Context),
 	)
 	if err != nil {
 		return domain.Task{}, fmt.Errorf("insert task: %w", err)
@@ -374,18 +384,31 @@ func (s *Store) UpdateTask(ctx context.Context, id string, input domain.UpdateTa
 		}
 	}
 
+	if input.ContextMessageIDs != nil && task.Status != domain.TaskReady && task.Status != domain.TaskBacklog {
+		return domain.Task{}, fmt.Errorf("context changes require a new authorization: %w", domain.ErrConflict)
+	}
 	now := nowMillis()
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return domain.Task{}, fmt.Errorf("begin update task: %w", err)
 	}
 	defer tx.Rollback()
+	if task.Status == domain.TaskReady || input.ContextMessageIDs != nil {
+		ids := selectedMessageIDs(task.Context)
+		if input.ContextMessageIDs != nil {
+			ids = *input.ContextMessageIDs
+		}
+		task.Context, err = selectTaskContext(ctx, tx, task.ProjectID, ids, task.Status == domain.TaskReady)
+		if err != nil {
+			return domain.Task{}, err
+		}
+	}
 	result, err := tx.ExecContext(ctx, `
 		UPDATE tasks
 		SET title = ?, description = ?, acceptance_criteria = ?, priority = ?,
 			budget_minutes = ?, deadline_at = ?, max_attempts = ?, max_tokens = ?,
 			max_cost_minor = ?, currency = ?, max_concurrency = ?, authority_json = ?,
-			version = version + 1, updated_at = ?
+			version = version + 1, updated_at = ?, context_json = ?
 		WHERE id = ? AND version = ?
 	`,
 		task.Title,
@@ -401,6 +424,7 @@ func (s *Store) UpdateTask(ctx context.Context, id string, input domain.UpdateTa
 		task.Budget.MaxConcurrency,
 		marshalJSON(task.Budget.Authority),
 		now,
+		marshalJSON(task.Context),
 		task.ID,
 		task.Version,
 	)
@@ -461,11 +485,17 @@ func (s *Store) MoveTask(ctx context.Context, id, target string) (domain.Task, e
 		return domain.Task{}, fmt.Errorf("begin task move: %w", err)
 	}
 	defer tx.Rollback()
+	if target == domain.TaskReady {
+		task.Context, err = selectTaskContext(ctx, tx, task.ProjectID, selectedMessageIDs(task.Context), true)
+		if err != nil {
+			return domain.Task{}, err
+		}
+	}
 	result, err := tx.ExecContext(ctx, `
 		UPDATE tasks
-		SET status = ?, assigned_agent_id = NULL, version = version + 1, updated_at = ?
+		SET status = ?, assigned_agent_id = NULL, version = version + 1, updated_at = ?, context_json = ?
 		WHERE id = ? AND status = ? AND version = ?
-	`, target, now, id, task.Status, task.Version)
+	`, target, now, marshalJSON(task.Context), id, task.Status, task.Version)
 	if err != nil {
 		return domain.Task{}, fmt.Errorf("move task: %w", err)
 	}

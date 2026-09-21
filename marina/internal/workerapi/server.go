@@ -36,6 +36,8 @@ type Model struct {
 }
 
 type Config struct {
+	ContextCheck      func(context.Context, execution.Execution) error
+	SourceBinding     func(context.Context, execution.Execution) (string, string, error)
 	PublicURL         string
 	SigningKey        []byte
 	SourceURL         string
@@ -102,6 +104,11 @@ func (server *Server) authorize(ctx context.Context, id, token string) (runtimea
 		if run.ID == record.ExternalRunID && run.WorkItemID == record.ExternalWorkID && run.AgentID == record.AgentID && run.TaskVersion == record.TaskVersion &&
 			run.FenceToken == attempt.Specification.AuthorityFence && run.Status.Active() && run.LeaseExpiresAt != nil && now.Before(*run.LeaseExpiresAt) {
 			record.LeaseExpiresAt = *run.LeaseExpiresAt
+			if server.config.ContextCheck != nil {
+				if err := server.config.ContextCheck(checkCtx, record); err != nil {
+					return attempt, record, err
+				}
+			}
 			return attempt, record, nil
 		}
 	}
@@ -116,7 +123,7 @@ func (server *Server) admit(w http.ResponseWriter, r *http.Request) (runtimeapi.
 	}
 	attempt, record, err := server.authorize(r.Context(), r.PathValue("id"), token)
 	if err != nil {
-		if errors.Is(err, errProviderUnavailable) {
+		if errors.Is(err, errProviderUnavailable) || errors.Is(err, workcontrol.ErrContextUnavailable) {
 			http.Error(w, "worker authority cannot currently be confirmed", http.StatusServiceUnavailable)
 			return attempt, record, false
 		}
@@ -293,11 +300,20 @@ func (server *Server) liveContext(r *http.Request) (context.Context, context.Can
 }
 
 func (server *Server) source(w http.ResponseWriter, r *http.Request) {
-	attempt, _, ok := server.admit(w, r)
+	attempt, executionRecord, ok := server.admit(w, r)
 	if !ok {
 		return
 	}
-	if attempt.Specification.RepositoryURI != server.config.SourceURL {
+	sourceURL, tokenFile := server.config.SourceURL, server.config.SourceTokenFile
+	if server.config.SourceBinding != nil {
+		var err error
+		sourceURL, tokenFile, err = server.config.SourceBinding(r.Context(), executionRecord)
+		if err != nil {
+			http.Error(w, "original repository binding unavailable", 503)
+			return
+		}
+	}
+	if attempt.Specification.RepositoryURI != sourceURL {
 		http.Error(w, "repository binding changed", 409)
 		return
 	}
@@ -314,15 +330,15 @@ func (server *Server) source(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := server.liveContext(r)
 	defer cancel()
-	request, err := http.NewRequestWithContext(ctx, r.Method, strings.TrimRight(server.config.SourceURL, "/")+path, http.MaxBytesReader(w, r.Body, 16<<20))
+	request, err := http.NewRequestWithContext(ctx, r.Method, strings.TrimRight(sourceURL, "/")+path, http.MaxBytesReader(w, r.Body, 16<<20))
 	if err != nil {
 		http.Error(w, "source endpoint unavailable", 503)
 		return
 	}
 	request.Header.Set("Content-Type", r.Header.Get("Content-Type"))
 	request.Header.Set("Git-Protocol", r.Header.Get("Git-Protocol"))
-	if server.config.SourceTokenFile != "" {
-		token, err := os.ReadFile(server.config.SourceTokenFile)
+	if tokenFile != "" {
+		token, err := os.ReadFile(tokenFile)
 		if err != nil || strings.TrimSpace(string(token)) == "" {
 			http.Error(w, "source credential unavailable", 503)
 			return

@@ -40,5 +40,5 @@ type Completion interface {
 
 func WorkerCapabilities() []string {
 	return append(MilestoneOneCapabilities(), CapabilityPlanSubmit, CapabilityDecisionInspect,
-		CapabilityRunStart, CapabilityRunVerify, CapabilityRunComplete, "evidence.record")
+		CapabilityRunStart, CapabilityRunVerify, CapabilityRunComplete, "evidence.record", CapabilityContextRead, CapabilityRepositoryRead, CapabilityRepositoryWrite)
 }

@@ -67,8 +67,21 @@ stores. It performs one implementation and one verification attempt, supports
 cancellation, and blocks on failed checks or requested changes. Headless and
 in-process packaging, pause/resume, automatic CI/review revision loops, independent
 semantic review, merge and deployment authority remain future work. A PR ready
-for human review is not a claim of merge readiness. Full context assembly is also
-future integration; the current worker receives the task and pinned repository.
+for human review is not a claim of merge readiness. Explicitly selected project
+and repository sources are assembled into immutable execution context; automatic
+context discovery and learned memory remain future work.
+
+## Accepted extension: a Kubernetes agent platform
+
+The operator approved extending Marina into an operator-owned agent execution
+and governance platform on 2026-09-21, with software engineering as its first
+workflow. Reuse the existing Marina component and prove shared execution controls
+with one non-coding workload and a different harness. Deck retains human intent,
+authorization, decisions and results. [Decision 0015](docs/decisions/0015-marina-agent-platform.md)
+and AGENT-01 through AGENT-13 in [TODO.md](TODO.md) define the bounded PoC/MVP;
+implementation remains pending. AgentCore is a capability reference, with full
+parity outside these gates. The supported repository release described above
+remains unchanged.
 
 ## From coding agent to autonomous software factory
 

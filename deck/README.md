@@ -220,3 +220,35 @@ api/openapi.yaml          agent-facing HTTP contract
 ## Prototype boundaries
 
 This release is single-user and single-process. Machine operations authenticate a scoped Marina service identity and use guarded, idempotent, fenced mutations; human routes use a separate optional operator session. Deck records provider-neutral work-control and operational facts but does not execute runtimes, mutate source control, operate deployments, or store artifact bytes. Multi-user permissions, password recovery, federated identity, distributed scheduling, autonomous task decomposition, and a general-purpose agent execution runtime remain outside the prototype.
+
+## Project context and repository association
+
+Open **Project context** to maintain versioned instructions, goals, authored
+documents, exact-commit Git file references, and approved Deck decision references.
+Only explicit operator approval marks a source as guidance; conversation is
+always task data. Active sources are selected when a task becomes Ready. Select
+up to 20 messages in Channels when promoting a task; later messages are excluded.
+A run keeps its selection even after the task or project sources change.
+
+The task drawer's **Sources** tab shows the captured outcome, source revisions,
+repository binding, full immutable worker snapshot and omissions. Revocation is
+separate from revision or deactivation: it withdraws a source from active use.
+Sources are limited to 32 per task, 16 KiB per authored/file input, and 128 KiB per
+assembled package. Expiry and declared conflicts can require clarification.
+
+The repository form submits a versioned request to Marina. Marina validates the
+repository and branch, persists the binding, and publishes a safe confirmation.
+Changing repository never grants task write/PR authority. Existing authorized
+work keeps its binding. Connection origins, credentials, policy, and runtime
+settings remain in Marina's installation configuration.
+
+Operator contracts live under `/api/v1/operator/projects/{project}/context/sources`
+and `/repository`, with task/run `/context` inspection. Source writes and
+repository requests use `expected_revision` and replay identical retries;
+repository requests also carry `expected_binding_version`. The service routes
+require `context.read`, `repository.read`, or `repository.write` and project scope.
+See [OpenAPI](api/openapi.yaml) and [validation](../docs/validation/ctx-02-08-2026-09-21.md).
+
+Project exports include source revision history and frozen task/run selections.
+Marina connection settings and pending repository requests are installation-local;
+import does not silently establish a repository connection in another installation.

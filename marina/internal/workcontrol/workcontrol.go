@@ -10,6 +10,9 @@ const (
 	ProtocolMajor        = 1
 	ProtocolMinimumMinor = 0
 
+	CapabilityContextRead     = "context.read"
+	CapabilityRepositoryRead  = "repository.read"
+	CapabilityRepositoryWrite = "repository.write"
 	CapabilityProviderInfo    = "provider.info"
 	CapabilityAgentRegister   = "agent.register"
 	CapabilityWorkReadyList   = "work.ready.list"
@@ -67,6 +70,7 @@ const (
 )
 
 type WorkItem struct {
+	Context            *TaskContext `json:",omitempty"`
 	ID                 string
 	ProjectID          string
 	Title              string

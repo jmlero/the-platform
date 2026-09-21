@@ -57,8 +57,13 @@ func configureWorkers(config flow.Config, journal *sqlite.Store, provider flow.P
 		return nil, nil, err
 	}
 	controller := &flow.Controller{Config: config, Journal: journal, Provider: provider, Runtime: runtime, Artifacts: store}
+	controller.BindingConfig = controller.ConfigurationForExecution
 	controller.Source = func(e execution.Execution) (sourcecontrol.Port, error) {
-		git := config.Git
+		effective, err := controller.ConfigurationForExecution(context.Background(), e)
+		if err != nil {
+			return nil, err
+		}
+		git := effective.Git
 		git.ReadBlob = store.Get
 		git.CommitTime = e.CreatedAt
 		git.Authorize = func(ctx context.Context, fence int64) error { return controller.Authorize(ctx, e, fence) }
@@ -67,6 +72,9 @@ func configureWorkers(config flow.Config, journal *sqlite.Store, provider flow.P
 	if _, err := github.New(config.Git, nil); err != nil {
 		return nil, nil, err
 	}
-	gateway := workerapi.New(workerapi.Config{PublicURL: config.PublicURL, SigningKey: key, SourceURL: config.Git.CloneURL, SourceTokenFile: config.Git.TokenFile, ArtifactTokenFile: config.ArtifactTokenFile, Model: config.Model}, journal, store, provider, nil)
+	gateway := workerapi.New(workerapi.Config{SourceBinding: func(ctx context.Context, e execution.Execution) (string, string, error) {
+		effective, err := controller.ConfigurationForExecution(ctx, e)
+		return effective.Git.CloneURL, effective.Git.TokenFile, err
+	}, ContextCheck: controller.CheckContext, PublicURL: config.PublicURL, SigningKey: key, SourceURL: config.Git.CloneURL, SourceTokenFile: config.Git.TokenFile, ArtifactTokenFile: config.ArtifactTokenFile, Model: config.Model}, journal, store, provider, nil)
 	return controller, gateway, nil
 }

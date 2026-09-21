@@ -6,7 +6,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -42,7 +44,8 @@ func TestRealRepositoryWorkflow(t *testing.T) {
 	if err = waitForProvider(ctx, client); err != nil {
 		t.Fatal(err)
 	}
-	for _, scenario := range []string{"completed", "promoted_completed", "verification_failed", "head_changed", "pr_closed", "ci_missing", "missing_authority"} {
+	var approved workcontrol.ContextSource
+	for _, scenario := range []string{"completed", "promoted_completed", "verification_failed", "head_changed", "pr_closed", "ci_missing", "missing_authority", "context_first", "context_reuse", "context_revised", "context_revoked"} {
 		t.Run(scenario, func(t *testing.T) {
 			directory := t.TempDir()
 			db := filepath.Join(directory, "journal.db")
@@ -62,6 +65,9 @@ func TestRealRepositoryWorkflow(t *testing.T) {
 			binding, err := journal.EnsureProjectBinding(ctx, execution.ProjectBinding{ProjectID: "prj_default", Provider: "deck", Repository: "https://git.internal/acme/repo.git", Runtime: "test", PolicyVersion: "test", ContextConfig: "test", ArtifactConfig: "test", DeliveryConfig: "test", BudgetMinutes: 30, MaxConcurrency: 1})
 			if err != nil {
 				t.Fatal(err)
+			}
+			if scenario == "context_first" {
+				approved = registerApprovedContext(t, ctx, client, identity.LogicalAgentID, workcontrol.ContextSource{}, "Keep the API stable")
 			}
 			var taskResponse taskDTO
 			authority := []string{"source.read", "source.write", "pull_request.create"}
@@ -94,6 +100,14 @@ func TestRealRepositoryWorkflow(t *testing.T) {
 				t.Fatal(err)
 			}
 			task := taskResponse.toDomain()
+			if strings.HasPrefix(scenario, "context_") {
+				if task.Context == nil || len(task.Context.Sources) != 1 {
+					t.Fatalf("project decision not selected: %#v", task.Context)
+				}
+				if scenario == "context_reuse" {
+					approved = registerApprovedContext(t, ctx, client, identity.LogicalAgentID, approved, "Document all API additions")
+				}
+			}
 			snapshot, _ := json.Marshal(task)
 			criteria := sha256.Sum256([]byte(task.AcceptanceCriteria))
 			intent, _, err := journal.EnsureAcquisitionIntent(ctx, execution.NewAcquisitionIntent{ProjectID: task.ProjectID, WorkID: task.ID, TaskVersion: task.Version, TaskDigest: artifacts.Digest(snapshot), TaskSnapshot: string(snapshot), AcceptanceCriteriaDigest: hex.EncodeToString(criteria[:]), ClaimKey: "workflow:" + task.ID, AgentID: identity.LogicalAgentID, LeaseSeconds: 120, BudgetMinutes: 30})
@@ -128,8 +142,13 @@ func TestRealRepositoryWorkflow(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if result := control.Cycle(ctx); len(result.Errors) > 0 {
+				if result := control.WithIntakeEnabled(false).Cycle(ctx); len(result.Errors) > 0 {
 					t.Fatalf("control cycle %d: %v", cycle, result.Errors)
+				}
+				if scenario == "context_revoked" && cycle == 3 {
+					if err = client.do(ctx, "POST", fmt.Sprintf("/api/v1/operator/projects/prj_default/context/sources/%s/%d/revoke", approved.ID, approved.Revision), nil, nil); err != nil {
+						t.Fatal(err)
+					}
 				}
 				failures := controller.Cycle(ctx)
 				for _, err := range failures {
@@ -158,7 +177,7 @@ func TestRealRepositoryWorkflow(t *testing.T) {
 			want := execution.StateCompleted
 			if scenario == "ci_missing" {
 				want = execution.StateRunning
-			} else if scenario != "completed" && scenario != "promoted_completed" {
+			} else if scenario != "completed" && scenario != "promoted_completed" && !strings.HasPrefix(scenario, "context_") || scenario == "context_revoked" {
 				want = execution.StateBlocked
 			}
 			if e.State != want {
@@ -168,7 +187,7 @@ func TestRealRepositoryWorkflow(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if scenario == "completed" || scenario == "promoted_completed" {
+			if scenario == "completed" || scenario == "promoted_completed" || (strings.HasPrefix(scenario, "context_") && scenario != "context_revoked") {
 				if detail.Runs[0].Status != workcontrol.RunCompleted || !strings.Contains(detail.Runs[0].ResultSummary, "https://git.internal/pr/1") {
 					t.Fatalf("result not projected: %#v", detail.Runs)
 				}
@@ -180,11 +199,34 @@ func TestRealRepositoryWorkflow(t *testing.T) {
 					t.Fatalf("wrong evidence: %#v %v", evidence, err)
 				}
 			}
+			if strings.HasPrefix(scenario, "context_") {
+				manifest, err := journal.ExecutionContextPackage(ctx, e.ID)
+				if err != nil {
+					t.Fatal(err)
+				}
+				expected := "Keep the API stable"
+				if scenario == "context_revised" || scenario == "context_revoked" {
+					expected = "Document all API additions"
+				}
+				found := false
+				for _, item := range manifest.Inputs {
+					if strings.Contains(item.Content, expected) && item.Owner == "deck" && item.Trust == "trusted" {
+						found = true
+					}
+				}
+				if !found {
+					t.Fatalf("saved decision not reused: %s", expected)
+				}
+				if scenario == "context_revoked" && runtime.starts != 0 {
+					t.Fatal("revoked context reached worker")
+				}
+			}
 			if scenario == "missing_authority" && (runtime.starts != 0 || source.commits != 0) {
 				t.Fatal("unauthorized task executed")
 			}
 		})
 	}
+	t.Run("repository_association", func(t *testing.T) { verifyRealRepositoryAssociation(t, ctx, client) })
 }
 
 type workflowRuntime struct {
@@ -200,6 +242,20 @@ func (r *workflowRuntime) InspectByKey(_ context.Context, key string) (runtimeap
 	return r.observations[key], nil
 }
 func (r *workflowRuntime) Start(ctx context.Context, spec runtimeapi.Specification) (runtimeapi.Observation, error) {
+	checkpoint, err := r.journal.GetCheckpoint(ctx, spec.ExecutionID, "worker-input:"+spec.AttemptID)
+	if err != nil {
+		return runtimeapi.Observation{}, err
+	}
+	var input worker.Input
+	if err = json.Unmarshal([]byte(checkpoint.Payload["input"].(string)), &input); err != nil {
+		return runtimeapi.Observation{}, err
+	}
+	if input.Context == nil || input.Context.Digest != spec.ContextDigest {
+		return runtimeapi.Observation{}, errors.New("worker did not receive the persisted context package")
+	}
+	if err = input.Context.ValidateAt(time.Now()); err != nil {
+		return runtimeapi.Observation{}, err
+	}
 	r.starts++
 	stage := "implement"
 	if strings.HasSuffix(spec.IdempotencyKey, ":verify") {
@@ -282,4 +338,110 @@ func (s *workflowSource) ObserveChecks(context.Context, sourcecontrol.Observatio
 }
 func (s *workflowSource) ObserveReviews(context.Context, sourcecontrol.ObservationRequest) ([]sourcecontrol.ReviewObservation, error) {
 	return nil, nil
+}
+
+func registerApprovedContext(t *testing.T, ctx context.Context, client *Client, agent string, previous workcontrol.ContextSource, planText string) workcontrol.ContextSource {
+	t.Helper()
+	var task taskDTO
+	if err := client.do(ctx, "POST", "/api/v1/tasks", map[string]any{"title": "Approve reusable project decision", "acceptance_criteria": "Project decision is approved", "status": "ready", "budget_minutes": 30}, &task); err != nil {
+		t.Fatal(err)
+	}
+	run, err := client.ClaimWork(ctx, task.ID, workcontrol.Claim{IdempotencyKey: "context-decision:" + task.ID, AgentID: agent, ExpectedTaskVersion: task.Version, Lease: 2 * time.Minute})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := client.SubmitPlanRevision(ctx, run.ID, workcontrol.PlanRevisionSubmission{IdempotencyKey: "context-plan:" + task.ID, AgentID: agent, ExpectedVersion: run.Version, FenceToken: run.FenceToken, Plan: planText, ContextDigest: artifacts.Digest([]byte(planText)), RiskClass: "low", VerificationStrategy: "Check public compatibility", RollbackApproach: "Revert the change", PolicyVersion: "context-proof", RequireApproval: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Decision == nil {
+		t.Fatal("approval decision missing")
+	}
+	if err = client.do(ctx, "POST", "/api/v1/operator/decisions/"+result.Decision.ID+"/answer", map[string]string{"answer": "Approve plan"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	input := workcontrol.ContextSourceInput{ID: "reusable-decision", ExpectedRevision: previous.Revision, Kind: "decision", Title: "API decision", Reference: result.Decision.ID, SourceRevision: result.PlanRevision.ID, Trust: "guidance", State: "active"}
+	var source workcontrol.ContextSource
+	if err = client.do(ctx, "PUT", "/api/v1/operator/projects/prj_default/context/sources", input, &source); err != nil {
+		t.Fatal(err)
+	}
+	detail, err := client.GetWork(ctx, task.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	latest := detail.Runs[0]
+	if err = client.BlockRun(ctx, run.ID, workcontrol.RunBlock{IdempotencyKey: "context-proof-done:" + task.ID, AgentID: agent, ExpectedVersion: latest.Version, FenceToken: latest.FenceToken, Reason: "Decision recorded for context reuse proof; no repository change requested"}); err != nil {
+		t.Fatal(err)
+	}
+	return source
+}
+
+func verifyRealRepositoryAssociation(t *testing.T, ctx context.Context, client *Client) {
+	t.Helper()
+	gitServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"object":{"sha":"%s"}}`, strings.Repeat("a", 40))
+	}))
+	defer gitServer.Close()
+	path := filepath.Join(t.TempDir(), "repository.db")
+	journal, err := sqlite.Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { journal.Close() }()
+	config := flow.Config{ProjectID: "prj_default", Git: github.Config{APIURL: gitServer.URL, CloneURL: gitServer.URL + "/owner/first.git", Repository: "owner/first", BaseBranch: "main"}}
+	bindingInput := execution.ProjectBinding{ProjectID: config.ProjectID, Provider: "deck", Repository: config.Git.CloneURL, Runtime: "test", PolicyVersion: "test", ContextConfig: config.Digest(), ArtifactConfig: "test", DeliveryConfig: "test", BudgetMinutes: 30, MaxConcurrency: 1}
+	if _, err = flow.InitializeRepository(ctx, journal, config, bindingInput); err != nil {
+		t.Fatal(err)
+	}
+	controller := &flow.Controller{Config: config, Journal: journal, Provider: client}
+	request := workcontrol.RepositoryRequestInput{Repository: "owner/first", BaseBranch: "main"}
+	var submitted workcontrol.RepositoryRequest
+	if err = client.do(ctx, "PUT", "/api/v1/operator/projects/prj_default/repository", request, &submitted); err != nil {
+		t.Fatal(err)
+	}
+	if err = controller.ReconcileRepository(ctx); err != nil {
+		t.Fatal(err)
+	}
+	confirmed, err := client.GetRepository(ctx, "prj_default")
+	if err != nil || confirmed.Status != "connected" || confirmed.Binding == nil {
+		t.Fatal("repository not confirmed", err)
+	}
+	var task taskDTO
+	if err = client.do(ctx, "POST", "/api/v1/tasks", map[string]any{"title": "Inspect original binding", "acceptance_criteria": "The selected binding is visible", "status": "ready", "budget_minutes": 30}, &task); err != nil {
+		t.Fatal(err)
+	}
+	original := task.toDomain()
+	if original.Context == nil || original.Context.Repository == nil {
+		t.Fatal("authorized task has no binding")
+	}
+	encoded, _ := json.Marshal(original)
+	if _, _, err = journal.EnsureAcquisitionIntent(ctx, execution.NewAcquisitionIntent{ProjectID: config.ProjectID, WorkID: task.ID, TaskVersion: task.Version, TaskDigest: artifacts.Digest(encoded), TaskSnapshot: string(encoded), AcceptanceCriteriaDigest: "proof", ClaimKey: "association-proof", AgentID: "proof", LeaseSeconds: 60, BudgetMinutes: 30}); err != nil {
+		t.Fatal(err)
+	}
+	request = workcontrol.RepositoryRequestInput{ExpectedRevision: confirmed.Revision, ExpectedBindingVersion: confirmed.Binding.Version, Repository: "owner/second", BaseBranch: "main"}
+	if err = client.do(ctx, "PUT", "/api/v1/operator/projects/prj_default/repository", request, &submitted); err != nil {
+		t.Fatal(err)
+	}
+	if err = controller.ReconcileRepository(ctx); err != nil {
+		t.Fatal(err)
+	}
+	journal.Close()
+	journal, err = sqlite.Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	controller.Journal = journal
+	latest, err := flow.InitializeRepository(ctx, journal, config, bindingInput)
+	if err != nil || latest.Version <= original.Context.Repository.Version {
+		t.Fatal("association did not survive restart", err)
+	}
+	recovered, err := controller.ConfigurationForExecution(ctx, execution.Execution{ProjectID: config.ProjectID, ExternalWorkID: task.ID, TaskVersion: task.Version, BindingVersion: original.Context.Repository.Version})
+	if err != nil || recovered.Git.Repository != "owner/first" {
+		t.Fatal("authorized work switched repositories", err)
+	}
+	detail, err := client.GetWork(ctx, task.ID)
+	if err != nil || *detail.Work.Context.Repository != *original.Context.Repository {
+		t.Fatal("Deck replaced frozen binding", err)
+	}
 }

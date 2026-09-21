@@ -116,6 +116,18 @@
       "path": "errors/unauthenticated.json",
       "implementation_status": "implemented",
       "http_status": 401
+    },
+    {
+      "kind": "context",
+      "schema": "ResolvedContext",
+      "path": "context.json",
+      "implementation_status": "implemented"
+    },
+    {
+      "kind": "repository",
+      "schema": "RepositoryRequest",
+      "path": "repository.json",
+      "implementation_status": "implemented"
     }
   ]
 }

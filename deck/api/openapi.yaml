@@ -44,8 +44,292 @@ tags:
   - name: Events
   - name: Channels
   - name: Operations
+  - name: Context
 
 paths:
+  /operator/projects/{project}/repository:
+    get:
+      tags: ["Context"]
+      operationId: "getOperatorRepository"
+      description: "Safe Marina-confirmed binding and latest association request."
+      security: [{"operatorSession": []}]
+      parameters: [{"name": "project", "in": "path", "required": true, "schema": {"type": "string"}}]
+      responses:
+        200:
+          description: "Repository association"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RepositoryRequest"
+        401:
+          description: "Authentication required"
+        403:
+          description: "Project or capability not authorized"
+        409:
+          description: "Revision conflict"
+        422:
+          description: "Invalid association"
+    put:
+      tags: ["Context"]
+      operationId: "requestRepository"
+      description: "Request association within the installed GitHub origin. Retries of the same expected revision and payload are idempotent. Pending requests preserve the previous confirmed binding."
+      security: [{"operatorSession": []}]
+      parameters: [{"name": "project", "in": "path", "required": true, "schema": {"type": "string"}}]
+      responses:
+        200:
+          description: "Repository association"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RepositoryRequest"
+        401:
+          description: "Authentication required"
+        403:
+          description: "Project or capability not authorized"
+        409:
+          description: "Revision conflict"
+        422:
+          description: "Invalid association"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RepositoryRequestInput"
+  /projects/{project}/repository:
+    get:
+      tags: ["Context"]
+      operationId: "getRepositoryRequest"
+      description: "Read the operator association request for reconciliation."
+      security: [{"serviceBearer": []}]
+      parameters: [{"name": "project", "in": "path", "required": true, "schema": {"type": "string"}}]
+      x-capability: repository.read
+      responses:
+        200:
+          description: "Repository association"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RepositoryRequest"
+        401:
+          description: "Authentication required"
+        403:
+          description: "Project or capability not authorized"
+        409:
+          description: "Revision conflict"
+        422:
+          description: "Invalid association"
+  /projects/{project}/repository/result:
+    put:
+      tags: ["Context"]
+      operationId: "recordRepositoryResult"
+      description: "Publish a safe confirmation or rejection from Marina. Exact retries are idempotent; stale request revisions conflict."
+      security: [{"serviceBearer": []}]
+      parameters: [{"name": "project", "in": "path", "required": true, "schema": {"type": "string"}}]
+      x-capability: repository.write
+      responses:
+        200:
+          description: "Repository association"
+          content:
+            application/json:
+              schema:
+                type: "object"
+                properties:
+                  recorded:
+                    type: "boolean"
+        401:
+          description: "Authentication required"
+        403:
+          description: "Project or capability not authorized"
+        409:
+          description: "Revision conflict"
+        422:
+          description: "Invalid association"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RepositoryResult"
+  /operator/projects/{project}/context/sources:
+    get:
+      tags: ["Context"]
+      operationId: "listOperatorContextSources"
+      description: "Version history for explicitly registered project sources."
+      security: [{"operatorSession": []}]
+      parameters: [{"name": "project", "in": "path", "required": true, "schema": {"type": "string"}}]
+      responses:
+        "200":
+          description: "Context result"
+          content:
+            "application/json":
+              schema:
+                type: "array"
+                items:
+                  $ref: "#/components/schemas/ContextSource"
+        "401":
+          description: "Authentication required"
+        "403":
+          description: "Project or capability not authorized"
+        "404":
+          description: "Resource not found"
+        "409":
+          description: "Revision conflict"
+        "422":
+          description: "Invalid context selection"
+    put:
+      tags: ["Context"]
+      operationId: "putContextSource"
+      description: "Create or revise a source using expected_revision; Git and approved decisions retain their canonical owners."
+      security: [{"operatorSession": []}]
+      parameters: [{"name": "project", "in": "path", "required": true, "schema": {"type": "string"}}]
+      responses:
+        "200":
+          description: "Context result"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ContextSource"
+        "401":
+          description: "Authentication required"
+        "403":
+          description: "Project or capability not authorized"
+        "404":
+          description: "Resource not found"
+        "409":
+          description: "Revision conflict"
+        "422":
+          description: "Invalid context selection"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/ContextSourceInput"
+  /operator/projects/{project}/context/sources/{source}/{revision}/revoke:
+    post:
+      tags: ["Context"]
+      operationId: "revokeContextSource"
+      description: "Revoke this exact revision. Active consumers must stop using it; saved references remain immutable."
+      security: [{"operatorSession": []}]
+      parameters: [{"name": "project", "in": "path", "required": true, "schema": {"type": "string"}}, {"name": "source", "in": "path", "required": true, "schema": {"type": "string"}}, {"name": "revision", "in": "path", "required": true, "schema": {"type": "string"}}]
+      responses:
+        "200":
+          description: "Context result"
+          content:
+            "application/json":
+              schema:
+                type: "object"
+        "401":
+          description: "Authentication required"
+        "403":
+          description: "Project or capability not authorized"
+        "404":
+          description: "Resource not found"
+        "409":
+          description: "Revision conflict"
+        "422":
+          description: "Invalid context selection"
+  /operator/tasks/{id}/context:
+    get:
+      tags: ["Context"]
+      operationId: "getOperatorTaskContext"
+      description: "Inspect context selected when the task was authorized. New project revisions cannot enter it silently."
+      security: [{"operatorSession": []}]
+      parameters: [{"name": "id", "in": "path", "required": true, "schema": {"type": "string"}}]
+      responses:
+        "200":
+          description: "Context result"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ResolvedContext"
+        "401":
+          description: "Authentication required"
+        "403":
+          description: "Project or capability not authorized"
+        "404":
+          description: "Resource not found"
+        "409":
+          description: "Revision conflict"
+        "422":
+          description: "Invalid context selection"
+  /operator/runs/{id}/context:
+    get:
+      tags: ["Context"]
+      operationId: "getOperatorRunContext"
+      description: "Inspect the original run selection even after a task is edited or retried."
+      security: [{"operatorSession": []}]
+      parameters: [{"name": "id", "in": "path", "required": true, "schema": {"type": "string"}}]
+      responses:
+        "200":
+          description: "Context result"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ResolvedContext"
+        "401":
+          description: "Authentication required"
+        "403":
+          description: "Project or capability not authorized"
+        "404":
+          description: "Resource not found"
+        "409":
+          description: "Revision conflict"
+        "422":
+          description: "Invalid context selection"
+  /projects/{project}/context/sources:
+    get:
+      tags: ["Context"]
+      operationId: "listContextSources"
+      description: "Read project source revisions and revocation state."
+      security: [{"serviceBearer": []}]
+      parameters: [{"name": "project", "in": "path", "required": true, "schema": {"type": "string"}}]
+      responses:
+        "200":
+          description: "Context result"
+          content:
+            "application/json":
+              schema:
+                type: "array"
+                items:
+                  $ref: "#/components/schemas/ContextSource"
+        "401":
+          description: "Authentication required"
+        "403":
+          description: "Project or capability not authorized"
+        "404":
+          description: "Resource not found"
+        "409":
+          description: "Revision conflict"
+        "422":
+          description: "Invalid context selection"
+      x-capability: context.read
+  /runs/{id}/context:
+    get:
+      tags: ["Context"]
+      operationId: "getRunContext"
+      description: "Resolve only the exact revisions frozen at authorization. Messages are immutable data with digests; revocation is returned separately. Context cannot increase authority or budgets."
+      security: [{"serviceBearer": []}]
+      parameters: [{"name": "id", "in": "path", "required": true, "schema": {"type": "string"}}]
+      responses:
+        "200":
+          description: "Context result"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ResolvedContext"
+        "401":
+          description: "Authentication required"
+        "403":
+          description: "Project or capability not authorized"
+        "404":
+          description: "Resource not found"
+        "409":
+          description: "Revision conflict"
+        "422":
+          description: "Invalid context selection"
+      x-capability: context.read
   /operator/tasks/{id}/artifacts/{digest}:
     get:
       tags: [Tasks]
@@ -1209,6 +1493,255 @@ components:
             $ref: "#/components/schemas/Error"
 
   schemas:
+    ContextReference:
+      type: "object"
+      required: ["id", "revision", "digest"]
+      properties:
+        id:
+          type: "string"
+        revision:
+          type: "integer"
+          minimum: 1
+        digest:
+          type: "string"
+          pattern: "^sha256:[a-f0-9]{64}$"
+    RepositoryBinding:
+      type: "object"
+      required: ["version", "repository", "clone_url", "base_branch"]
+      properties:
+        version:
+          type: "integer"
+          minimum: 1
+        repository:
+          type: "string"
+        clone_url:
+          type: "string"
+          format: "uri"
+        base_branch:
+          type: "string"
+    RepositoryRequestInput:
+      type: "object"
+      required: ["expected_revision", "expected_binding_version", "repository", "base_branch"]
+      properties:
+        expected_revision:
+          type: "integer"
+          minimum: 0
+        expected_binding_version:
+          type: "integer"
+          minimum: 0
+        repository:
+          type: "string"
+          pattern: "^[A-Za-z0-9_-][A-Za-z0-9_.-]{0,99}/[A-Za-z0-9_-][A-Za-z0-9_.-]{0,99}$"
+        base_branch:
+          type: "string"
+          maxLength: 200
+    RepositoryRequest:
+      example:
+        $ref: ./fixtures/v1/repository.json
+      type: "object"
+      required: ["expected_revision", "expected_binding_version", "repository", "base_branch", "revision", "status"]
+      properties:
+        expected_revision:
+          type: "integer"
+          minimum: 0
+        expected_binding_version:
+          type: "integer"
+          minimum: 0
+        repository:
+          type: "string"
+          pattern: "^[A-Za-z0-9_-][A-Za-z0-9_.-]{0,99}/[A-Za-z0-9_-][A-Za-z0-9_.-]{0,99}$"
+        base_branch:
+          type: "string"
+          maxLength: 200
+        revision:
+          type: "integer"
+        status:
+          type: "string"
+          enum: ["", "pending", "connected", "rejected"]
+        reason:
+          type: "string"
+        binding:
+          $ref: "#/components/schemas/RepositoryBinding"
+    RepositoryResult:
+      type: "object"
+      required: ["request_revision", "status"]
+      properties:
+        request_revision:
+          type: "integer"
+          minimum: 1
+        status:
+          type: "string"
+          enum: ["connected", "rejected"]
+        reason:
+          type: "string"
+          maxLength: 500
+        binding:
+          $ref: "#/components/schemas/RepositoryBinding"
+    ContextSourceInput:
+      type: "object"
+      additionalProperties: false
+      required: ["id", "kind", "title"]
+      properties:
+        id:
+          type: "string"
+          pattern: "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$"
+        expected_revision:
+          type: "integer"
+          minimum: 0
+          default: 0
+        kind:
+          type: "string"
+          enum: ["instruction", "goal", "document", "git", "decision"]
+        title:
+          type: "string"
+          minLength: 1
+          maxLength: 200
+        content:
+          type: "string"
+          maxLength: 16384
+        reference:
+          type: "string"
+          description: "Canonical approved Deck decision ID; never an arbitrary URL."
+        source_revision:
+          type: "string"
+          description: "Exact Git commit or the decision\u2019s immutable plan revision."
+        path:
+          type: "string"
+          description: "Safe repository-relative regular text file for Git sources."
+        trust:
+          type: "string"
+          enum: ["data", "guidance"]
+          default: "data"
+        state:
+          type: "string"
+          enum: ["active", "inactive"]
+          default: "active"
+        expires_at:
+          type: "integer"
+          minimum: 0
+        conflicts_with:
+          type: "array"
+          maxItems: 32
+          items:
+            type: "string"
+    ContextSource:
+      type: "object"
+      required: ["id", "project_id", "revision", "digest", "kind", "title", "trust", "state", "created_at", "superseded"]
+      properties:
+        id:
+          type: "string"
+          pattern: "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$"
+        expected_revision:
+          type: "integer"
+          minimum: 0
+          default: 0
+        kind:
+          type: "string"
+          enum: ["instruction", "goal", "document", "git", "decision"]
+        title:
+          type: "string"
+          minLength: 1
+          maxLength: 200
+        content:
+          type: "string"
+          maxLength: 16384
+        reference:
+          type: "string"
+          description: "Canonical approved Deck decision ID; never an arbitrary URL."
+        source_revision:
+          type: "string"
+          description: "Exact Git commit or the decision\u2019s immutable plan revision."
+        path:
+          type: "string"
+          description: "Safe repository-relative regular text file for Git sources."
+        trust:
+          type: "string"
+          enum: ["data", "guidance"]
+          default: "data"
+        state:
+          type: "string"
+          enum: ["active", "inactive"]
+          default: "active"
+        expires_at:
+          type: "integer"
+          minimum: 0
+        conflicts_with:
+          type: "array"
+          maxItems: 32
+          items:
+            type: "string"
+        project_id:
+          type: "string"
+        revision:
+          type: "integer"
+          minimum: 1
+        digest:
+          type: "string"
+        created_at:
+          type: "integer"
+        revoked_at:
+          type: "integer"
+        superseded:
+          type: "boolean"
+    TaskContext:
+      type: "object"
+      required: ["sources", "messages", "authorized_at"]
+      properties:
+        repository:
+          $ref: "#/components/schemas/RepositoryBinding"
+        sources:
+          type: "array"
+          maxItems: 32
+          items:
+            $ref: "#/components/schemas/ContextReference"
+        messages:
+          type: "array"
+          maxItems: 20
+          items:
+            $ref: "#/components/schemas/ContextReference"
+        authorized_at:
+          type: "integer"
+          description: "Zero for a draft; source selection is frozen on Ready."
+    ContextMessage:
+      type: "object"
+      required: ["id", "channel_id", "author_type", "author_id", "content", "digest", "trust", "created_at"]
+      properties:
+        id:
+          type: "string"
+        channel_id:
+          type: "string"
+        author_type:
+          type: "string"
+        author_id:
+          type: "string"
+        content:
+          type: "string"
+        digest:
+          type: "string"
+        trust:
+          const: "data"
+        created_at:
+          type: "integer"
+    ResolvedContext:
+      example:
+        $ref: ./fixtures/v1/context.json
+      type: "object"
+      required: ["selection", "sources", "messages"]
+      properties:
+        assembly:
+          type: object
+          description: Immutable Marina snapshot and interpreted outcome projected for operator inspection; absent before assembly.
+          additionalProperties: true
+        selection:
+          anyOf: [{"$ref": "#/components/schemas/TaskContext"}, {"type": "null"}]
+        sources:
+          type: "array"
+          items:
+            $ref: "#/components/schemas/ContextSource"
+        messages:
+          type: "array"
+          items:
+            $ref: "#/components/schemas/ContextMessage"
     RunGuard:
       type: object
       required: [agent_id, expected_version, fence_token]
@@ -1289,6 +1822,7 @@ components:
         - created_at
         - updated_at
       properties:
+        context: {"$ref": "#/components/schemas/TaskContext"}
         id:
           type: string
         project_id:
@@ -1322,6 +1856,7 @@ components:
       type: object
       required: [title]
       properties:
+        context_message_ids: {"type": "array", "maxItems": 20, "uniqueItems": true, "items": {"type": "string"}}
         project_id:
           type: string
           default: prj_default
@@ -1347,6 +1882,7 @@ components:
     UpdateTask:
       type: object
       properties:
+        context_message_ids: {"type": "array", "maxItems": 20, "uniqueItems": true, "items": {"type": "string"}}
         title:
           type: string
         description:

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import TaskContextPanel from './TaskContextPanel.svelte';
   import { modal } from '$lib/dialog';
   import {
     ArrowRight,
@@ -37,7 +38,7 @@
   export let onsave: (task: Task, input: UpdateTaskInput) => Promise<void>;
   export let onanswer: (decision: Decision, answer: string) => Promise<void>;
 
-  let tab: 'overview' | 'activity' | 'evidence' = 'overview';
+  let tab: 'overview' | 'activity' | 'evidence' | 'context' = 'overview';
   let editing = false;
   let busy = false;
   let error = '';
@@ -289,6 +290,7 @@
         <button class:active={tab === 'overview'} type="button" on:click={() => (tab = 'overview')}>
           <ListChecks size={14} /> Overview
         </button>
+        <button class:active={tab === 'context'} type="button" on:click={() => (tab = 'context')}><ListChecks size={14} /> Sources</button>
         <button class:active={tab === 'activity'} type="button" on:click={() => (tab = 'activity')}>
           <History size={14} /> Activity <span>{detail.events.length}</span>
         </button>
@@ -424,6 +426,8 @@
             </section>
           {/if}
         </div>
+      {:else if tab === 'context'}
+        {#key detail.task.id}<TaskContextPanel {detail} />{/key}
       {:else if tab === 'activity'}
         <div class="tab-content timeline">
           {#each detail.trail as event (event.id)}

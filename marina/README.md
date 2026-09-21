@@ -61,7 +61,7 @@ The worker uses a configured Codex CLI image and an explicit Responses-compatibl
 model endpoint. GitHub/GHES is the first source adapter. Workers receive neither
 source-write nor upstream-model credentials. The gateway checks live authority;
 artifacts survive worker cleanup on Marina-owned storage. This workflow uses
-fixed bounded repository rules; the broader policy/context/plugin foundations
+fixed bounded repository rules and explicit immutable context; broader policy/plugin foundations
 remain available for later workflows.
 
 Without a workflow configuration, the existing Milestone 1 control-only mode
@@ -190,3 +190,30 @@ docs/decisions/            Reversible architecture decisions
 ```
 
 Read the root [AGENTS.md](../AGENTS.md) and Marina [AGENTS.md](AGENTS.md) before making changes, [ARCHITECTURE.md](../ARCHITECTURE.md) for the target system boundaries, and [TODO.md](../TODO.md) for the prioritized build sequence. The initial language choice and its reversal criteria are recorded in [Marina decision 0001](docs/decisions/0001-initial-go-core.md); the single-replica SQLite decision and its PostgreSQL migration triggers are in [Marina decision 0002](docs/decisions/0002-sqlite-execution-journal.md); the initial typed policy representation and local provider-neutral foundations are in [Marina decision 0003](docs/decisions/0003-initial-policy-and-local-foundations.md); the cross-product service identity and rotation model is in [platform decision 0003](../docs/decisions/0003-service-authentication.md); and the lossless handoff, fencing, command, and outbox mechanics are in [platform decision 0004](../docs/decisions/0004-milestone-one-work-control-safety.md).
+
+## Explicit project context
+
+The repository workflow assembles a content-addressed package before plan
+submission: the authorized task and budget, installed limits, pinned repository,
+worker image, selected Deck/Git sources and explicit conversation excerpts.
+It persists the package before worker dispatch and recovers those exact bytes on
+restart. Plans bind the package digest; both implementation and verification
+worker inputs include it. Deck receives a bounded derived snapshot for inspection.
+
+New source revisions affect newly authorized tasks. Explicit revocation and
+expired included inputs deny further worker-gateway access and stop the workflow
+for clarification, waiting for worker termination before reporting a blocker.
+Expired reference data and known instruction overrides can be omitted at assembly;
+stale guidance and declared conflicts block. Conversation stays untrusted data.
+These checks do not claim general semantic conflict or prompt-injection detection;
+existing filesystem, network, source-publication, authority and budget gates apply.
+
+Marina reconciles Deck repository requests even with new task intake disabled.
+The request is an owner/repository name plus branch, never an arbitrary endpoint
+or credential. Validation uses the installed GitHub API/clone origin and private
+credential reference. Versioned repository history survives restart and active
+runs resolve their original binding. An installation-profile change requires
+review and newly authorized work; it cannot silently alter old execution policy.
+Grant the project-scoped service identity `context.read`, `repository.read`, and
+`repository.write` when upgrading an existing installation; the setup generator
+includes them for new installations. See [the context proof](../docs/validation/ctx-02-08-2026-09-21.md).

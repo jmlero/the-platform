@@ -311,6 +311,9 @@ func (s *Store) ClaimTaskVersioned(
 	if err != nil {
 		return domain.Run{}, fmt.Errorf("create run: %w", err)
 	}
+	if _, err = tx.ExecContext(ctx, "INSERT INTO run_context(run_id, context_json) VALUES (?, ?)", run.ID, marshalJSON(currentTask.Context)); err != nil {
+		return domain.Run{}, err
+	}
 	if _, err := tx.ExecContext(ctx,
 		"UPDATE agents SET status = 'active', last_seen_at = ? WHERE id = ?",
 		now, agentID,

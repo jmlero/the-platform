@@ -1,0 +1,14 @@
+{
+  "expected_revision": 0,
+  "expected_binding_version": 0,
+  "repository": "acme/repo",
+  "base_branch": "main",
+  "revision": 1,
+  "status": "connected",
+  "binding": {
+    "version": 1,
+    "repository": "acme/repo",
+    "clone_url": "https://github.com/acme/repo.git",
+    "base_branch": "main"
+  }
+}

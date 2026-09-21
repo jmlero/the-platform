@@ -43,6 +43,13 @@ func (c *Controller) worker(ctx context.Context, e execution.Execution, task wor
 	}
 	if attempt.State == runtimeapi.StatePending {
 		input := worker.Input{Stage: stage, SourceURL: strings.TrimRight(c.Config.PublicURL, "/") + "/workers/" + attempt.ID + "/git", SourceRevision: attempt.Specification.SourceRevision, Title: task.Title, Description: task.Description, AcceptanceCriteria: task.AcceptanceCriteria, AllowedPaths: c.Config.AllowedPaths, Checks: c.Config.Checks}
+		if s.ContextDigest != "" {
+			manifest, err := c.Journal.GetContextPackage(ctx, s.ContextDigest)
+			if err != nil {
+				return fail(err)
+			}
+			input.Context = &manifest
+		}
 		if stage == "implement" {
 			input.Harness = []string{"codex", "exec", "--json", "--dangerously-bypass-approvals-and-sandbox", "-c", `web_search="disabled"`, "-c", `tools.view_image=false`, "-c", `model_provider="marina"`, "-c", `model="` + c.Config.Model.Name + `"`, "-c", `model_providers.marina.name="Marina controlled endpoint"`, "-c", `model_providers.marina.base_url="` + strings.TrimRight(c.Config.PublicURL, "/") + "/workers/" + attempt.ID + `/model/v1"`, "-c", `model_providers.marina.env_key="MARINA_WORKER_TOKEN"`, "-c", `model_providers.marina.wire_api="responses"`, "-"}
 		}

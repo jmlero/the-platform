@@ -41,11 +41,11 @@ Read relevant records under [docs/decisions/](docs/decisions/) before revisiting
 - The configured repository workflow supports one repository and one active task, with one implementation and one separate deterministic verification attempt. It ends at a PR ready for human review or a blocker; failed checks and requested changes block.
 - Cancellation waits for observed worker termination. Pause, resume, replan, retry, and reduce-authority commands are rejected by this workflow. Automatic revision loops, independent semantic review, merge and deploy authority remain future work.
 - Without workflow configuration, Marina remains in control-only mode. Disabling new task intake does not pause already journaled executions.
-- Channel history and explicit task promotion exist. Conversational agent dispatch, persistent unread-result state, project knowledge management, and full context assembly remain pending. Ledger records and reusable foundations alone do not establish a supported workflow capability.
+- Channel history and explicit task promotion exist. Versioned project knowledge, selected conversation excerpts, repository association, and immutable workflow context are implemented. Conversational agent dispatch and persistent unread-result state remain pending. Ledger records and reusable foundations alone do not establish a supported workflow capability.
 
 ## Project repository and context
 
-Follow [decision 0014](docs/decisions/0014-project-repository-and-knowledge.md) when implementing project context; it is accepted direction with implementation pending under CTX-02 through CTX-08.
+Follow [decision 0014](docs/decisions/0014-project-repository-and-knowledge.md) when implementing project context; its explicit-source workflow is implemented under CTX-02 through CTX-08; evidence and boundaries are in [the context validation report](docs/validation/ctx-02-08-2026-09-21.md).
 
 - Start with one GitHub repository per project. Reuse Deck's project identity and Marina's versioned project binding; repository connection, execution settings, and credential references remain Marina-owned.
 - Deck owns project-authored knowledge and selected source registrations. Git remains authoritative for repository-owned instructions, documents, and decisions. Reference existing Deck decisions and messages by identity and revision instead of duplicating their authoritative records.

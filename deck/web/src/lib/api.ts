@@ -1,4 +1,5 @@
 import type {
+  ContextSource, ContextSourceInput, ResolvedContext, RepositoryRequest, RepositoryRequestInput,
   AppEvent,
   Bootstrap,
   Channel,
@@ -62,6 +63,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+ repository: (projectID = 'prj_default') => request<RepositoryRequest>(`/api/v1/operator/projects/${encodeURIComponent(projectID)}/repository`),
+ requestRepository: (input: RepositoryRequestInput, projectID = 'prj_default') => request<RepositoryRequest>(`/api/v1/operator/projects/${encodeURIComponent(projectID)}/repository`, {method: 'PUT', body: JSON.stringify(input)}),
+  contextSources: (project = 'prj_default') => request<ContextSource[]>(`/api/v1/operator/projects/${encodeURIComponent(project)}/context/sources`),
+  putContextSource: (input: ContextSourceInput, project = 'prj_default') => request<ContextSource>(`/api/v1/operator/projects/${encodeURIComponent(project)}/context/sources`, {method: 'PUT', body: JSON.stringify(input)}),
+  revokeContextSource: (id: string, revision: number, project = 'prj_default') => request<unknown>(`/api/v1/operator/projects/${encodeURIComponent(project)}/context/sources/${encodeURIComponent(id)}/${revision}/revoke`, {method: 'POST'}),
+  taskContext: (id: string) => request<ResolvedContext>(`/api/v1/operator/tasks/${encodeURIComponent(id)}/context`),
+  runContext: (id: string) => request<ResolvedContext>(`/api/v1/operator/runs/${encodeURIComponent(id)}/context`),
   session: () => request<OperatorSession>('/api/v1/operator/session'),
   login: (token: string) =>
     request<OperatorSession>('/api/v1/operator/session', {

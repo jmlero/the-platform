@@ -27,12 +27,13 @@ type Provider interface {
 }
 
 type Controller struct {
-	Config    Config
-	Journal   *sqlite.Store
-	Provider  Provider
-	Runtime   runtimeapi.Adapter
-	Artifacts *artifacts.Store
-	Source    func(execution.Execution) (sourcecontrol.Port, error)
+	BindingConfig func(context.Context, execution.Execution) (Config, error)
+	Config        Config
+	Journal       *sqlite.Store
+	Provider      Provider
+	Runtime       runtimeapi.Adapter
+	Artifacts     *artifacts.Store
+	Source        func(execution.Execution) (sourcecontrol.Port, error)
 }
 
 // Every value used in an external write is derived from this durable state,
@@ -40,6 +41,7 @@ type Controller struct {
 type state struct {
 	Step                 string
 	ConfigDigest         string
+	ContextDigest        string
 	Base                 string
 	Head                 string
 	Branch               string
@@ -124,6 +126,41 @@ func (c *Controller) Authorize(ctx context.Context, e execution.Execution, fence
 	if !r.Status.Active() || r.LeaseExpiresAt == nil || !time.Now().Add(time.Second).Before(*r.LeaseExpiresAt) {
 		return errors.New("live provider authority unavailable")
 	}
+	return c.CheckContext(ctx, e)
+}
+
+func (c *Controller) CheckContext(ctx context.Context, e execution.Execution) error {
+	if manifest, err := c.Journal.ExecutionContextPackage(ctx, e.ID); err == nil {
+		if err = manifest.ValidateAt(time.Now()); err != nil {
+			return contextProblem("The saved context contains stale or revoked inputs")
+		}
+	} else if !errors.Is(err, execution.ErrNotFound) {
+		return err
+	}
+	snapshot, err := c.Journal.AcquiredTaskSnapshot(ctx, e.ProjectID, e.ExternalWorkID, e.TaskVersion)
+	if err != nil {
+		return err
+	}
+	var task workcontrol.WorkItem
+	if err = json.Unmarshal([]byte(snapshot), &task); err != nil {
+		return err
+	}
+	if task.Context != nil {
+		reader, ok := c.Provider.(workcontrol.ContextInspection)
+		if !ok {
+			return contextProblem("Provider cannot validate selected context")
+		}
+		resolved, err := reader.GetRunContext(ctx, e.ExternalRunID)
+		if err != nil {
+			return fmt.Errorf("%w: %v", workcontrol.ErrContextUnavailable, err)
+		}
+		if err = workcontrol.ValidateResolvedContext(task.Context, resolved); err != nil {
+			return contextProblem(err.Error())
+		}
+		if err = workcontrol.CheckContextValidity(time.Now(), resolved); err != nil {
+			return contextProblem(err.Error())
+		}
+	}
 	return nil
 }
 
@@ -159,6 +196,20 @@ func (c *Controller) Cycle(ctx context.Context) []error {
 }
 
 func (c *Controller) advance(ctx context.Context, e execution.Execution) error {
+	if c.BindingConfig != nil {
+		config, err := c.BindingConfig(ctx, e)
+		if err != nil {
+			r, readErr := c.run(ctx, e)
+			if readErr != nil {
+				return readErr
+			}
+			return c.block(ctx, e, r, "The original repository binding is unavailable or its installation profile changed; authorize new work after reviewing the installation")
+		}
+		effective := *c
+		effective.Config = config
+		effective.BindingConfig = nil
+		return effective.advance(ctx, e)
+	}
 	s, err := c.load(ctx, e)
 	if err != nil {
 		return err
@@ -171,6 +222,9 @@ func (c *Controller) advance(ctx context.Context, e execution.Execution) error {
 		return c.transition(ctx, e, execution.StateCompleted, "Verified pull request ready for human review")
 	}
 	if err = c.Authorize(ctx, e, e.FenceToken); err != nil {
+		if errors.Is(err, errContextClarification) {
+			return c.block(ctx, e, r, err.Error())
+		}
 		return err
 	}
 	if s.ConfigDigest != c.Config.Digest() {
@@ -220,6 +274,21 @@ func (c *Controller) advance(ctx context.Context, e execution.Execution) error {
 		s.Head = base.Commit
 		s.Step = "plan"
 		return c.save(ctx, e, s)
+	}
+	if s.Step == "plan" && s.ContextDigest == "" {
+		s.ContextDigest, err = c.prepareContext(ctx, e, task, s)
+		if err != nil {
+			if errors.Is(err, errContextClarification) {
+				return c.block(ctx, e, r, err.Error())
+			}
+			return err
+		}
+		return c.save(ctx, e, s)
+	}
+	if s.ContextDigest != "" {
+		if err = c.publishContext(ctx, e, s); err != nil {
+			return err
+		}
 	}
 	if s.Step == "plan" {
 		// A lost submission response is recovered from the authoritative ledger.
@@ -450,6 +519,9 @@ func (c *Controller) advance(ctx context.Context, e execution.Execution) error {
 }
 
 func (c *Controller) contextDigest(task workcontrol.WorkItem, s state) string {
+	if s.ContextDigest != "" {
+		return s.ContextDigest
+	}
 	b, _ := json.Marshal(struct {
 		Task         workcontrol.WorkItem
 		Base, Config string

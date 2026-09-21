@@ -1,8 +1,8 @@
 # Decision 0014: Project repository and reusable knowledge
 
-- Status: accepted product direction; implementation pending
+- Status: accepted; explicit-source workflow implemented 2026-09-21
 - Date: 2026-09-17
-- Scope: CTX-01; Deck projects, Marina project bindings, and task context
+- Scope: CTX-01 through CTX-08; Deck projects, Marina project bindings, and task context
 
 ## Decision
 
@@ -40,7 +40,7 @@ HTTP/JSON contract; neither reads the other's database.
 
 ## Minimum context references
 
-The future contract must identify each selected input by its project, source
+The implemented contract identifies each selected input by its project, source
 owner, kind, stable reference, revision, and content digest, together with scope,
 provenance, trust, freshness, and superseded or revoked state where applicable.
 
@@ -50,9 +50,9 @@ provenance, trust, freshness, and superseded or revoked state where applicable.
 - Conversation excerpts identify selected message IDs and their exact revisions
   or immutable content digests; a live channel URL alone is insufficient.
 
-These are contract requirements, not a published wire schema or advertised
-provider capability. API shapes, persistence migrations, and capability discovery
-belong to the implementation tasks and require joint conformance checks.
+The additive version-1 wire contract is published in [Deck OpenAPI](../../deck/api/openapi.yaml)
+and its canonical fixtures. `context.read`, `repository.read`, and
+`repository.write` are implemented capabilities, exercised by joint conformance.
 
 ## Use in a task
 
@@ -83,10 +83,22 @@ third task; the earlier runs still show their original inputs.
 
 ## Delivery and deferred choices
 
-CTX-01 is complete as a decision. Repository association through Deck is CTX-08;
-knowledge registration and revision are CTX-02; assembly, conversation selection,
-trust handling, inspection, and the two-task proof remain CTX-03 through CTX-07
-in [TODO.md](../../TODO.md).
+CTX-01 through CTX-08 have implementation and test evidence in the
+[context validation report](../validation/ctx-02-08-2026-09-21.md).
+
+Deck owns durable association intent and a safe binding projection. Marina
+validates repository/base-branch access through its installed GitHub origin,
+keeps credential references private, records version history and a receipt before
+confirming to Deck, and reconstructs an execution using its original binding.
+A request may change owner/repository and base branch within that origin; changing
+hosts, credentials, trusted checks, or runtime policy remains installation setup.
+Missing credentials or a transient provider outage defer validation; a permanent
+access/branch failure produces a visible rejection that can be corrected.
+
+Explicit expiry and declared conflicting source IDs govern freshness/conflicts.
+A conservative override filter omits known injected data or blocks such guidance;
+this is not general semantic contradiction or prompt-injection detection. Trust
+labels and the existing external authority/budget/worker gates remain mandatory.
 
 Begin with explicitly maintained project sources. Automatic discovery,
 agent-suggested knowledge, and promotion of learned guidance need subsequent
@@ -94,7 +106,6 @@ decisions. This minimum contract does not require a retrieval framework, vector
 database, additional service, multiple repositories per project, or concurrent
 project execution.
 
-This decision records the operator's agreed direction. Project knowledge
-management and its integration into the active workflow remain unimplemented;
-the first-release scope in [decision 0007](0007-sovereign-first-usable-release.md)
-is unchanged.
+This implements the operator's agreed direction as a subsequent increment to
+[decision 0007](0007-sovereign-first-usable-release.md). It adds no automatic
+revision loops, merge/deploy authority, or additional active task concurrency.

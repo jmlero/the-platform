@@ -1,0 +1,1210 @@
+{
+  "captured_at": "2026-09-21T11:58:14Z",
+  "accounting_note": "Configured gateway admission rates; not provider billing. Unknown reservations are retained.",
+  "totals": {
+    "used_tokens": 1311514,
+    "used_cost_micros": 611458,
+    "pending_model_calls": 7,
+    "reserved_tokens": 357644,
+    "reserved_cost_micros": 191050
+  },
+  "allocated_cost_minor": 272,
+  "currency": "USD",
+  "tasks": [
+    {
+      "label": "RUN11-final",
+      "task": "tsk_14737898d76c65235d34",
+      "status": "done",
+      "budget": {
+        "time_minutes": 6,
+        "max_attempts": 2,
+        "max_tokens": 400000,
+        "max_cost_minor": 20,
+        "currency": "USD",
+        "max_concurrency": 1,
+        "authority": [
+          "source.read",
+          "source.write",
+          "pull_request.create"
+        ]
+      },
+      "runs": [
+        {
+          "id": "run_8a6ec069f3bc13040e7b",
+          "status": "completed",
+          "started_at": 1789990961342,
+          "finished_at": 1789991093880
+        }
+      ],
+      "executions": [
+        {
+          "id": "exec_b10c307328d3ba5589d981de",
+          "state": "completed",
+          "attempt": 2,
+          "used_tokens": 148516,
+          "used_cost_micros": 69402,
+          "pending_model_calls": 0,
+          "reserved_tokens": 0,
+          "reserved_cost_micros": 0
+        }
+      ],
+      "attempts": [
+        {
+          "id": "rtm_4ba2c43225f0d0897b9d7eb5",
+          "attempt_number": 1,
+          "state": "succeeded",
+          "cleanup_state": "completed"
+        },
+        {
+          "id": "rtm_c6fd8ea9952e2c6d8836bb30",
+          "attempt_number": 2,
+          "state": "succeeded",
+          "cleanup_state": "completed"
+        }
+      ],
+      "prs": [
+        {
+          "number": 6,
+          "url": "https://github.com/jmlero/marina-acceptance/pull/6",
+          "head": "b78e779f66700e0f5d0ae0365f8f3be2d244581b",
+          "branch": "marina/exec_b10c307328d3ba5589d981de",
+          "state": "open",
+          "merged": false
+        }
+      ]
+    },
+    {
+      "label": "RUN15-outage-deck-tcp-final",
+      "task": "tsk_0ba33bd70ae6c0cdb67c",
+      "status": "done",
+      "budget": {
+        "time_minutes": 6,
+        "max_attempts": 2,
+        "max_tokens": 400000,
+        "max_cost_minor": 20,
+        "currency": "USD",
+        "max_concurrency": 1,
+        "authority": [
+          "source.read",
+          "source.write",
+          "pull_request.create"
+        ]
+      },
+      "runs": [
+        {
+          "id": "run_19b8fd079a82cf82f1d0",
+          "status": "completed",
+          "started_at": 1789991597055,
+          "finished_at": 1789991741614
+        }
+      ],
+      "executions": [
+        {
+          "id": "exec_e6b78d682842a3382d5a9929",
+          "state": "completed",
+          "attempt": 2,
+          "used_tokens": 80447,
+          "used_cost_micros": 37566,
+          "pending_model_calls": 0,
+          "reserved_tokens": 0,
+          "reserved_cost_micros": 0
+        }
+      ],
+      "attempts": [
+        {
+          "id": "rtm_fa16553922afa8f4f148af8e",
+          "attempt_number": 1,
+          "state": "succeeded",
+          "cleanup_state": "completed"
+        },
+        {
+          "id": "rtm_27c822d203a44e68dc28b740",
+          "attempt_number": 2,
+          "state": "succeeded",
+          "cleanup_state": "completed"
+        }
+      ],
+      "prs": [
+        {
+          "number": 10,
+          "url": "https://github.com/jmlero/marina-acceptance/pull/10",
+          "head": "238a90632354124a7cc6a1ebf6e983256b75e899",
+          "branch": "marina/exec_e6b78d682842a3382d5a9929",
+          "state": "open",
+          "merged": false
+        }
+      ]
+    },
+    {
+      "label": "RUN15-outage-git-tcp-final",
+      "task": "tsk_a255b99fc83a89548bae",
+      "status": "done",
+      "budget": {
+        "time_minutes": 6,
+        "max_attempts": 2,
+        "max_tokens": 400000,
+        "max_cost_minor": 20,
+        "currency": "USD",
+        "max_concurrency": 1,
+        "authority": [
+          "source.read",
+          "source.write",
+          "pull_request.create"
+        ]
+      },
+      "runs": [
+        {
+          "id": "run_2749987c840ae752eae1",
+          "status": "completed",
+          "started_at": 1789991423695,
+          "finished_at": 1789991582972
+        }
+      ],
+      "executions": [
+        {
+          "id": "exec_25a0dcaf574867cd62be4abb",
+          "state": "completed",
+          "attempt": 2,
+          "used_tokens": 62725,
+          "used_cost_micros": 29271,
+          "pending_model_calls": 0,
+          "reserved_tokens": 0,
+          "reserved_cost_micros": 0
+        }
+      ],
+      "attempts": [
+        {
+          "id": "rtm_7e227e1483d0f32aebfa5c09",
+          "attempt_number": 1,
+          "state": "succeeded",
+          "cleanup_state": "completed"
+        },
+        {
+          "id": "rtm_86e14bcbae58df259dbd7b43",
+          "attempt_number": 2,
+          "state": "succeeded",
+          "cleanup_state": "completed"
+        }
+      ],
+      "prs": [
+        {
+          "number": 9,
+          "url": "https://github.com/jmlero/marina-acceptance/pull/9",
+          "head": "57071c6f673a3a64a6151c13dc9f870ac6365765",
+          "branch": "marina/exec_25a0dcaf574867cd62be4abb",
+          "state": "open",
+          "merged": false
+        }
+      ]
+    },
+    {
+      "label": "RUN15-outage-model-final",
+      "task": "tsk_8416e809c431913abc61",
+      "status": "done",
+      "budget": {
+        "time_minutes": 6,
+        "max_attempts": 2,
+        "max_tokens": 400000,
+        "max_cost_minor": 20,
+        "currency": "USD",
+        "max_concurrency": 1,
+        "authority": [
+          "source.read",
+          "source.write",
+          "pull_request.create"
+        ]
+      },
+      "runs": [
+        {
+          "id": "run_1fb2d666a75b9a83a8f1",
+          "status": "completed",
+          "started_at": 1789991121182,
+          "finished_at": 1789991229892
+        }
+      ],
+      "executions": [
+        {
+          "id": "exec_dbd19c682db7c9832ea82dfb",
+          "state": "completed",
+          "attempt": 2,
+          "used_tokens": 62333,
+          "used_cost_micros": 29204,
+          "pending_model_calls": 0,
+          "reserved_tokens": 0,
+          "reserved_cost_micros": 0
+        }
+      ],
+      "attempts": [
+        {
+          "id": "rtm_a38a36d1c282d70fea6fa4b2",
+          "attempt_number": 1,
+          "state": "succeeded",
+          "cleanup_state": "completed"
+        },
+        {
+          "id": "rtm_a41231c0d113f22f64218057",
+          "attempt_number": 2,
+          "state": "succeeded",
+          "cleanup_state": "completed"
+        }
+      ],
+      "prs": [
+        {
+          "number": 7,
+          "url": "https://github.com/jmlero/marina-acceptance/pull/7",
+          "head": "ca0ef303667337602471721771bcfac76e36857d",
+          "branch": "marina/exec_dbd19c682db7c9832ea82dfb",
+          "state": "open",
+          "merged": false
+        }
+      ]
+    },
+    {
+      "label": "RUN15-outage-model-tcp-final",
+      "task": "tsk_c9654f5ada0032254c8d",
+      "status": "done",
+      "budget": {
+        "time_minutes": 6,
+        "max_attempts": 2,
+        "max_tokens": 400000,
+        "max_cost_minor": 20,
+        "currency": "USD",
+        "max_concurrency": 1,
+        "authority": [
+          "source.read",
+          "source.write",
+          "pull_request.create"
+        ]
+      },
+      "runs": [
+        {
+          "id": "run_12d36e91142dcc6715a8",
+          "status": "completed",
+          "started_at": 1789991250485,
+          "finished_at": 1789991401552
+        }
+      ],
+      "executions": [
+        {
+          "id": "exec_ecc9ee22b07fd0af1fe1aff5",
+          "state": "completed",
+          "attempt": 2,
+          "used_tokens": 91094,
+          "used_cost_micros": 42536,
+          "pending_model_calls": 2,
+          "reserved_tokens": 101788,
+          "reserved_cost_micros": 54408
+        }
+      ],
+      "attempts": [
+        {
+          "id": "rtm_da417459ce8e07c638195122",
+          "attempt_number": 1,
+          "state": "succeeded",
+          "cleanup_state": "completed"
+        },
+        {
+          "id": "rtm_b114db97c10a5705b61a0037",
+          "attempt_number": 2,
+          "state": "succeeded",
+          "cleanup_state": "completed"
+        }
+      ],
+      "prs": [
+        {
+          "number": 8,
+          "url": "https://github.com/jmlero/marina-acceptance/pull/8",
+          "head": "1f3d9dedd97c846f0b5c7994effc3b1383729fe5",
+          "branch": "marina/exec_ecc9ee22b07fd0af1fe1aff5",
+          "state": "open",
+          "merged": false
+        }
+      ]
+    },
+    {
+      "label": "run09-poc-200k",
+      "task": "tsk_25ebbec4926ff048f5ee",
+      "status": "done",
+      "budget": {
+        "time_minutes": 10,
+        "max_attempts": 2,
+        "max_tokens": 200000,
+        "max_cost_minor": 10,
+        "currency": "USD",
+        "max_concurrency": 1,
+        "authority": [
+          "source.read",
+          "source.write",
+          "pull_request.create"
+        ]
+      },
+      "runs": [
+        {
+          "id": "run_0ad9130c7614367bb400",
+          "status": "completed",
+          "started_at": 1789984815773,
+          "finished_at": 1789984930365
+        }
+      ],
+      "executions": [
+        {
+          "id": "exec_8ef33145a6fc3899a9722be1",
+          "state": "completed",
+          "attempt": 2,
+          "used_tokens": 88347,
+          "used_cost_micros": 41205,
+          "pending_model_calls": 0,
+          "reserved_tokens": 0,
+          "reserved_cost_micros": 0
+        }
+      ],
+      "attempts": [
+        {
+          "id": "rtm_6a563249f439c3b7d04e6e90",
+          "attempt_number": 1,
+          "state": "succeeded",
+          "cleanup_state": "completed"
+        },
+        {
+          "id": "rtm_cb27dcf6c8b70f3c04f66353",
+          "attempt_number": 2,
+          "state": "succeeded",
+          "cleanup_state": "completed"
+        }
+      ],
+      "prs": [
+        {
+          "number": 1,
+          "url": "https://github.com/jmlero/marina-acceptance/pull/1",
+          "head": "2986c4f70d970ef7b016cde2dd6cb1c7b4b1e76c",
+          "branch": "marina/exec_8ef33145a6fc3899a9722be1",
+          "state": "open",
+          "merged": false
+        }
+      ]
+    },
+    {
+      "label": "run09-poc",
+      "task": "tsk_9274053f69f6bc4beacb",
+      "status": "blocked",
+      "budget": {
+        "time_minutes": 10,
+        "max_attempts": 2,
+        "max_tokens": 100000,
+        "max_cost_minor": 10,
+        "currency": "USD",
+        "max_concurrency": 1,
+        "authority": [
+          "source.read",
+          "source.write",
+          "pull_request.create"
+        ]
+      },
+      "runs": [
+        {
+          "id": "run_03216800a867c230b7c0",
+          "status": "blocked",
+          "started_at": 1789984628193,
+          "finished_at": 1789984731973
+        }
+      ],
+      "executions": [
+        {
+          "id": "exec_2bb1960e715439c200e1ce6f",
+          "state": "blocked",
+          "attempt": 1,
+          "used_tokens": 50175,
+          "used_cost_micros": 23485,
+          "pending_model_calls": 0,
+          "reserved_tokens": 0,
+          "reserved_cost_micros": 0
+        }
+      ],
+      "attempts": [
+        {
+          "id": "rtm_2fcb7724a24ffa47041ac00f",
+          "attempt_number": 1,
+          "state": "failed",
+          "cleanup_state": "completed"
+        }
+      ],
+      "prs": []
+    },
+    {
+      "label": "run11-active-restarts",
+      "task": "tsk_10223b097654c269723d",
+      "status": "blocked",
+      "budget": {
+        "time_minutes": 10,
+        "max_attempts": 2,
+        "max_tokens": 200000,
+        "max_cost_minor": 10,
+        "currency": "USD",
+        "max_concurrency": 1,
+        "authority": [
+          "source.read",
+          "source.write",
+          "pull_request.create"
+        ]
+      },
+      "runs": [
+        {
+          "id": "run_1af516187e25771b967e",
+          "status": "blocked",
+          "started_at": 1789985051859,
+          "finished_at": 1789985135489
+        }
+      ],
+      "executions": [
+        {
+          "id": "exec_79426fcd7fe9c4e62dd26715",
+          "state": "blocked",
+          "attempt": 1,
+          "used_tokens": 0,
+          "used_cost_micros": 0,
+          "pending_model_calls": 1,
+          "reserved_tokens": 46010,
+          "reserved_cost_micros": 25006
+        }
+      ],
+      "attempts": [
+        {
+          "id": "rtm_53e200f7a85875db720f8361",
+          "attempt_number": 1,
+          "state": "failed",
+          "cleanup_state": "completed"
+        }
+      ],
+      "prs": []
+    },
+    {
+      "label": "run11-restart-retest",
+      "task": "tsk_a66b91fad7a5557bd66a",
+      "status": "backlog",
+      "budget": {
+        "time_minutes": 10,
+        "max_attempts": 2,
+        "max_tokens": 200000,
+        "max_cost_minor": 20,
+        "currency": "USD",
+        "max_concurrency": 1,
+        "authority": [
+          "source.read",
+          "source.write",
+          "pull_request.create"
+        ]
+      },
+      "runs": [
+        {
+          "id": "run_fa21d42535b2c38f9b52",
+          "status": "failed",
+          "started_at": 1789986591358,
+          "finished_at": 1789986834419
+        }
+      ],
+      "executions": [
+        {
+          "id": "exec_d8ca270fbec56bf7d171272a",
+          "state": "failed",
+          "attempt": 2,
+          "used_tokens": 76892,
+          "used_cost_micros": 35846,
+          "pending_model_calls": 1,
+          "reserved_tokens": 50417,
+          "reserved_cost_micros": 26989
+        }
+      ],
+      "attempts": [
+        {
+          "id": "rtm_4d9e725e976df33650e07297",
+          "attempt_number": 1,
+          "state": "succeeded",
+          "cleanup_state": "completed"
+        },
+        {
+          "id": "rtm_7e8d35bf514d97ebb023a769",
+          "attempt_number": 2,
+          "state": "succeeded",
+          "cleanup_state": "completed"
+        }
+      ],
+      "prs": [
+        {
+          "number": 2,
+          "url": "https://github.com/jmlero/marina-acceptance/pull/2",
+          "head": "845970f4a9483ee9395951a84682f80970654ad8",
+          "branch": "marina/exec_d8ca270fbec56bf7d171272a",
+          "state": "open",
+          "merged": false
+        }
+      ]
+    },
+    {
+      "label": "run11-retry-fix",
+      "task": "tsk_71b38daf49930a923409",
+      "status": "blocked",
+      "budget": {
+        "time_minutes": 10,
+        "max_attempts": 2,
+        "max_tokens": 200000,
+        "max_cost_minor": 20,
+        "currency": "USD",
+        "max_concurrency": 1,
+        "authority": [
+          "source.read",
+          "source.write",
+          "pull_request.create"
+        ]
+      },
+      "runs": [
+        {
+          "id": "run_e2ff13a86fa27f9fea78",
+          "status": "blocked",
+          "started_at": 1789986966562,
+          "finished_at": 1789987064656
+        }
+      ],
+      "executions": [
+        {
+          "id": "exec_ba8735c2d2177aaf266db25c",
+          "state": "blocked",
+          "attempt": 1,
+          "used_tokens": 87784,
+          "used_cost_micros": 40942,
+          "pending_model_calls": 1,
+          "reserved_tokens": 48615,
+          "reserved_cost_micros": 26178
+        }
+      ],
+      "attempts": [
+        {
+          "id": "rtm_f3f453a3eff61beb6ea9352b",
+          "attempt_number": 1,
+          "state": "failed",
+          "cleanup_state": "completed"
+        }
+      ],
+      "prs": []
+    },
+    {
+      "label": "run12-cancellation",
+      "task": "tsk_78a33bd75e933e36b74c",
+      "status": "cancelled",
+      "budget": {
+        "time_minutes": 10,
+        "max_attempts": 2,
+        "max_tokens": 200000,
+        "max_cost_minor": 10,
+        "currency": "USD",
+        "max_concurrency": 1,
+        "authority": [
+          "source.read",
+          "source.write",
+          "pull_request.create"
+        ]
+      },
+      "runs": [
+        {
+          "id": "run_42ed265899a6f4d0fa32",
+          "status": "cancelled",
+          "started_at": 1789987112791,
+          "finished_at": 1789987159621
+        }
+      ],
+      "executions": [
+        {
+          "id": "exec_802b31dd869d1bc9ba3d24bc",
+          "state": "cancelled",
+          "attempt": 1,
+          "used_tokens": 57822,
+          "used_cost_micros": 26751,
+          "pending_model_calls": 1,
+          "reserved_tokens": 59480,
+          "reserved_cost_micros": 31067
+        }
+      ],
+      "attempts": [
+        {
+          "id": "rtm_6dfca14f7de970f092049205",
+          "attempt_number": 1,
+          "state": "cancelled",
+          "cleanup_state": "completed"
+        }
+      ],
+      "prs": []
+    },
+    {
+      "label": "run13-ci-failure",
+      "task": "tsk_9b0150d9ec22ffeb9a0f",
+      "status": "blocked",
+      "budget": {
+        "time_minutes": 10,
+        "max_attempts": 2,
+        "max_tokens": 200000,
+        "max_cost_minor": 10,
+        "currency": "USD",
+        "max_concurrency": 1,
+        "authority": [
+          "source.read",
+          "source.write",
+          "pull_request.create"
+        ]
+      },
+      "runs": [
+        {
+          "id": "run_18597dc5b292b318bc88",
+          "status": "blocked",
+          "started_at": 1789987654908,
+          "finished_at": 1789987775044
+        }
+      ],
+      "executions": [
+        {
+          "id": "exec_2634ef45bef420a873d9d668",
+          "state": "blocked",
+          "attempt": 2,
+          "used_tokens": 102607,
+          "used_cost_micros": 47793,
+          "pending_model_calls": 0,
+          "reserved_tokens": 0,
+          "reserved_cost_micros": 0
+        }
+      ],
+      "attempts": [
+        {
+          "id": "rtm_2509d18dec8ecd485e7a36e2",
+          "attempt_number": 1,
+          "state": "succeeded",
+          "cleanup_state": "completed"
+        },
+        {
+          "id": "rtm_81d961e62251c90401ba4108",
+          "attempt_number": 2,
+          "state": "succeeded",
+          "cleanup_state": "completed"
+        }
+      ],
+      "prs": [
+        {
+          "number": 3,
+          "url": "https://github.com/jmlero/marina-acceptance/pull/3",
+          "head": "0b9945803404996983dbc27a455c39d84853e2de",
+          "branch": "marina/exec_2634ef45bef420a873d9d668",
+          "state": "open",
+          "merged": false
+        }
+      ]
+    },
+    {
+      "label": "run13-local-failure",
+      "task": "tsk_68cf14e0cc4ff50974e8",
+      "status": "blocked",
+      "budget": {
+        "time_minutes": 10,
+        "max_attempts": 2,
+        "max_tokens": 200000,
+        "max_cost_minor": 10,
+        "currency": "USD",
+        "max_concurrency": 1,
+        "authority": [
+          "source.read",
+          "source.write",
+          "pull_request.create"
+        ]
+      },
+      "runs": [
+        {
+          "id": "run_b408496133d8a4ec7e8a",
+          "status": "blocked",
+          "started_at": 1789987297775,
+          "finished_at": 1789987369257
+        }
+      ],
+      "executions": [
+        {
+          "id": "exec_800f21248e028d732536aef1",
+          "state": "blocked",
+          "attempt": 2,
+          "used_tokens": 52079,
+          "used_cost_micros": 24201,
+          "pending_model_calls": 1,
+          "reserved_tokens": 51334,
+          "reserved_cost_micros": 27402
+        }
+      ],
+      "attempts": [
+        {
+          "id": "rtm_b30193207ea83e117eacd6fc",
+          "attempt_number": 1,
+          "state": "succeeded",
+          "cleanup_state": "completed"
+        },
+        {
+          "id": "rtm_2905ff28c6509ad0effc24f5",
+          "attempt_number": 2,
+          "state": "succeeded",
+          "cleanup_state": "completed"
+        }
+      ],
+      "prs": []
+    },
+    {
+      "label": "run13-missing-ci",
+      "task": "tsk_ee249abcf9f1e6e8e1cf",
+      "status": "blocked",
+      "budget": {
+        "time_minutes": 3,
+        "max_attempts": 2,
+        "max_tokens": 400000,
+        "max_cost_minor": 20,
+        "currency": "USD",
+        "max_concurrency": 1,
+        "authority": [
+          "source.read",
+          "source.write",
+          "pull_request.create"
+        ]
+      },
+      "runs": [
+        {
+          "id": "run_1880704c5019949de99d",
+          "status": "blocked",
+          "started_at": 1789990462795,
+          "finished_at": 1789990644886
+        }
+      ],
+      "executions": [
+        {
+          "id": "exec_cf9ea81a5f618c31a00f2658",
+          "state": "failed",
+          "attempt": 2,
+          "used_tokens": 113244,
+          "used_cost_micros": 52548,
+          "pending_model_calls": 0,
+          "reserved_tokens": 0,
+          "reserved_cost_micros": 0
+        }
+      ],
+      "attempts": [
+        {
+          "id": "rtm_383bc8be4cf7d143058d5b94",
+          "attempt_number": 1,
+          "state": "succeeded",
+          "cleanup_state": "completed"
+        },
+        {
+          "id": "rtm_4b23c3d6b29b8a7932e12756",
+          "attempt_number": 2,
+          "state": "succeeded",
+          "cleanup_state": "completed"
+        }
+      ],
+      "prs": [
+        {
+          "number": 5,
+          "url": "https://github.com/jmlero/marina-acceptance/pull/5",
+          "head": "117a3ccc764e3d593a5d0210df035cb17fd85ae3",
+          "branch": "marina/exec_cf9ea81a5f618c31a00f2658",
+          "state": "open",
+          "merged": false
+        }
+      ]
+    },
+    {
+      "label": "run14-changed-head",
+      "task": "tsk_f99f4085d40509eaf9b6",
+      "status": "blocked",
+      "budget": {
+        "time_minutes": 10,
+        "max_attempts": 2,
+        "max_tokens": 200000,
+        "max_cost_minor": 10,
+        "currency": "USD",
+        "max_concurrency": 1,
+        "authority": [
+          "source.read",
+          "source.write",
+          "pull_request.create"
+        ]
+      },
+      "runs": [
+        {
+          "id": "run_2e4d4f9ad26f2bb10bca",
+          "status": "blocked",
+          "started_at": 1789987982528,
+          "finished_at": 1789988038704
+        }
+      ],
+      "executions": [
+        {
+          "id": "exec_1b029e47f9b2c341a84f77c7",
+          "state": "blocked",
+          "attempt": 1,
+          "used_tokens": 122940,
+          "used_cost_micros": 57338,
+          "pending_model_calls": 0,
+          "reserved_tokens": 0,
+          "reserved_cost_micros": 0
+        }
+      ],
+      "attempts": [
+        {
+          "id": "rtm_28fa33eaaf9efdea802e4a6a",
+          "attempt_number": 1,
+          "state": "failed",
+          "cleanup_state": "completed"
+        }
+      ],
+      "prs": []
+    },
+    {
+      "label": "run14-head-retest",
+      "task": "tsk_5c6c8be10a74f8ec66eb",
+      "status": "blocked",
+      "budget": {
+        "time_minutes": 10,
+        "max_attempts": 2,
+        "max_tokens": 400000,
+        "max_cost_minor": 20,
+        "currency": "USD",
+        "max_concurrency": 1,
+        "authority": [
+          "source.read",
+          "source.write",
+          "pull_request.create"
+        ]
+      },
+      "runs": [
+        {
+          "id": "run_37a406047c6d52aa6c18",
+          "status": "blocked",
+          "started_at": 1789990328638,
+          "finished_at": 1789990435811
+        }
+      ],
+      "executions": [
+        {
+          "id": "exec_538effe76f7f2638f5a6aa52",
+          "state": "blocked",
+          "attempt": 2,
+          "used_tokens": 114509,
+          "used_cost_micros": 53370,
+          "pending_model_calls": 0,
+          "reserved_tokens": 0,
+          "reserved_cost_micros": 0
+        }
+      ],
+      "attempts": [
+        {
+          "id": "rtm_ba92cd87961ad26cf2bee488",
+          "attempt_number": 1,
+          "state": "succeeded",
+          "cleanup_state": "completed"
+        },
+        {
+          "id": "rtm_f13250b2f2a514dc5a41a770",
+          "attempt_number": 2,
+          "state": "succeeded",
+          "cleanup_state": "completed"
+        }
+      ],
+      "prs": [
+        {
+          "number": 4,
+          "url": "https://github.com/jmlero/marina-acceptance/pull/4",
+          "head": "7b0b163de6a12849fed0fb011329eb4a5b6bcd24",
+          "branch": "marina/exec_538effe76f7f2638f5a6aa52",
+          "state": "open",
+          "merged": false
+        }
+      ]
+    },
+    {
+      "label": "run16-cost-cap",
+      "task": "tsk_3a6caedb2fbe14fce68f",
+      "status": "blocked",
+      "budget": {
+        "time_minutes": 10,
+        "max_attempts": 2,
+        "max_tokens": 200000,
+        "max_cost_minor": 1,
+        "currency": "USD",
+        "max_concurrency": 1,
+        "authority": [
+          "source.read",
+          "source.write",
+          "pull_request.create"
+        ]
+      },
+      "runs": [
+        {
+          "id": "run_e094bf83564b9fa40b7c",
+          "status": "blocked",
+          "started_at": 1789990215133,
+          "finished_at": 1789990238174
+        }
+      ],
+      "executions": [
+        {
+          "id": "exec_b6a96aa61d078dc025460771",
+          "state": "blocked",
+          "attempt": 1,
+          "used_tokens": 0,
+          "used_cost_micros": 0,
+          "pending_model_calls": 0,
+          "reserved_tokens": 0,
+          "reserved_cost_micros": 0
+        }
+      ],
+      "attempts": [
+        {
+          "id": "rtm_c8f67ecd0fe2c0442944b6e2",
+          "attempt_number": 1,
+          "state": "failed",
+          "cleanup_state": "completed"
+        }
+      ],
+      "prs": []
+    },
+    {
+      "label": "run16-token-cap",
+      "task": "tsk_d37a14a358bc8b5a02a8",
+      "status": "blocked",
+      "budget": {
+        "time_minutes": 10,
+        "max_attempts": 2,
+        "max_tokens": 1,
+        "max_cost_minor": 1,
+        "currency": "USD",
+        "max_concurrency": 1,
+        "authority": [
+          "source.read",
+          "source.write",
+          "pull_request.create"
+        ]
+      },
+      "runs": [
+        {
+          "id": "run_db2cce28bbc1c4a10c4f",
+          "status": "blocked",
+          "started_at": 1789987180907,
+          "finished_at": 1789987203846
+        }
+      ],
+      "executions": [
+        {
+          "id": "exec_f12ff795321e8e791bc86d2d",
+          "state": "blocked",
+          "attempt": 1,
+          "used_tokens": 0,
+          "used_cost_micros": 0,
+          "pending_model_calls": 0,
+          "reserved_tokens": 0,
+          "reserved_cost_micros": 0
+        }
+      ],
+      "attempts": [
+        {
+          "id": "rtm_4daf61f8934d07e6e82698ac",
+          "attempt_number": 1,
+          "state": "failed",
+          "cleanup_state": "completed"
+        }
+      ],
+      "prs": []
+    },
+    {
+      "label": "run16-token-final",
+      "task": "tsk_3eed97b559994c1fca85",
+      "status": "blocked",
+      "budget": {
+        "time_minutes": 10,
+        "max_attempts": 2,
+        "max_tokens": 1,
+        "max_cost_minor": 10,
+        "currency": "USD",
+        "max_concurrency": 1,
+        "authority": [
+          "source.read",
+          "source.write",
+          "pull_request.create"
+        ]
+      },
+      "runs": [
+        {
+          "id": "run_bd5b53dd028bcb92d727",
+          "status": "blocked",
+          "started_at": 1789990274004,
+          "finished_at": 1789990297306
+        }
+      ],
+      "executions": [
+        {
+          "id": "exec_effdc04974b7766394237364",
+          "state": "blocked",
+          "attempt": 1,
+          "used_tokens": 0,
+          "used_cost_micros": 0,
+          "pending_model_calls": 0,
+          "reserved_tokens": 0,
+          "reserved_cost_micros": 0
+        }
+      ],
+      "attempts": [
+        {
+          "id": "rtm_d56c4d65f5dfa57ebb86b1f9",
+          "attempt_number": 1,
+          "state": "failed",
+          "cleanup_state": "completed"
+        }
+      ],
+      "prs": []
+    },
+    {
+      "label": "run16-token-retest",
+      "task": "tsk_331c9b04bf4003f61b57",
+      "status": "blocked",
+      "budget": {
+        "time_minutes": 10,
+        "max_attempts": 2,
+        "max_tokens": 1,
+        "max_cost_minor": 10,
+        "currency": "USD",
+        "max_concurrency": 1,
+        "authority": [
+          "source.read",
+          "source.write",
+          "pull_request.create"
+        ]
+      },
+      "runs": [
+        {
+          "id": "run_433624c78f3aea13f3a8",
+          "status": "blocked",
+          "started_at": 1789987882506,
+          "finished_at": 1789987905314
+        }
+      ],
+      "executions": [
+        {
+          "id": "exec_c01262136795f5108c4f4b70",
+          "state": "blocked",
+          "attempt": 1,
+          "used_tokens": 0,
+          "used_cost_micros": 0,
+          "pending_model_calls": 0,
+          "reserved_tokens": 0,
+          "reserved_cost_micros": 0
+        }
+      ],
+      "attempts": [
+        {
+          "id": "rtm_32f1d7f884a468f9864d3439",
+          "attempt_number": 1,
+          "state": "failed",
+          "cleanup_state": "completed"
+        }
+      ],
+      "prs": []
+    }
+  ],
+  "final_installation": {
+    "captured_at": "2026-09-21T11:59:04Z",
+    "context": "kind-marina-local",
+    "intake_enabled": false,
+    "unrelated_ready_task_untouched": true,
+    "deployments": [
+      {
+        "name": "deck",
+        "image": "localhost/the-platform/deck@sha256:6cb39428216759f32c7e911dd07c0bb3cb7f5dea43883a4dee2c7c07c199d190",
+        "ready_replicas": 1
+      },
+      {
+        "name": "marina",
+        "image": "localhost/the-platform/marina@sha256:999b8b99017d0fabb37bcd23f56c51137aa1dd9794c71ae395fbe2d07337c40a",
+        "ready_replicas": 1
+      }
+    ],
+    "pvcs": [
+      {
+        "name": "appdeck-data",
+        "uid": "f0748990-48d1-4f05-82fe-a36c843494e4",
+        "volume": "pvc-f0748990-48d1-4f05-82fe-a36c843494e4",
+        "phase": "Bound"
+      },
+      {
+        "name": "marina-data",
+        "uid": "88ea8759-3a36-4438-8cf7-44b0da7531de",
+        "volume": "pvc-88ea8759-3a36-4438-8cf7-44b0da7531de",
+        "phase": "Bound"
+      }
+    ],
+    "worker_jobs": [],
+    "worker_pods": [],
+    "worker_secrets": [],
+    "workflow_sha256": "8599efbc1fa00f674d85050cea77eb4a10294786dd9ec112e24b4237416615e8",
+    "worker_image": "localhost/the-platform/marina-worker@sha256:1f7217c2a81066b297a198daee855a3aabeee3469ed8726d8fac4765fc62b12b",
+    "required_ci": [
+      "acceptance-regression"
+    ],
+    "max_tokens": 200000
+  },
+  "images": {
+    "source_commit": "5d39684",
+    "images": {
+      "deck": "localhost/the-platform/deck@sha256:6cb39428216759f32c7e911dd07c0bb3cb7f5dea43883a4dee2c7c07c199d190",
+      "marina": "localhost/the-platform/marina@sha256:999b8b99017d0fabb37bcd23f56c51137aa1dd9794c71ae395fbe2d07337c40a",
+      "marina-worker": "localhost/the-platform/marina-worker@sha256:1f7217c2a81066b297a198daee855a3aabeee3469ed8726d8fac4765fc62b12b"
+    }
+  },
+  "outages": [
+    {
+      "task": "tsk_0ba33bd70ae6c0cdb67c",
+      "provider": "deck",
+      "started_at": "2026-09-21T11:53:37.973936+00:00",
+      "restored_at": "2026-09-21T11:54:26.435750+00:00",
+      "duration_seconds": 48.462,
+      "exact_policy_restored": true,
+      "existing_sockets_closed": 1,
+      "accepted_outage_proof": true
+    },
+    {
+      "task": "tsk_8416e809c431913abc61",
+      "provider": "model",
+      "started_at": "2026-09-21T11:45:42.233073+00:00",
+      "restored_at": "2026-09-21T11:46:27.999521+00:00",
+      "duration_seconds": 45.766,
+      "exact_policy_restored": true,
+      "existing_sockets_closed": 0,
+      "accepted_outage_proof": false
+    },
+    {
+      "task": "tsk_a255b99fc83a89548bae",
+      "provider": "git",
+      "started_at": "2026-09-21T11:50:44.277774+00:00",
+      "restored_at": "2026-09-21T11:52:18.243965+00:00",
+      "duration_seconds": 93.966,
+      "exact_policy_restored": true,
+      "existing_sockets_closed": 1,
+      "accepted_outage_proof": true
+    },
+    {
+      "task": "tsk_c9654f5ada0032254c8d",
+      "provider": "model",
+      "started_at": "2026-09-21T11:47:51.648436+00:00",
+      "restored_at": "2026-09-21T11:48:39.923836+00:00",
+      "duration_seconds": 48.275,
+      "exact_policy_restored": true,
+      "existing_sockets_closed": 1,
+      "accepted_outage_proof": true
+    }
+  ],
+  "attempt_limit_validation": {
+    "live_ready_admission_http_status": 422,
+    "reason": "needs at least two attempts for implementation and verification",
+    "task_created": false,
+    "journal_regression": "marina/internal/journal/sqlite/runtime_records_test.go: TestRuntimeAttemptLimitSurvivesRestartAndAllowsIdempotentReplay",
+    "journal_regression_passed": true,
+    "live_two_attempt_failure_task": "tsk_68cf14e0cc4ff50974e8"
+  }
+}

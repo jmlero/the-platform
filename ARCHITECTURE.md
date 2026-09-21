@@ -57,6 +57,18 @@ HTTP with separate persistence, restarting Marina's journal between boundaries.
 Git/runtime doubles make this a deterministic protocol and recovery proof; it is
 not evidence of a completed external model, Git or Kubernetes acceptance run.
 
+## Accepted agent-platform extension
+
+[Decision 0015](docs/decisions/0015-marina-agent-platform.md) adds a bounded,
+unimplemented PoC/MVP after the repository release: the existing Marina service
+will share execution controls between the coding workflow and one read-only
+analysis workload using another harness. Repository materialization, Git/PR/CI
+steps and source-revision checks remain workflow-specific; both workloads retain
+explicit authority and admissible evidence. Deck keeps the authoritative task
+ledger, and profile selection/invocation uses the supported public contract.
+AGENT-01 through AGENT-13 in [TODO.md](TODO.md) track delivery without requiring
+a third component or changing the current single-operator deployment topology.
+
 ## Earlier foundation snapshot
 
 The following table records the earlier control-only gate. Its gaps motivated
@@ -80,7 +92,7 @@ enable the narrower repository workflow described above.
 
 The following invariants and component/lifecycle designs include future targets.
 The current workflow above defines implemented behavior. In particular, descriptions
-of retry, pause/resume, context assembly, semantic review, delivery and production
+of retry, pause/resume, automatic context discovery, semantic review, delivery and production
 feedback do not establish those capabilities in the one-pass repository workflow.
 
 ## Non-negotiable invariants
@@ -130,8 +142,8 @@ The first implementation remains a modular pair of services. Internal controller
 | --- | --- | --- |
 | Project name and human-facing description | Deck | Marina project binding references the provider project ID |
 | Repository, default branch, runtime, policy, and adapter configuration | Marina project binding | Deck displays safe summaries and active policy version |
-| Project knowledge, custom instructions, and selected context-source registrations (accepted direction; pending implementation) | Deck | Marina consumes explicit revisions; Git remains authoritative for repository-owned content |
-| Assembled task-context package (foundation exists; workflow integration pending) | Marina | Deck exposes source provenance and the immutable manifest reference |
+| Project knowledge, custom instructions, and selected context-source registrations | Deck | Marina consumes explicit revisions; Git remains authoritative for repository-owned content |
+| Assembled task-context package | Marina | Deck exposes a derived immutable snapshot with source provenance |
 | Task outcome, constraints, acceptance criteria, priority, and authorized budget | Deck | Marina snapshots the claimed revision |
 | Task readiness and operator-visible status | Deck | Marina reads and reconciles it |
 | External run ID, task assignment, lease, and fence token | Deck | Marina persists an exact binding |
@@ -439,15 +451,20 @@ An external managed runtime implements the same lifecycle semantics without pret
 the accepted project-context direction: one GitHub repository per project and
 persistent custom instructions, goals, selected documents, and approved decision
 references managed through Deck. Reuse the existing Deck project ID and Marina
-project binding. Repository configuration remains Marina-owned; Deck's future
-setup surface uses a supported public contract. Git-owned instructions and
+project binding. Repository configuration remains Marina-owned; Deck submits
+version-checked association requests and displays Marina's safe confirmation. Git-owned instructions and
 documents retain Git as their source of truth. Marina assembles the selected
-project knowledge and bounded conversation excerpts for each task. Knowledge
-management and workflow integration remain pending under CTX-02 through CTX-08.
+project knowledge and bounded conversation excerpts for each task. The active
+workflow persists the package before planning and supplies it to both workers.
+Deck freezes source and repository selections on Ready and on the run's claim;
+later edits apply only to newly authorized work. The Sources tab displays the
+saved outcome, exact inputs, provenance, trust, and omissions. Explicit revocation
+is checked at workflow and worker-gateway boundaries. See the
+[CTX validation](docs/validation/ctx-02-08-2026-09-21.md) for evidence and limits.
 
 A context package is immutable and content-addressed. Its manifest records:
 
-- task snapshot and plan revision;
+- task snapshot; the subsequent plan references this package digest;
 - repository URL, commit, and relevant paths;
 - architecture decisions and repository instructions;
 - exact revisions of project instructions, selected documents, and conversation excerpts;
@@ -600,7 +617,7 @@ Marina starts, inspects, cancels, and cleans an isolated Job at a pinned revisio
 A frozen task and repository revision, versioned plan/decision, one implementation,
 separate deterministic verification, PR/CI observation and structured evidence
 complete while the operator is offline, or report a blocker. Installation-specific
-acceptance is still required. Automatic CI/review revisions, full context assembly,
+acceptance is still required. Automatic CI/review revisions, automatic context discovery,
 independent semantic review, and merge authority are later gates, not release claims.
 
 ### Gate E: bounded delivery and feedback

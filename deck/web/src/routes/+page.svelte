@@ -30,6 +30,7 @@
   import CreateTaskModal from '$lib/components/CreateTaskModal.svelte';
   import DecisionInbox from '$lib/components/DecisionInbox.svelte';
   import ChannelsView from '$lib/components/ChannelsView.svelte';
+  import ProjectContext from '$lib/components/ProjectContext.svelte';
   import TaskCard from '$lib/components/TaskCard.svelte';
   import TaskDrawer from '$lib/components/TaskDrawer.svelte';
   import WorkOverview from '$lib/components/WorkOverview.svelte';
@@ -50,7 +51,7 @@
     ProviderStatus
   } from '$lib/types';
 
-  type View = 'overview' | 'factory' | 'backlog' | 'decisions' | 'channels';
+  type View = 'overview' | 'factory' | 'backlog' | 'decisions' | 'channels' | 'context';
 
   const boardColumns: Array<{
     status: TaskStatus;
@@ -391,6 +392,9 @@
         <span>Channels</span>
         {#if channels.length}<em>{channels.length}</em>{/if}
       </button>
+      <button class:active={activeView === 'context'} aria-current={activeView === 'context' ? 'page' : undefined} type="button" on:click={() => selectView('context')}>
+        <Layers3 size={17} /><span>Project context</span>
+      </button>
     </nav>
 
     <div class="sidebar-bottom">
@@ -446,9 +450,9 @@
 
     <section class="workspace" aria-label="Workspace content">
       <PageHeading
-        eyebrow={activeView === 'overview' ? 'Your workspace' : activeView === 'factory' ? 'Execution' : activeView === 'backlog' ? 'Plan ahead' : activeView === 'channels' ? 'Collaborate' : 'Human attention'}
-        title={activeView === 'overview' ? 'Work overview' : activeView === 'factory' ? 'Task board' : activeView === 'backlog' ? 'Backlog' : activeView === 'channels' ? 'Channels' : 'Decision inbox'}
-        description={activeView === 'overview' ? 'A clear view of what needs you, what’s moving, and what’s ready to review.' : activeView === 'factory' ? 'Follow every task from authorization to a verified result.' : activeView === 'backlog' ? 'Define the outcome and its boundaries before work begins.' : activeView === 'channels' ? 'Discuss the work, share context, and turn an idea into a task.' : 'Review the context and choose how work should proceed.'}
+        eyebrow={activeView === 'context' ? 'Project knowledge' : activeView === 'overview' ? 'Your workspace' : activeView === 'factory' ? 'Execution' : activeView === 'backlog' ? 'Plan ahead' : activeView === 'channels' ? 'Collaborate' : 'Human attention'}
+        title={activeView === 'context' ? 'Project context' : activeView === 'overview' ? 'Work overview' : activeView === 'factory' ? 'Task board' : activeView === 'backlog' ? 'Backlog' : activeView === 'channels' ? 'Channels' : 'Decision inbox'}
+        description={activeView === 'context' ? 'Connect project sources once and reuse their exact revisions across tasks.' : activeView === 'overview' ? 'A clear view of what needs you, what’s moving, and what’s ready to review.' : activeView === 'factory' ? 'Follow every task from authorization to a verified result.' : activeView === 'backlog' ? 'Define the outcome and its boundaries before work begins.' : activeView === 'channels' ? 'Discuss the work, share context, and turn an idea into a task.' : 'Review the context and choose how work should proceed.'}
       />
 
       {#if activeView === 'overview'}
@@ -566,6 +570,8 @@
             </ul>
           </aside>
         </div>
+      {:else if activeView === 'context'}
+        <ProjectContext />
       {:else if activeView === 'channels'}
         <ChannelsView {channels} refreshVersion={channelRefreshVersion} onpromoted={handlePromotedTask} />
       {:else}

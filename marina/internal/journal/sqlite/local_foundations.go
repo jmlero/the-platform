@@ -54,10 +54,20 @@ func (store *Store) GetContextPackage(ctx context.Context, digest string) (conte
 	if err := json.Unmarshal([]byte(encoded), &manifest); err != nil {
 		return contextpack.Package{}, fmt.Errorf("decode context package: %w", err)
 	}
-	if err := manifest.ValidateAt(store.now()); err != nil {
+	if err := manifest.Validate(); err != nil {
 		return contextpack.Package{}, fmt.Errorf("verify context package: %w", err)
 	}
 	return manifest, nil
+}
+
+// The active one-plan workflow freezes context before submitting its plan.
+// Recover this exact package if it was stored before the flow checkpoint.
+func (store *Store) ExecutionContextPackage(ctx context.Context, executionID string) (contextpack.Package, error) {
+	var digest string
+	if err := store.db.QueryRowContext(ctx, "SELECT digest FROM context_packages WHERE execution_id = ? AND plan_revision_id = '' ORDER BY created_at, digest LIMIT 1", executionID).Scan(&digest); err != nil {
+		return contextpack.Package{}, wrapNotFound(err)
+	}
+	return store.GetContextPackage(ctx, digest)
 }
 
 func (store *Store) RecordPolicySnapshot(ctx context.Context, snapshot policy.Policy) (policy.Policy, bool, error) {

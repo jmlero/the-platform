@@ -285,10 +285,25 @@ func runServe(arguments []string, stderr io.Writer) int {
 		bindingInput.DeliveryConfig = workflowConfig.Git.APIURL
 		bindingInput.BudgetMinutes = workflowConfig.BudgetMinutes
 	}
-	binding, err := journal.EnsureProjectBinding(startupCtx, bindingInput)
+	var binding execution.ProjectBinding
+	if *configPath != "" {
+		binding, err = flow.InitializeRepository(startupCtx, journal, workflowConfig, bindingInput)
+	} else {
+		binding, err = journal.EnsureProjectBinding(startupCtx, bindingInput)
+	}
 	if err != nil {
 		logger.Error("persist project binding", "error", err)
 		return 1
+	}
+	// Tasks authorized before Deck first confirmed a repository retain the
+	// installation's original binding across later association changes.
+	if *configPath != "" {
+		baseline, baselineErr := journal.FirstRepositoryVersion(startupCtx, binding.ProjectID)
+		if baselineErr != nil {
+			logger.Error("load original repository binding", "error", baselineErr)
+			return 1
+		}
+		binding.Version = baseline
 	}
 	controllerEnabled := compatibilityErr == nil
 	registration := workcontrol.AgentRegistration{ID: identity.LogicalAgentID,
@@ -344,6 +359,11 @@ func runServe(arguments []string, stderr io.Writer) int {
 		controlController.WithExecutionLimits(2, workflowConfig.MaxTokens).WithCommandHandler(workflow.Command)
 	}
 	if controllerEnabled {
+		if workflow != nil {
+			if err := workflow.ReconcileRepository(startupCtx); err != nil {
+				logger.Warn("repository association deferred", "error", err)
+			}
+		}
 		startupControl := controlController.Cycle(startupCtx)
 		logControlCycle(logger, startupControl, "startup")
 		startupCycle := leaseManager.Cycle(startupCtx)
@@ -392,6 +412,14 @@ func runServe(arguments []string, stderr io.Writer) int {
 					}
 					controllerEnabled = true
 					logger.Info("milestone-one controllers enabled after provider recovery")
+				}
+				if workflow != nil {
+					op, cancel := context.WithTimeout(ctx, 30*time.Second)
+					err := workflow.ReconcileRepository(op)
+					cancel()
+					if err != nil {
+						logger.Warn("repository association deferred", "error", err)
+					}
 				}
 				logControlCycle(logger, controlController.Cycle(ctx), "scheduled")
 				logLeaseCycle(logger, leaseManager.Cycle(ctx), "scheduled")

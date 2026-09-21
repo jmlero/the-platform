@@ -37,6 +37,7 @@ export interface Budget {
 }
 
 export interface Task {
+  context?: TaskContext;
   id: string;
   project_id: string;
   title: string;
@@ -54,6 +55,7 @@ export interface Task {
 }
 
 export interface CreateTaskInput {
+  context_message_ids?: string[];
   title: string;
   description: string;
   acceptance_criteria: string;
@@ -64,6 +66,7 @@ export interface CreateTaskInput {
 }
 
 export interface UpdateTaskInput {
+  context_message_ids?: string[];
   title?: string;
   description?: string;
   acceptance_criteria?: string;
@@ -291,3 +294,26 @@ export interface Bootstrap {
   provider_status: ProviderStatus;
   now: number;
 }
+
+export interface ContextReference { id: string; revision: number; digest: string }
+export interface TaskContext {
+ repository?: RepositoryBinding; sources: ContextReference[]; messages: ContextReference[]; authorized_at: number }
+export interface ContextSourceInput {
+  id: string; expected_revision: number; kind: 'instruction' | 'goal' | 'document' | 'git' | 'decision';
+  title: string; content?: string; reference?: string; source_revision?: string; path?: string;
+  trust: 'data' | 'guidance'; state: 'active' | 'inactive'; expires_at?: number; conflicts_with?: string[];
+}
+export interface ContextSource extends ContextSourceInput {
+  project_id: string; revision: number; digest: string; created_at: number; revoked_at?: number; superseded: boolean;
+}
+export interface ContextMessage { id: string; channel_id: string; author_type: string; author_id: string; content: string; digest: string; trust: 'data'; created_at: number }
+export interface ResolvedContext { assembly?: {context?: ContextManifest; interpreted_outcome?: {Title?: string; Description?: string; AcceptanceCriteria?: string}}; selection: TaskContext | null; sources: ContextSource[]; messages: ContextMessage[] }
+export interface ContextManifest {
+  digest: string; source_revision: string; policy_version: string; created_at: string;
+  inputs: Array<{kind: string; content?: string; title?: string; uri: string; owner?: string; revision?: string; digest: string; trust: string}>;
+  omissions?: Array<{uri: string; title: string; digest: string; reason: string}>;
+}
+
+export interface RepositoryBinding { version: number; repository: string; clone_url: string; base_branch: string; }
+export interface RepositoryRequestInput { expected_revision: number; expected_binding_version: number; repository: string; base_branch: string; }
+export interface RepositoryRequest extends RepositoryRequestInput { revision: number; status: '' | 'pending' | 'connected' | 'rejected'; reason?: string; binding?: RepositoryBinding; }

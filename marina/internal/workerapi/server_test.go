@@ -61,7 +61,8 @@ func TestWorkerCredentialCannotOutliveProviderFence(t *testing.T) {
 	}
 	key := []byte(strings.Repeat("s", 32))
 	p := &provider{run: workcontrol.Run{ID: "run", WorkItemID: "task", AgentID: "agent", TaskVersion: 1, Version: 1, FenceToken: 1, Status: workcontrol.RunRunning, LeaseExpiresAt: &lease}}
-	server := New(Config{PublicURL: "https://marina.example", SigningKey: key}, journal, store, p, nil)
+	var contextErr error
+	server := New(Config{ContextCheck: func(context.Context, execution.Execution) error { return contextErr }, PublicURL: "https://marina.example", SigningKey: key}, journal, store, p, nil)
 	request := func() int {
 		r := httptest.NewRequest(http.MethodGet, "/workers/"+attempt.ID+"/input", nil)
 		r.Header.Set("Authorization", "Bearer "+kubernetes.Token(key, attempt.Specification))
@@ -80,6 +81,15 @@ func TestWorkerCredentialCannotOutliveProviderFence(t *testing.T) {
 	if status := request(); status != 200 {
 		t.Fatalf("worker did not recover after provider restoration: %d", status)
 	}
+	contextErr = workcontrol.ErrContextUnavailable
+	if status := request(); status != 503 {
+		t.Fatalf("context outage returned %d", status)
+	}
+	contextErr = errors.New("selected source revoked")
+	if status := request(); status != 403 {
+		t.Fatalf("revoked context returned %d", status)
+	}
+	contextErr = nil
 	p.run.FenceToken = 2
 	if status := request(); status != 403 {
 		t.Fatalf("revoked worker returned %d", status)

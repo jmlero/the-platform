@@ -1,0 +1,30 @@
+{
+  "selection": {
+    "sources": [
+      {
+        "id": "public-api",
+        "revision": 1,
+        "digest": "sha256:de6fddbe6dbdf3f2d83a776d8d3e94c8107da471a9720a04129c082389f8779d"
+      }
+    ],
+    "messages": [],
+    "authorized_at": 1789984800001
+  },
+  "sources": [
+    {
+      "id": "public-api",
+      "expected_revision": 0,
+      "kind": "instruction",
+      "title": "Public API",
+      "content": "Preserve the public API.",
+      "trust": "guidance",
+      "state": "active",
+      "project_id": "prj_default",
+      "revision": 1,
+      "digest": "sha256:de6fddbe6dbdf3f2d83a776d8d3e94c8107da471a9720a04129c082389f8779d",
+      "created_at": 1789984800000,
+      "superseded": false
+    }
+  ],
+  "messages": []
+}

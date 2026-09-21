@@ -105,6 +105,7 @@ checks are `make test check` from `deck`. The build refreshes the tracked fronte
 embedded in the Go binary.
 
 In a browser, review overview, board, backlog, decisions, channels, task creation,
-and task details. Check at desktop and narrow phone widths, then verify Tab,
+and task details. Desktop browsers are the acceptance target (operator decision, 2026-09-21).
+Existing narrow layouts may remain, but phone support is not required. Verify Tab,
 Escape, focus restoration, scrolling, and a task-creation cycle in an isolated
 preview database. The design does not change the Deck–Marina API contract.

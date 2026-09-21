@@ -16,3 +16,13 @@ Claims and every run mutation use the version-1 `Idempotency-Key` convention. De
 The Milestone 1 real-process suite proves claim replay and recovery lookup, assigned-run discovery, task-snapshot binding, guarded projections, producer-event deduplication, durable cancellation and acknowledgement, budget stopping, lease reaping, stale-fence rejection, and Marina journal restart against a real Deck binary.
 
 Do not create a second copy of the OpenAPI document or fixture corpus under this directory. This file is a stable map to the authoritative producer and consumer locations.
+
+The context extension adds immutable source/message references to Task, freezes
+selection per Run, and exposes exact-version resolution via `context.read`.
+Repository association uses operator intent plus Marina's safe versioned
+confirmation (`repository.read` / `repository.write`). Credential references stay
+in Marina. Identical source/request revision retries replay; stale concurrent
+edits and confirmations conflict. Canonical `context.json` and `repository.json`
+fixtures cover these additive v1 shapes. Real-process conformance demonstrates
+approved decision reuse, revision isolation, revocation, and repository changes
+while original authorized work retains its binding.

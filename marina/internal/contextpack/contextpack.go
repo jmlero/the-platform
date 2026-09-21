@@ -36,6 +36,10 @@ const (
 )
 
 type Input struct {
+	Title      string     `json:"title,omitempty"`
+	Content    string     `json:"content,omitempty"`
+	Owner      string     `json:"owner,omitempty"`
+	Revision   string     `json:"revision,omitempty"`
 	Kind       Kind       `json:"kind"`
 	URI        string     `json:"uri"`
 	Digest     string     `json:"digest"`
@@ -47,6 +51,7 @@ type Input struct {
 }
 
 type BuildInput struct {
+	Omissions      []Omission        `json:"omissions,omitempty"`
 	ProjectID      string            `json:"project_id"`
 	ExecutionID    string            `json:"execution_id"`
 	PlanRevisionID string            `json:"plan_revision_id"`
@@ -58,6 +63,7 @@ type BuildInput struct {
 }
 
 type Package struct {
+	Omissions      []Omission        `json:"omissions,omitempty"`
 	SchemaVersion  string            `json:"schema_version"`
 	ProjectID      string            `json:"project_id"`
 	ExecutionID    string            `json:"execution_id"`
@@ -69,6 +75,13 @@ type Package struct {
 	Inputs         []Input           `json:"inputs"`
 	CreatedAt      time.Time         `json:"created_at"`
 	Digest         string            `json:"digest"`
+}
+
+type Omission struct {
+	URI    string `json:"uri"`
+	Title  string `json:"title"`
+	Digest string `json:"digest"`
+	Reason string `json:"reason"`
 }
 
 type HarnessView struct {
@@ -84,7 +97,7 @@ func Build(now time.Time, input BuildInput) (Package, error) {
 	input.PolicyVersion = strings.TrimSpace(input.PolicyVersion)
 	input.SourceRevision = strings.TrimSpace(input.SourceRevision)
 	input.HarnessVersion = strings.TrimSpace(input.HarnessVersion)
-	if input.ProjectID == "" || input.ExecutionID == "" || input.PlanRevisionID == "" ||
+	if input.ProjectID == "" || input.ExecutionID == "" ||
 		input.PolicyVersion == "" || !fullRevision(input.SourceRevision) || input.HarnessVersion == "" || now.IsZero() {
 		return Package{}, fmt.Errorf("context identity and versions are required: %w", ErrInvalidInput)
 	}
@@ -98,8 +111,8 @@ func Build(now time.Time, input BuildInput) (Package, error) {
 	}
 	inputs := slices.Clone(input.Inputs)
 	required := map[Kind]bool{
-		KindTaskSnapshot: false, KindRepositoryInstructions: false, KindArchitectureDecision: false,
-		KindPolicy: false, KindSourceRevision: false, KindTool: false,
+		KindTaskSnapshot: false,
+		KindPolicy:       false, KindSourceRevision: false, KindTool: false,
 	}
 	for index := range inputs {
 		item := &inputs[index]
@@ -120,6 +133,12 @@ func Build(now time.Time, input BuildInput) (Package, error) {
 		if item.Kind == KindExternal && item.Trust != TrustUntrusted {
 			return Package{}, fmt.Errorf("external context must remain untrusted data: %w", ErrInvalidInput)
 		}
+		if item.Content != "" {
+			digest := sha256.Sum256([]byte(item.Content))
+			if item.Digest != "sha256:"+hex.EncodeToString(digest[:]) {
+				return Package{}, fmt.Errorf("context content digest mismatch: %w", ErrInvalidInput)
+			}
+		}
 		if _, ok := required[item.Kind]; ok {
 			required[item.Kind] = true
 		}
@@ -134,6 +153,7 @@ func Build(now time.Time, input BuildInput) (Package, error) {
 			string(right.Kind)+"\x00"+right.URI+"\x00"+right.Digest)
 	})
 	manifest := Package{
+		Omissions:     slices.Clone(input.Omissions),
 		SchemaVersion: SchemaVersion, ProjectID: input.ProjectID, ExecutionID: input.ExecutionID,
 		PlanRevisionID: input.PlanRevisionID, PolicyVersion: input.PolicyVersion,
 		SourceRevision: input.SourceRevision, HarnessVersion: input.HarnessVersion,

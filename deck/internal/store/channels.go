@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/jmlero/the-platform/deck/internal/domain"
@@ -265,18 +266,26 @@ func (s *Store) PromoteChannelMessage(ctx context.Context, messageID string, inp
 		return domain.Task{}, fmt.Errorf("begin message promotion: %w", err)
 	}
 	defer tx.Rollback()
+	ids := validated.ContextMessageIDs
+	if !slices.Contains(ids, message.ID) {
+		ids = append(ids, message.ID)
+	}
+	task.Context, err = selectTaskContext(ctx, tx, task.ProjectID, ids, task.Status == domain.TaskReady)
+	if err != nil {
+		return domain.Task{}, err
+	}
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO tasks (
 			id, project_id, title, description, acceptance_criteria, status,
 			priority, budget_minutes, deadline_at, max_attempts, max_tokens,
 			max_cost_minor, currency, max_concurrency, authority_json,
-			version, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			version, created_at, updated_at, context_json
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, task.ID, task.ProjectID, task.Title, task.Description, task.AcceptanceCriteria,
 		task.Status, task.Priority, task.BudgetMinutes, nullableInt64(task.Budget.DeadlineAt),
 		task.Budget.MaxAttempts, task.Budget.MaxTokens, task.Budget.MaxCostMinor,
 		task.Budget.Currency, task.Budget.MaxConcurrency, marshalJSON(task.Budget.Authority),
-		task.Version, task.CreatedAt, task.UpdatedAt); err != nil {
+		task.Version, task.CreatedAt, task.UpdatedAt, marshalJSON(task.Context)); err != nil {
 		return domain.Task{}, fmt.Errorf("create promoted task: %w", err)
 	}
 	result, err := tx.ExecContext(ctx, `

@@ -49,6 +49,7 @@ cat >"${service_auth_file}" <<EOF
         "agent.register",
         "command.ack",
         "command.list",
+        "context.read", "repository.read", "repository.write",
         "decision.answer",
         "decision.inspect",
         "decision.list",

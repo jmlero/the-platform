@@ -97,7 +97,8 @@ func TestAdvertisedCapabilitiesMatchOpenAPIOperations(t *testing.T) {
 		}
 		capability := strings.TrimSpace(strings.TrimPrefix(line, "x-capability:"))
 		if _, exists := seen[capability]; exists {
-			t.Fatalf("OpenAPI capability %q is assigned more than once", capability)
+			// One capability can cover multiple project-scoped read routes.
+			continue
 		}
 		seen[capability] = struct{}{}
 		capabilities = append(capabilities, capability)

@@ -10,6 +10,9 @@ const (
 	capabilityDecisionList    = "decision.list"
 	capabilityCommandAck      = "command.ack"
 	capabilityCommandList     = "command.list"
+	capabilityRepositoryRead  = "repository.read"
+	capabilityRepositoryWrite = "repository.write"
+	capabilityContextRead     = "context.read"
 	capabilityEventList       = "event.list"
 	capabilityEventStream     = "event.stream"
 	capabilityEventAppend     = "event.append"
@@ -52,6 +55,7 @@ var protocolCapabilities = []string{
 	capabilityChannelRead,
 	capabilityCommandAck,
 	capabilityCommandList,
+	capabilityContextRead,
 	capabilityDecisionAnswer,
 	capabilityDecisionInspect,
 	capabilityDecisionList,
@@ -61,6 +65,8 @@ var protocolCapabilities = []string{
 	capabilityEvidenceRecord,
 	capabilityOperationReport,
 	capabilityProviderInfo,
+	capabilityRepositoryRead,
+	capabilityRepositoryWrite,
 	capabilityAssignedRuns,
 	capabilityRunBlock,
 	capabilityRunComplete,

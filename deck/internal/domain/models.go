@@ -55,20 +55,21 @@ type Project struct {
 }
 
 type Task struct {
-	ID                 string  `json:"id"`
-	ProjectID          string  `json:"project_id"`
-	Title              string  `json:"title"`
-	Description        string  `json:"description"`
-	AcceptanceCriteria string  `json:"acceptance_criteria"`
-	Status             string  `json:"status"`
-	Priority           string  `json:"priority"`
-	BudgetMinutes      int     `json:"budget_minutes"`
-	Budget             Budget  `json:"budget"`
-	DisplayState       string  `json:"display_state"`
-	AssignedAgentID    *string `json:"assigned_agent_id,omitempty"`
-	Version            int     `json:"version"`
-	CreatedAt          int64   `json:"created_at"`
-	UpdatedAt          int64   `json:"updated_at"`
+	Context            *TaskContext `json:"context,omitempty"`
+	ID                 string       `json:"id"`
+	ProjectID          string       `json:"project_id"`
+	Title              string       `json:"title"`
+	Description        string       `json:"description"`
+	AcceptanceCriteria string       `json:"acceptance_criteria"`
+	Status             string       `json:"status"`
+	Priority           string       `json:"priority"`
+	BudgetMinutes      int          `json:"budget_minutes"`
+	Budget             Budget       `json:"budget"`
+	DisplayState       string       `json:"display_state"`
+	AssignedAgentID    *string      `json:"assigned_agent_id,omitempty"`
+	Version            int          `json:"version"`
+	CreatedAt          int64        `json:"created_at"`
+	UpdatedAt          int64        `json:"updated_at"`
 }
 
 type Budget struct {
@@ -83,24 +84,26 @@ type Budget struct {
 }
 
 type CreateTaskInput struct {
-	ProjectID          string  `json:"project_id"`
-	Title              string  `json:"title"`
-	Description        string  `json:"description"`
-	AcceptanceCriteria string  `json:"acceptance_criteria"`
-	Status             string  `json:"status"`
-	Priority           string  `json:"priority"`
-	BudgetMinutes      int     `json:"budget_minutes"`
-	Budget             *Budget `json:"budget,omitempty"`
+	ContextMessageIDs  []string `json:"context_message_ids,omitempty"`
+	ProjectID          string   `json:"project_id"`
+	Title              string   `json:"title"`
+	Description        string   `json:"description"`
+	AcceptanceCriteria string   `json:"acceptance_criteria"`
+	Status             string   `json:"status"`
+	Priority           string   `json:"priority"`
+	BudgetMinutes      int      `json:"budget_minutes"`
+	Budget             *Budget  `json:"budget,omitempty"`
 }
 
 type UpdateTaskInput struct {
-	Title              *string `json:"title,omitempty"`
-	Description        *string `json:"description,omitempty"`
-	AcceptanceCriteria *string `json:"acceptance_criteria,omitempty"`
-	Priority           *string `json:"priority,omitempty"`
-	BudgetMinutes      *int    `json:"budget_minutes,omitempty"`
-	Budget             *Budget `json:"budget,omitempty"`
-	Version            *int    `json:"version,omitempty"`
+	ContextMessageIDs  *[]string `json:"context_message_ids,omitempty"`
+	Title              *string   `json:"title,omitempty"`
+	Description        *string   `json:"description,omitempty"`
+	AcceptanceCriteria *string   `json:"acceptance_criteria,omitempty"`
+	Priority           *string   `json:"priority,omitempty"`
+	BudgetMinutes      *int      `json:"budget_minutes,omitempty"`
+	Budget             *Budget   `json:"budget,omitempty"`
+	Version            *int      `json:"version,omitempty"`
 }
 
 type Agent struct {

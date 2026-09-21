@@ -924,18 +924,19 @@ func (agent agentDTO) toDomain() workcontrol.Agent {
 }
 
 type taskDTO struct {
-	ID                 string    `json:"id"`
-	ProjectID          string    `json:"project_id"`
-	Title              string    `json:"title"`
-	Description        string    `json:"description"`
-	AcceptanceCriteria string    `json:"acceptance_criteria"`
-	Status             string    `json:"status"`
-	Priority           string    `json:"priority"`
-	BudgetMinutes      int       `json:"budget_minutes"`
-	Budget             budgetDTO `json:"budget"`
-	Version            int       `json:"version"`
-	CreatedAt          int64     `json:"created_at"`
-	UpdatedAt          int64     `json:"updated_at"`
+	Context            *workcontrol.TaskContext `json:"context,omitempty"`
+	ID                 string                   `json:"id"`
+	ProjectID          string                   `json:"project_id"`
+	Title              string                   `json:"title"`
+	Description        string                   `json:"description"`
+	AcceptanceCriteria string                   `json:"acceptance_criteria"`
+	Status             string                   `json:"status"`
+	Priority           string                   `json:"priority"`
+	BudgetMinutes      int                      `json:"budget_minutes"`
+	Budget             budgetDTO                `json:"budget"`
+	Version            int                      `json:"version"`
+	CreatedAt          int64                    `json:"created_at"`
+	UpdatedAt          int64                    `json:"updated_at"`
 }
 
 type budgetDTO struct {
@@ -984,6 +985,7 @@ func (detail taskDetailDTO) toDomain() workcontrol.WorkDetail {
 
 func (task taskDTO) toDomain() workcontrol.WorkItem {
 	return workcontrol.WorkItem{
+		Context:            task.Context,
 		ID:                 task.ID,
 		ProjectID:          task.ProjectID,
 		Title:              task.Title,

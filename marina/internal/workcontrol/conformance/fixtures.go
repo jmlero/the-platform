@@ -14,13 +14,15 @@ import (
 )
 
 type Fixtures struct {
-	Provider ProviderFixture
-	Agent    AgentFixture
-	Task     TaskFixture
-	Run      RunFixture
-	Plan     PlanFixture
-	Event    EventFixture
-	Errors   map[string]ErrorFixture
+	Context    workcontrol.ResolvedContext
+	Repository workcontrol.RepositoryRequest
+	Provider   ProviderFixture
+	Agent      AgentFixture
+	Task       TaskFixture
+	Run        RunFixture
+	Plan       PlanFixture
+	Event      EventFixture
+	Errors     map[string]ErrorFixture
 }
 
 type ProviderFixture struct {
@@ -191,6 +193,13 @@ func LoadFixtures(root string) (Fixtures, error) {
 		}
 
 		switch entry.Kind {
+		case "context":
+			err = decodeFile(path, &fixtures.Context)
+			if err == nil {
+				err = workcontrol.ValidateResolvedContext(fixtures.Context.Selection, fixtures.Context)
+			}
+		case "repository":
+			err = decodeFile(path, &fixtures.Repository)
 		case "provider_info":
 			err = decodeFile(path, &fixtures.Provider)
 		case "agent":

@@ -110,6 +110,18 @@ func TestProtocolFixturesCoverCanonicalContract(t *testing.T) {
 
 		path := filepath.Join(fixtureRoot, filepath.FromSlash(entry.Path))
 		switch entry.Kind {
+		case "context":
+			var fixture domain.ResolvedContext
+			decodeFixture(t, path, &fixture)
+			if fixture.Selection == nil || len(fixture.Sources) != 1 || len(fixture.Selection.Sources) != 1 || fixture.Selection.Sources[0].Digest != fixture.Sources[0].Digest || fixture.Sources[0].Trust != "guidance" {
+				t.Fatalf("context fixture = %#v", fixture)
+			}
+		case "repository":
+			var fixture domain.RepositoryRequest
+			decodeFixture(t, path, &fixture)
+			if fixture.Status != "connected" || fixture.Binding == nil || fixture.Binding.Version < 1 || fixture.Binding.Repository != fixture.Repository {
+				t.Fatalf("repository fixture = %#v", fixture)
+			}
 		case "provider_info":
 			var fixture providerInfoResponse
 			decodeFixture(t, path, &fixture)
@@ -156,7 +168,7 @@ func TestProtocolFixturesCoverCanonicalContract(t *testing.T) {
 		}
 	}
 
-	for _, required := range []string{"task", "run", "lease", "plan", "command", "event", "budget", "evidence"} {
+	for _, required := range []string{"task", "run", "lease", "plan", "command", "event", "budget", "evidence", "context", "repository"} {
 		if _, ok := seenKinds[required]; !ok {
 			t.Errorf("fixture manifest is missing %q", required)
 		}
