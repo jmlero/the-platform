@@ -2,7 +2,9 @@ package sqlite
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -13,7 +15,8 @@ import (
 
 func TestModelReservationSurvivesUnknownResponseAndPreventsOverspend(t *testing.T) {
 	ctx := context.Background()
-	store, err := Open(ctx, ":memory:")
+	journalPath := filepath.Join(t.TempDir(), "journal.db")
+	store, err := Open(ctx, journalPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,5 +59,33 @@ func TestModelReservationSurvivesUnknownResponseAndPreventsOverspend(t *testing.
 	}
 	if _, err = store.ReserveModelCall(ctx, record.ID, attempt.ID, 1, 10, 10); !errors.Is(err, execution.ErrConflict) {
 		t.Fatalf("terminated attempt received model budget: %v", err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := Open(ctx, journalPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	data, err := reopened.ExportDiagnostics(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var report struct {
+		Executions []struct {
+			UsedTokens         int64 `json:"used_tokens"`
+			PendingModelCalls  int64 `json:"pending_model_calls"`
+			ReservedTokens     int64 `json:"reserved_tokens"`
+			ReservedCostMicros int64 `json:"reserved_cost_micros"`
+		} `json:"executions"`
+	}
+	if err := json.Unmarshal(data, &report); err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Executions) != 1 || report.Executions[0].UsedTokens != 20 ||
+		report.Executions[0].PendingModelCalls != 1 || report.Executions[0].ReservedTokens != 50 ||
+		report.Executions[0].ReservedCostMicros != 50 {
+		t.Fatalf("restart diagnostics must distinguish known usage from the retained unknown-call reservation: %+v", report)
 	}
 }

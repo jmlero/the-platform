@@ -69,3 +69,18 @@ func TestGitReadUsesOneScopedBearerHeader(t *testing.T) {
 		t.Fatalf("expected rejected source read, seen=%v err=%v", seen, err)
 	}
 }
+
+func TestHarnessFailureKeepsFinalStructuredErrorAndRedactsCredential(t *testing.T) {
+	output := "raw output must not be copied\n" +
+		`{"type":"error","message":"Reconnecting: temporary failure"}` + "\n" +
+		`{"type":"turn.failed","error":{"message":"unexpected status 429 with attempt-secret"}}` + "\n"
+	if got := harnessFailure(output, "attempt-secret"); got != "unexpected status 429 with [redacted]" {
+		t.Fatalf("safe final failure = %q", got)
+	}
+	if got := harnessFailure(`{"type":"item.completed","item":{"text":"tool output"}}`, "secret"); got != "" {
+		t.Fatalf("non-error output exposed: %q", got)
+	}
+	if got := harnessFailure(`{"type":"error","message":"`+strings.Repeat("x", 1000)+`"}`, "secret"); len(got) > 512 {
+		t.Fatalf("unbounded error: %d bytes", len(got))
+	}
+}

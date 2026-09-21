@@ -5,11 +5,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/jmlero/the-platform/marina/internal/artifacts"
+	"github.com/jmlero/the-platform/marina/internal/execution"
 )
 
 func forbiddenModelInput(value any) bool {
@@ -109,6 +113,18 @@ func (server *Server) model(w http.ResponseWriter, r *http.Request) {
 	cost := price(inputReservation, model.InputMicrosPerMillion) + price(model.MaxOutputTokens, model.OutputMicrosPerMillion)
 	callID, err := server.journal.ReserveModelCall(r.Context(), record.ID, attempt.ID, record.FenceToken, reservation, cost)
 	if err != nil {
+		if errors.Is(err, execution.ErrBudgetExhausted) {
+			// Preserve the fixed budget reason after ephemeral worker cleanup. The
+			// stable key prevents harness retries from flooding the operator ledger.
+			_, _, saveErr := server.journal.EnqueueOutbox(r.Context(), record.ID, execution.OutboxInput{
+				Kind: "event", IdempotencyKey: "model-budget:" + attempt.ID + ":" + artifacts.Digest([]byte(err.Error())),
+				Payload: map[string]any{"type": "model.budget_exhausted", "message": err.Error()},
+			})
+			if saveErr != nil {
+				http.Error(w, "model budget denial could not be recorded", 503)
+				return
+			}
+		}
 		http.Error(w, "model request exceeds remaining authority or budget", 429)
 		return
 	}
@@ -136,6 +152,7 @@ func (server *Server) model(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", response.Header.Get("Content-Type"))
 	w.Header().Set("Cache-Control", "no-store")
+	streaming := strings.Contains(response.Header.Get("Content-Type"), "text/event-stream")
 	var usage struct {
 		Input  int64 `json:"input_tokens"`
 		Output int64 `json:"output_tokens"`
@@ -149,32 +166,42 @@ func (server *Server) model(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 	observe := func(data []byte) {
+		type tokenUsage struct {
+			Input  *int64 `json:"input_tokens"`
+			Output *int64 `json:"output_tokens"`
+		}
 		var event struct {
-			Usage *struct {
-				Input  int64 `json:"input_tokens"`
-				Output int64 `json:"output_tokens"`
-			} `json:"usage"`
+			Type     string      `json:"type"`
+			Status   string      `json:"status"`
+			Usage    *tokenUsage `json:"usage"`
 			Response struct {
-				Usage *struct {
-					Input  int64 `json:"input_tokens"`
-					Output int64 `json:"output_tokens"`
-				} `json:"usage"`
+				Status string      `json:"status"`
+				Usage  *tokenUsage `json:"usage"`
 			} `json:"response"`
 		}
 		if json.Unmarshal(data, &event) != nil {
 			return
 		}
-		candidate := event.Usage
-		if candidate == nil {
-			candidate = event.Response.Usage
+		candidate, status := event.Usage, event.Status
+		if streaming {
+			candidate, status = event.Response.Usage, event.Response.Status
+			if event.Type != "response."+status {
+				return
+			}
 		}
-		if candidate != nil && candidate.Input >= 0 && candidate.Output >= 0 && candidate.Input < 1<<32 && candidate.Output < 1<<32 {
-			usage.Input = candidate.Input
-			usage.Output = candidate.Output
+		// Intermediate usage is only a partial count. Missing counters are
+		// unknown, not zero; neither may release a durable reservation.
+		if status != "completed" && status != "incomplete" && status != "failed" {
+			return
+		}
+		if candidate != nil && candidate.Input != nil && candidate.Output != nil &&
+			*candidate.Input >= 0 && *candidate.Output >= 0 && *candidate.Input < 1<<32 && *candidate.Output < 1<<32 {
+			usage.Input = *candidate.Input
+			usage.Output = *candidate.Output
 			known = true
 		}
 	}
-	if strings.Contains(response.Header.Get("Content-Type"), "text/event-stream") {
+	if streaming {
 		scanner := bufio.NewScanner(response.Body)
 		scanner.Buffer(make([]byte, 4096), 2<<20)
 		for scanner.Scan() {

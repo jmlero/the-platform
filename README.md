@@ -27,6 +27,12 @@ For a Mac development installation, use the [local Podman profile](deploy/kubern
 It runs both services with TLS and persistent storage before repository/model
 configuration, with new task intake explicitly disabled.
 
+Development and testing may also use the existing GKE Autopilot cluster
+`autopilot` in project `jmlero`, region `europe-west3`. Its infrastructure and
+operating instructions live in `/Users/jmolero/personal/github/infra-gcp`.
+See [decision 0010](docs/decisions/0010-initial-installation-services.md) for
+environment selection, access, and the GCP budget boundary.
+
 Existing installations should follow the [Deck naming upgrade](docs/decisions/0012-deck-component-name.md)
 when updating binaries, configuration and persistent storage.
 

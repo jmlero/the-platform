@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 
 	"github.com/jmlero/the-platform/marina/internal/execution"
 )
@@ -37,9 +38,11 @@ func (store *Store) ReserveModelCall(ctx context.Context, executionID, attemptID
 	if err = tx.QueryRowContext(ctx, `SELECT COALESCE(SUM(reserved_tokens),0),COALESCE(SUM(reserved_cost_micros),0) FROM model_calls WHERE execution_id=? AND finished_at IS NULL`, executionID).Scan(&pendingTokens, &pendingCost); err != nil {
 		return "", err
 	}
-	if (record.MaxTokens > 0 && tokens > record.MaxTokens-record.UsedTokens-pendingTokens) ||
-		(record.MaxCostMicros > 0 && cost > record.MaxCostMicros-record.UsedCostMicros-pendingCost) {
-		return "", execution.ErrBudgetExhausted
+	if record.MaxTokens > 0 && tokens > record.MaxTokens-record.UsedTokens-pendingTokens {
+		return "", fmt.Errorf("token budget cannot admit model request: %w", execution.ErrBudgetExhausted)
+	}
+	if record.MaxCostMicros > 0 && cost > record.MaxCostMicros-record.UsedCostMicros-pendingCost {
+		return "", fmt.Errorf("cost budget cannot admit model request: %w", execution.ErrBudgetExhausted)
 	}
 	id, err := newID("mdl")
 	if err != nil {

@@ -1,0 +1,15 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: marina
+  namespace: marina-system
+spec:
+  template:
+    spec:
+      automountServiceAccountToken: true
+      containers:
+        - name: marina
+          args: [serve, --intake-enabled=false]
+          env:
+            - name: MARINA_CONFIG_FILE
+              value: /etc/marina/workflow.json

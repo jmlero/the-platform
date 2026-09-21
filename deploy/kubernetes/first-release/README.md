@@ -28,7 +28,8 @@ live-run prerequisites. The private disposable repository is
 here. [NETWORK.md](NETWORK.md) enumerates the selected destinations, data flows,
 DNS/IP enforcement limits and reproducible local probes.
 
-Use the [named live acceptance exercises](ACCEPTANCE.md) for RUN-09–18 and the
+Use the [named live acceptance exercises](ACCEPTANCE.md) for RUN-09, RUN-11–16
+and the RUN-18 report (RUN-10 and RUN-17 are retired), and the
 [operations runbook](OPERATIONS.md) for certificate renewal, credential rotation,
 artifact retention and failure recovery. `python3 scripts/check-installation.py
 <private-installation>` reports configuration blockers without exposing Secret

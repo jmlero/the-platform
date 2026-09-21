@@ -68,6 +68,14 @@ type OutboxInput struct {
 	Payload        map[string]any
 }
 
+// OutboxGuard is frozen before sending a mutation. A retry must first replay
+// this guard even if lease reconciliation has advanced the execution.
+type OutboxGuard struct {
+	AgentID         string `json:"agent_id"`
+	ExpectedVersion int64  `json:"expected_version"`
+	FenceToken      int64  `json:"fence_token"`
+}
+
 type OutboxItem struct {
 	ID               string
 	ExecutionID      string
@@ -75,6 +83,7 @@ type OutboxItem struct {
 	Kind             string
 	IdempotencyKey   string
 	Payload          map[string]any
+	Guard            *OutboxGuard
 	Status           string
 	Attempts         int
 	NextEligibleAt   *time.Time

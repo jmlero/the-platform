@@ -1,10 +1,32 @@
 import pathlib
+import re
 import subprocess
 import tempfile
 import unittest
 
 
 class LocalPreparationTest(unittest.TestCase):
+    def test_repository_workflow_can_start_without_admitting_tasks(self):
+        root = pathlib.Path(__file__).resolve().parents[1]
+        result = subprocess.run(
+            ["kubectl", "kustomize", str(root / "deploy/kubernetes/local-podman-workflow")],
+            capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        resources = result.stdout.split("\n---\n")
+        marina = next(document for document in resources
+                      if "kind: Deployment\n" in document
+                      and re.search(r"^  name: marina$", document, re.MULTILINE))
+        self.assertIn("automountServiceAccountToken: true", marina)
+        self.assertRegex(marina, r"name: MARINA_CONFIG_FILE\s+value: /etc/marina/workflow.json")
+        self.assertIn("- --intake-enabled=false", marina)
+        worker = next(document for document in resources
+                      if "kind: ServiceAccount\n" in document
+                      and re.search(r"^  name: marina-worker$", document, re.MULTILINE))
+        self.assertIn("automountServiceAccountToken: false", worker)
+        self.assertTrue(any("kind: NetworkPolicy\n" in document
+                            and "namespace: marina-workers\n" in document
+                            for document in resources))
+
     def test_local_profile_has_local_images_and_private_credentials(self):
         root = pathlib.Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory() as directory:

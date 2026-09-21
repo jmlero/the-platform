@@ -3,6 +3,7 @@ package workerapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -18,10 +19,13 @@ import (
 	"github.com/jmlero/the-platform/marina/internal/worker"
 )
 
-type provider struct{ run workcontrol.Run }
+type provider struct {
+	run workcontrol.Run
+	err error
+}
 
 func (p *provider) GetWork(context.Context, string) (workcontrol.WorkDetail, error) {
-	return workcontrol.WorkDetail{Runs: []workcontrol.Run{p.run}}, nil
+	return workcontrol.WorkDetail{Runs: []workcontrol.Run{p.run}}, p.err
 }
 
 func TestWorkerCredentialCannotOutliveProviderFence(t *testing.T) {
@@ -67,6 +71,14 @@ func TestWorkerCredentialCannotOutliveProviderFence(t *testing.T) {
 	}
 	if status := request(); status != 200 {
 		t.Fatalf("valid worker returned %d", status)
+	}
+	p.err = errors.New("temporary Deck outage")
+	if status := request(); status != 503 {
+		t.Fatalf("temporary provider outage must deny access without reporting revocation: %d", status)
+	}
+	p.err = nil
+	if status := request(); status != 200 {
+		t.Fatalf("worker did not recover after provider restoration: %d", status)
 	}
 	p.run.FenceToken = 2
 	if status := request(); status != 403 {

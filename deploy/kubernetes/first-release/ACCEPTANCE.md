@@ -9,6 +9,9 @@ with the Mac running. RUN-10 was removed by the operator; laptop-off operation i
 not an acceptance gate. Keep its ID retired. RUN-08 uses the existing
 `https://localhost:8443` mapping with trusted TLS and operator authentication;
 LAN exposure and a second-device sign-in are not required for this installation.
+The operator also removed RUN-17 on 2026-09-18; deliberately failing or evicting
+an active worker is not required. Its ID remains retired. The remaining live
+exercises are RUN-09 and RUN-11 through RUN-16, recorded under RUN-18.
 
 For each exercise record: UTC times; task/run/attempt and Job IDs; Git branch,
 commit and PR URL/head; image/configuration digests; expected and observed result;
@@ -25,7 +28,6 @@ Use a separate bounded task where a preceding exercise terminates the run.
 | RUN-14 | After verification but before completion, make a normal additional commit to the disposable PR branch under operator authority. Do not force-push. | Previous-head evidence cannot complete the task; the displayed blocker identifies the changed revision and need for a new verified attempt. |
 | RUN-15 | Separately interrupt Deck, the model path and the Git path during an active run. Save each original Deployment/network rule before changing it and restore that exact resource afterwards. Do not rely on an additive deny policy while an allow policy remains. | Authority expires safely, incomplete/uncertain model usage stays reserved, persisted state survives, and restoration either recovers the original work or produces a bounded blocker without duplicated external work. |
 | RUN-16 | Use separate valid tasks to exhaust wall time, tokens and a nonzero cost cap using configured nonzero model rates. Exercise the two-attempt boundary with failed verification and confirm that no third implementation is admitted. Interrupt one admitted model response to test uncertain usage. | Each cap stops further admitted work and remains inspectable; no hidden attempt or cleared reservation permits extra execution. Record provider-side spend separately from gateway admission accounting. |
-| RUN-17 | Fail or evict only the identified Marina-managed worker Pod during implementation. Preserve its Job/attempt identity and termination observations. | Failure cannot count as completion; cleanup and the original blocker are visible. A separately authorized follow-up demonstrates the supported recovery path without overwriting old evidence. |
 | RUN-18 | Assemble the redacted results above, including failures and missing prerequisites. | Each completed acceptance condition has concrete evidence; unresolved cases remain open. Identify the local host and cluster; do not claim laptop-off operation. |
 
 Use the [operations runbook](OPERATIONS.md) for containment and recovery. Review

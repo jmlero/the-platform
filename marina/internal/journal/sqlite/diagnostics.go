@@ -38,6 +38,9 @@ type diagnosticExecution struct {
 	Attempt            int    `json:"attempt"`
 	UsedTokens         int64  `json:"used_tokens"`
 	UsedCostMicros     int64  `json:"used_cost_micros"`
+	PendingModelCalls  int64  `json:"pending_model_calls"`
+	ReservedTokens     int64  `json:"reserved_tokens"`
+	ReservedCostMicros int64  `json:"reserved_cost_micros"`
 	FailureClass       string `json:"failure_class,omitempty"`
 	FailureMessage     string `json:"failure_message,omitempty"`
 	LastErrorClass     string `json:"last_error_class,omitempty"`
@@ -162,7 +165,10 @@ func (store *Store) exportDiagnosticExecutions(ctx context.Context, export *diag
 	rows, err := store.db.QueryContext(ctx, `
 		SELECT id, project_id, work_provider, external_work_id, external_run_id, state, attempt,
 			used_tokens, used_cost_micros, failure_class, failure_message, last_error_class,
-			exhaustion_reason, version, updated_at
+			exhaustion_reason, version, updated_at,
+			(SELECT COUNT(*) FROM model_calls WHERE execution_id = executions.id AND finished_at IS NULL),
+			(SELECT COALESCE(SUM(reserved_tokens), 0) FROM model_calls WHERE execution_id = executions.id AND finished_at IS NULL),
+			(SELECT COALESCE(SUM(reserved_cost_micros), 0) FROM model_calls WHERE execution_id = executions.id AND finished_at IS NULL)
 		FROM executions ORDER BY id
 	`)
 	if err != nil {
@@ -173,7 +179,8 @@ func (store *Store) exportDiagnosticExecutions(ctx context.Context, export *diag
 		var item diagnosticExecution
 		if err := rows.Scan(&item.ID, &item.ProjectID, &item.WorkProvider, &item.ExternalWorkID, &item.ExternalRunID,
 			&item.State, &item.Attempt, &item.UsedTokens, &item.UsedCostMicros, &item.FailureClass,
-			&item.FailureMessage, &item.LastErrorClass, &item.ExhaustionReason, &item.Version, &item.UpdatedAtUnixMilli); err != nil {
+			&item.FailureMessage, &item.LastErrorClass, &item.ExhaustionReason, &item.Version, &item.UpdatedAtUnixMilli,
+			&item.PendingModelCalls, &item.ReservedTokens, &item.ReservedCostMicros); err != nil {
 			return err
 		}
 		item.FailureMessage = omitFreeText(item.FailureMessage)

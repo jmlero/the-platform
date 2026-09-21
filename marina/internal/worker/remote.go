@@ -64,7 +64,7 @@ func RunRemote(ctx context.Context) error {
 		}
 		defer response.Body.Close()
 		if response.StatusCode != 200 {
-			return nil, fmt.Errorf("worker gateway returned HTTP %d", response.StatusCode)
+			return nil, gatewayStatusError{response.StatusCode}
 		}
 		return io.ReadAll(io.LimitReader(response.Body, MaxResultBytes+1))
 	}
@@ -75,8 +75,25 @@ func RunRemote(ctx context.Context) error {
 	if err = unix.Setrlimit(unix.RLIMIT_NPROC, &limit); err != nil {
 		return fmt.Errorf("enforce process limit: %w", err)
 	}
-	if _, err = request(ctx, "GET", "/authority", nil); err != nil {
+	checkAuthority := func(ctx context.Context) (time.Time, error) {
+		b, err := request(ctx, "GET", "/authority", nil)
+		if err != nil {
+			return time.Time{}, err
+		}
+		var authority struct {
+			ExpiresAt time.Time `json:"expires_at"`
+		}
+		if err := json.Unmarshal(b, &authority); err != nil {
+			return time.Time{}, err
+		}
+		return authority.ExpiresAt, nil
+	}
+	expires, err := checkAuthority(ctx)
+	if err != nil {
 		return err
+	}
+	if !time.Now().Add(8 * time.Second).Before(expires) {
+		return errors.New("worker authority expired")
 	}
 	b, err := request(ctx, "GET", "/input", nil)
 	if err != nil {
@@ -96,27 +113,8 @@ func RunRemote(ctx context.Context) error {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		ticker := time.NewTicker(3 * time.Second)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				b, err := request(ctx, "GET", "/authority", nil)
-				if err != nil {
-					cancel()
-					return
-				}
-				var authority struct {
-					ExpiresAt time.Time `json:"expires_at"`
-				}
-				if json.Unmarshal(b, &authority) != nil || !time.Now().Add(8*time.Second).Before(authority.ExpiresAt) {
-					cancel()
-					return
-				}
-			}
-		}
+		_ = watchAuthority(ctx, expires, 8*time.Second, 3*time.Second, checkAuthority)
+		cancel()
 	}()
 	defer func() { cancel(); <-done }()
 	result, err := Run(ctx, input, "/work/attempt")

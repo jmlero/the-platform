@@ -6,6 +6,30 @@ Reviewed against source code and the product visions on **2026-09-17**.
 
 This replaces the historical milestone checklist. Completed foundations are summarized below; the tables contain remaining work. [Decision 0007](docs/decisions/0007-sovereign-first-usable-release.md) still governs the first release: a bounded repository fix ends at a **PR ready for human review**, or a truthful blocker. The board, conversation, and inbox target in [decision 0009](docs/decisions/0009-asynchronous-agent-work.md) is proposed next work, not implemented behavior or a change to release scope.
 
+## Current priority: validate the PoC, then the MVP — 2026-09-21
+
+The operator reaffirmed that proving the PoC and MVP is the immediate goal.
+**RUN-09 passed locally:** a bounded Deck task used the configured model and
+Kubernetes worker to produce [PR #1](https://github.com/jmlero/marina-acceptance/pull/1),
+a separate verification Job, passing CI at the same head, and downloadable,
+digest-checked evidence with persisted usage. **MVP failure and recovery tests
+are now the priority**; see the [live report](docs/validation/poc-mvp-2026-09-21.md).
+
+| Priority | Tasks | Validation outcome |
+| --- | --- | --- |
+| P0 — prerequisites | RUN-03, RUN-05 | Finish the acceptance repository and private workflow configuration; verify the credential boundary and reproducible installation before the live run. |
+| P0 — PoC | RUN-09 | Demonstrate the complete Deck → Marina → worker → verified GitHub PR → Deck evidence path. |
+| P1 — MVP acceptance | RUN-11 through RUN-16, RUN-18 | Prove restart recovery, cancellation, failed/missing checks, changed-head handling, provider outages and budget enforcement; record the installation's passing and unresolved results. |
+| P2 — pilot value | VALUE-01 | Measure preparation, supervision, review, elapsed time and cost on representative tasks; use the findings to select further product work. |
+
+Use the existing local `kind-marina-local` installation first. GCP remains an
+authorized alternative when a concrete validation need warrants it, under the
+environment and budget rules in [decision 0010](docs/decisions/0010-initial-installation-services.md).
+This sequence uses the existing bounded first-release scope for MVP acceptance;
+context, conversation, inbox and automatic-revision expansion remain subsequent work.
+Retain the existing €5 total model-test limit and explicit task authority.
+Task states change only when their acceptance evidence exists.
+
 ## What exists and what is missing
 
 | Area | Implemented evidence | Gap to the vision |
@@ -50,7 +74,9 @@ These bounded corrections are complete. [Verification evidence](docs/validation/
 
 ## 2. First-release installation and acceptance
 
-**Deployment target decided:** Deck and Marina target vanilla Kubernetes through standard APIs, with no required cloud provider or Kubernetes distribution. The user's local Podman/Kind cluster is the test environment; choosing a hosting vendor is not a product decision or a blocker for development.
+**Deployment target decided:** Deck and Marina target vanilla Kubernetes through standard APIs, with no required cloud provider or Kubernetes distribution. The user's local Podman/Kind cluster and existing GCP GKE Autopilot cluster are authorized development/test environments; choosing a hosting vendor is not a product decision or a blocker for development.
+
+**2026-09-21 additional environment:** GCP project `jmlero`, region `europe-west3`, cluster `autopilot` is available through the configured `gcloud` CLI. Read `/Users/jmolero/personal/github/infra-gcp/AGENTS.md` and its `README.md` for infrastructure ownership, DNS endpoint access, and the EUR 10/month total budget. Use explicit contexts and separate installation state; local acceptance evidence remains local and no RUN item is completed by GCP availability. See [decision 0010](docs/decisions/0010-initial-installation-services.md).
 
 **Initial services decided:** use OpenRouter for model inference, GitHub for source control, and GHCR for published images. Keep separate SQLite databases and artifact files on Kubernetes persistent volumes. Backup automation and restore drills are deferred. The running platform requires only GitHub services and OpenRouter externally; image builds and cluster setup may fetch required dependencies from their normal sources. Prepackage the dependencies needed by agent execution and verification. See [decision 0010](docs/decisions/0010-initial-installation-services.md). Exact model, repository, credentials, and destination rules still need configuration and validation.
 
@@ -62,21 +88,32 @@ Use the existing [installation and acceptance guide](deploy/kubernetes/first-rel
 | --- | --- | --- | --- | --- |
 | RUN-01 | Done | Ops | Validate the vanilla Kubernetes installation using local Podman/Kind. | Installation prerequisites for storage, DNS, network-policy enforcement, and access are documented; the standard manifests install locally without cloud-specific dependencies, with cluster/configuration versions recorded. [Local evidence](docs/validation/run-01-18-2026-09-17.md). |
 | RUN-02 | Done | Ops | Document the selected services and concrete runtime network destinations. | GitHub/GHCR and OpenRouter service/download destinations, internal storage, and DNS resolution are recorded with the data exchanged; ordinary build/setup downloads are distinguished from runtime traffic and OpenRouter's upstream processing is described accurately. [Local evidence](docs/validation/run-01-18-2026-09-17.md). |
-| RUN-03 | Open | Ops | Configure one disposable GitHub acceptance repository. | The repository, small known defect, allowed paths, trusted offline checks, required CI, and scoped credentials are configured; credentials remain outside Git. |
+| RUN-03 | Done | Ops | Configure one disposable GitHub acceptance repository. | The repository, known defect, allowed paths, trusted offline checks, required CI, and operator-approved credentials are configured outside Git. The classic-token pilot exception and live source-write proof are recorded in the [acceptance report](docs/validation/poc-mvp-2026-09-21.md). |
 | RUN-04 | Done | Ops | Build and pin the acceptance worker image for GHCR or local loading. | Build-time downloads supply the fixture's tools and dependencies; the worker runs its checks without public package downloads at runtime, and its image digest is recorded. [Local evidence](docs/validation/run-01-18-2026-09-17.md). |
-| RUN-05 | Open | Ops | Prepare a reproducible site overlay. | Existing preparation/manifests produce pinned images, separate persistent stores and identities, TLS trust, and private configuration without unresolved placeholders. |
+| RUN-05 | Done | Ops | Prepare a reproducible site overlay. | Existing preparation/manifests produce pinned images, separate persistent stores and identities, TLS trust, and private configuration without unresolved placeholders. [Workflow preflight and local proof](docs/validation/poc-mvp-2026-09-21.md). |
 | RUN-06 | Done | Ops | Enforce the selected GitHub/OpenRouter network boundaries. | Required internal and selected external destinations work; disallowed worker/controller destinations are denied in observed tests. Node image pulls and DNS resolution are accounted for separately, matching RUN-02. [Local evidence](docs/validation/run-01-18-2026-09-17.md). |
 | RUN-07 | Done | Ops | Start the paired services on the selected host. | Both services become ready with persistent storage and recover after a service restart; initial intake stays disabled until configuration is ready. [Local evidence](docs/validation/run-01-18-2026-09-17.md). |
 | RUN-08 | Done | Ops | Validate authenticated local Deck access. | Deck is available at `https://localhost:8443` through the existing Podman/Kind port mapping without an interactive port-forward; trusted TLS, operator login and session persistence pass. LAN exposure and second-device testing are outside the current local acceptance scope. [Evidence](docs/validation/local-acceptance-follow-up-2026-09-17.md). |
-| RUN-09 | Verify | Marina | Validate the pinned harness against the selected OpenRouter model. | One bounded fixture run on local Kubernetes through the configured OpenRouter Responses endpoint exercises streaming, tool calls, durable usage accounting, and output collection with no implicit endpoint fallback; the repaired fixture reaches one PR, a distinct verification Job, current required CI, and downloadable evidence. |
+| RUN-09 | Done | Marina | Validate the pinned harness against the selected OpenRouter model. | One bounded fixture run on local Kubernetes through the configured OpenRouter Responses endpoint exercises streaming, tool calls, durable usage accounting, and output collection with no implicit endpoint fallback; the repaired fixture reaches one PR, a distinct verification Job, current required CI, and downloadable evidence. [Live proof](docs/validation/poc-mvp-2026-09-21.md#run-09-complete-task-to-pr-proof). |
 | RUN-11 | Verify | Joint | Restart each control service during work. | Restarting Deck and Marina separately during execution and CI waiting preserves the original work and produces no duplicate branch, commit, or PR. |
 | RUN-12 | Verify | Joint | Cancel a real active worker from Deck. | Authority is revoked, worker termination is observed before acknowledgement, and attempt resources are cleaned up while evidence remains accessible. |
 | RUN-13 | Verify | Joint | Exercise failed and missing verification gates. | Failed local checks, failed CI, and a missing required CI check never produce a completed result; Deck explains the blocker or continued wait. |
 | RUN-14 | Verify | Joint | Change a PR head after verification. | Evidence for the previous head cannot complete the task; the operator sees why a new verification attempt is needed. |
 | RUN-15 | Verify | Joint | Interrupt required providers during a run. | Deck/model/Git outages stop unsafe progress, retain useful state, and recover or report a bounded blocker without duplicate external work. |
 | RUN-16 | Verify | Marina | Exhaust configured execution budgets. | Time, token, attempt, and nonzero cost limits stop further admitted work and leave an inspectable reason; uncertain model usage retains its reservation. |
-| RUN-17 | Verify | Marina | Fail an active Kubernetes worker. | Job/process failure or eviction cannot produce false completion; cleanup and the current follow-up-task recovery path are observable. |
-| RUN-18 | Open | Joint | Record the installation acceptance result. | A redacted report links task/run IDs, PR revision, image/configuration versions, and RUN-09 plus RUN-11 through RUN-17 results; unresolved failures stay open. |
+| RUN-18 | Open | Joint | Record the installation acceptance result. | A redacted report links task/run IDs, PR revision, image/configuration versions, and RUN-09 plus RUN-11 through RUN-16 results; unresolved failures stay open. |
+
+**2026-09-21 live progress:** RUN-03/05/09 passed in the local profile. The
+repository workflow is enabled, with intake disabled between explicitly admitted
+acceptance tasks. RUN-11 exposed restart defects being fixed and retested; other
+MVP exercises remain in progress. The classic-token pilot exception is recorded
+in the [credential evidence](docs/validation/github-credential-2026-09-21.md), and
+the [live report](docs/validation/poc-mvp-2026-09-21.md) records outcomes and limits.
+This supersedes the missing-token and control-only status in older notes below.
+
+**2026-09-18 scope:** the operator removed RUN-17 (deliberately failing or evicting an active worker) from first-release acceptance. Its ID is retired without renumbering the remaining tasks. RUN-09 and RUN-11 through RUN-16 remain required; see [decision 0007](docs/decisions/0007-sovereign-first-usable-release.md).
+
+**2026-09-18 preparation:** the [workflow profile](deploy/kubernetes/local-podman-workflow/kustomization.yaml) reproducibly enables the configured workflow with intake still disabled. It renders against the existing private installation while preserving its credentials, image pins, egress rules and Deck PVC. Fresh local network/fixture checks passed. The operator confirmed the scoped Git credential is not available yet, so RUN-03/05/09/11–16/18 remain open or awaiting live evidence. See the [current preparation and acceptance report](docs/validation/poc-mvp-2026-09-21.md).
 
 **2026-09-17 progress:** RUN-01/02/04/06/07 are complete for the local installation. A private [acceptance repository](https://github.com/jmlero/marina-acceptance), offline fixture checks and a pinned worker are prepared. The operator authorized €5 total test spend and requested a GLM trial; `z-ai/glm-5.3-flash` is now configured with conservative USD budget rates. Both GLM and Luna passed direct streaming/tool probes and produced the same fixture repair, each passing seven isolated regression tests. Six inference requests cost $0.0004802 in total; the [GLM comparison](docs/validation/glm-model-trial-2026-09-17.md) records costs, latency and limits of this evidence. RUN-03/05 still need the repository-scoped Git credential the operator will supply; RUN-09 still needs the pinned harness/gateway fixture run. The [local acceptance follow-up](docs/validation/local-acceptance-follow-up-2026-09-17.md) records fresh network, fixture and idle-restart checks, completes RUN-08 for authenticated localhost access, and removes RUN-10. RUN-03/05/09/11–18 still need the scoped Git credential and live workflow evidence. Intake remains disabled.
 

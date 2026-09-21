@@ -16,6 +16,8 @@ Marina persists a stable installation and logical-agent identity, a versioned pr
 
 Operator commands are ordered durable resources. Marina persists a command cursor and publishes acknowledgements through a priority outbox so cancellation and authority reduction pre-empt ordinary projections. Other projections retain per-execution order, use stable producer identities and sequences, and cannot overtake an unpublished predecessor. Deck deduplicates both the producer event ID and execution sequence.
 
+Before sending an outbox mutation, Marina persists its agent, resource version, and fence. Retries replay that original request even after a heartbeat or restart; events without an explicit occurrence time use the durable enqueue time. Only after Deck definitively rejects the original request may Marina retry with a newer resource version, and only for the same run, work item, agent, and fence. These retries remain bounded. The [September 2026 regression evidence](../validation/review-fixes-2026-09-21.md) covers lost requests and responses for events and command acknowledgements.
+
 External reconciliation is time-bounded and cancellation-aware. Retry attempt, next eligibility, failure class, and exhaustion reason are persisted. Exhausted or permanent reconciliation failures become classified terminal transitions and enter the same outbox. The controller refuses overlapping cycles and does not bind work whose lease is inside the safety window.
 
 Milestone 1 enables automatic control-plane claims only. Runtime, source-control, artifact, and delivery bindings remain disabled until their own fenced, restart-safe adapters exist.

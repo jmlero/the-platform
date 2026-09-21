@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"strings"
 	"sync"
 	"time"
@@ -41,6 +42,7 @@ type ControlJournal interface {
 	SetCommandCursor(context.Context, string, int64, int64) (execution.Execution, error)
 	EnqueueOutbox(context.Context, string, execution.OutboxInput) (execution.OutboxItem, bool, error)
 	ListReadyOutbox(context.Context, int) ([]execution.OutboxItem, error)
+	SaveOutboxGuard(context.Context, string, *execution.OutboxGuard, execution.OutboxGuard) (execution.OutboxItem, error)
 	MarkOutboxPublished(context.Context, string) error
 	CompleteOutboxPublication(context.Context, string, string, int64, int64, int64, time.Time, string) (execution.Execution, error)
 	RecordOutboxFailure(context.Context, string, execution.FailureClass, string, int) error
@@ -439,24 +441,41 @@ func (controller *ControlController) publishOutbox(ctx context.Context, cycle *C
 			cycle.Errors = append(cycle.Errors, err)
 			continue
 		}
+		if item.Guard == nil {
+			item, err = controller.journal.SaveOutboxGuard(ctx, item.ID, nil, execution.OutboxGuard{
+				AgentID: record.AgentID, ExpectedVersion: record.ExternalRunVersion, FenceToken: record.FenceToken})
+			if err != nil {
+				cycle.Errors = append(cycle.Errors, err)
+				continue
+			}
+		}
 		operationCtx, cancel := context.WithTimeout(ctx, controller.operationTimeout)
 		switch item.Kind {
 		case "command_ack":
 			err = controller.provider.AcknowledgeRunCommand(operationCtx, record.ExternalRunID,
 				stringValue(item.Payload, "command_id"), workcontrol.CommandAcknowledgement{IdempotencyKey: item.IdempotencyKey,
-					AgentID: record.AgentID, ExpectedVersion: record.ExternalRunVersion, FenceToken: record.FenceToken,
+					AgentID: item.Guard.AgentID, ExpectedVersion: item.Guard.ExpectedVersion, FenceToken: item.Guard.FenceToken,
 					Status: stringValue(item.Payload, "status"), Result: stringValue(item.Payload, "result")})
 		default:
 			err = controller.provider.AppendRunEvent(operationCtx, record.ExternalRunID, workcontrol.ProjectedEvent{
-				IdempotencyKey: item.IdempotencyKey, AgentID: record.AgentID, ExpectedVersion: record.ExternalRunVersion,
-				FenceToken: record.FenceToken, Producer: "marina", ProducerEventID: item.ID,
+				IdempotencyKey: item.IdempotencyKey, AgentID: item.Guard.AgentID, ExpectedVersion: item.Guard.ExpectedVersion,
+				FenceToken: item.Guard.FenceToken, Producer: "marina", ProducerEventID: item.ID,
 				ExecutionID: record.ID, Sequence: item.Sequence, Type: stringValue(item.Payload, "type"),
 				Message: stringValue(item.Payload, "message"), Payload: item.Payload,
-				OccurredAt: time.UnixMilli(int64Value(item.Payload, "occurred_at")).UTC()})
+				OccurredAt: time.UnixMilli(int64Value(item.Payload, "occurred_at", item.CreatedAt.UnixMilli())).UTC()})
 		}
 		cancel()
 		if err != nil {
 			class := classifyExternal(err)
+			var conflict interface{ MutationConflict() bool }
+			if errors.As(err, &conflict) && conflict.MutationConflict() {
+				refreshed, refreshErr := controller.refreshRejectedOutbox(ctx, record, item)
+				if refreshErr != nil {
+					err, class = refreshErr, classifyExternal(refreshErr)
+				} else if refreshed {
+					class = execution.FailureTransient
+				}
+			}
 			_ = controller.journal.RecordOutboxFailure(ctx, item.ID, class, err.Error(), controller.maxRetries)
 			cycle.Errors = append(cycle.Errors, err)
 			continue
@@ -488,6 +507,23 @@ func (controller *ControlController) publishOutbox(ctx context.Context, cycle *C
 	}
 }
 
+func (controller *ControlController) refreshRejectedOutbox(ctx context.Context, record execution.Execution, item execution.OutboxItem) (bool, error) {
+	// Exact replay would have succeeded if the original request had committed.
+	// After a definitive rejection, a heartbeat may permit a new version. Never
+	// transfer a queued mutation across an ownership fence or to another agent.
+	current, err := controller.currentProviderRun(ctx, record)
+	if err != nil {
+		return false, err
+	}
+	if current.WorkItemID != record.ExternalWorkID || current.AgentID != item.Guard.AgentID ||
+		current.FenceToken != item.Guard.FenceToken || current.Version <= item.Guard.ExpectedVersion {
+		return false, nil
+	}
+	_, err = controller.journal.SaveOutboxGuard(ctx, item.ID, item.Guard, execution.OutboxGuard{
+		AgentID: current.AgentID, ExpectedVersion: current.Version, FenceToken: current.FenceToken})
+	return err == nil, err
+}
+
 func (controller *ControlController) currentProviderRun(ctx context.Context, record execution.Execution) (workcontrol.Run, error) {
 	inspectCtx, inspectCancel := context.WithTimeout(ctx, controller.operationTimeout)
 	defer inspectCancel()
@@ -514,6 +550,10 @@ func classifyExternal(err error) execution.FailureClass {
 	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 		return execution.FailureTransient
 	}
+	var network net.Error
+	if errors.As(err, &network) {
+		return execution.FailureTransient
+	}
 	return execution.FailurePermanent
 }
 
@@ -521,7 +561,7 @@ func stringValue(payload map[string]any, key string) string {
 	value, _ := payload[key].(string)
 	return strings.TrimSpace(value)
 }
-func int64Value(payload map[string]any, key string) int64 {
+func int64Value(payload map[string]any, key string, fallback int64) int64 {
 	switch value := payload[key].(type) {
 	case float64:
 		return int64(value)
@@ -530,5 +570,5 @@ func int64Value(payload map[string]any, key string) int64 {
 	case int:
 		return int64(value)
 	}
-	return time.Now().UTC().UnixMilli()
+	return fallback
 }

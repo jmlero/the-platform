@@ -42,6 +42,10 @@ func (e *APIError) Error() string {
 
 func (e *APIError) RetryableFailure() bool { return e.Retryable }
 
+// A conflict rejects the mutation without committing it. Consumers must replay
+// their original request before considering a newer version of the same fence.
+func (e *APIError) MutationConflict() bool { return e.StatusCode == http.StatusConflict }
+
 type Client struct {
 	baseURL              *url.URL
 	httpClient           *http.Client

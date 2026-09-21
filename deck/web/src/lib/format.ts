@@ -19,6 +19,20 @@ export function formatDate(timestamp: number): string {
   }).format(timestamp);
 }
 
+export function deadlineForInput(timestamp?: number): string {
+  if (timestamp === undefined) return '';
+  const date = new Date(timestamp);
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+export function deadlineFromInput(value: string, original?: number): number | undefined {
+  if (!value) return undefined;
+  // Preserve seconds and the exact instant in a repeated DST hour unless edited.
+  if (original !== undefined && value === deadlineForInput(original)) return original;
+  return new Date(value).getTime();
+}
+
 export function initials(name: string): string {
   return name
     .split(/\s+/)

@@ -794,12 +794,20 @@ func (s *Store) BlockRun(ctx context.Context, mutation Mutation, runID, reason s
 		return fmt.Errorf("block reason is required: %w", domain.ErrInvalidInput)
 	}
 	now := nowMillis()
-	if _, err := tx.ExecContext(ctx, `
+	result, err := tx.ExecContext(ctx, `
 		UPDATE runs SET status = 'blocked', result_summary = ?, lease_expires_at = NULL,
 			finished_at = ?, version = version + 1, updated_at = ?
 		WHERE id = ? AND version = ? AND status IN ('planning', 'waiting_decision', 'running', 'verifying')
-	`, reason, now, now, runID, run.Version); err != nil {
+	`, reason, now, now, runID, run.Version)
+	if err != nil {
 		return fmt.Errorf("block run: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("read block run result: %w", err)
+	}
+	if rows != 1 {
+		return fmt.Errorf("run is no longer active: %w", domain.ErrConflict)
 	}
 	if _, err := tx.ExecContext(ctx, `
 		UPDATE tasks SET status = 'blocked', assigned_agent_id = NULL,

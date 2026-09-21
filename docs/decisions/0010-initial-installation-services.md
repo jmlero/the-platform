@@ -8,8 +8,9 @@
 
 The product targets vanilla Kubernetes. Use the existing local Podman/Kind
 installation for development and integration testing, as recorded in
-[decision 0008](0008-local-podman-development-installation.md). No cloud-provider
-selection is required.
+[decision 0008](0008-local-podman-development-installation.md). The existing GCP
+cluster is also authorized for development/testing as recorded below; the product
+does not require a cloud provider.
 
 | Area | Initial choice |
 | --- | --- |
@@ -31,6 +32,41 @@ The operator intends to build a Git service application in the future. Preserve
 the existing source-control boundary so a future adapter can integrate it when
 its API exists. Implementing that application or a speculative adapter is outside
 the current pilot.
+
+## Additional development/test environment — 2026-09-21
+
+The operator authorized both local Kubernetes and the existing Kubernetes cluster
+in their GCP account for development and testing. The GCP infrastructure source
+of truth is `/Users/jmolero/personal/github/infra-gcp`; read its `AGENTS.md` and
+`README.md` before using or changing that environment.
+
+- Local: context `kind-marina-local`, Podman connection
+  `podman-machine-default-root`, and the existing localhost installation.
+- GCP: project `jmlero`, region `europe-west3`, GKE Autopilot cluster `autopilot`.
+  Use the configured `gcloud` CLI, `gke-gcloud-auth-plugin`, and the
+  IAM-authenticated DNS endpoint. Fetch access with
+  `gcloud container clusters get-credentials autopilot --region europe-west3 --project jmlero --dns-endpoint`
+  using a separate `KUBECONFIG`, then pass context
+  `gke_jmlero_europe-west3_autopilot` explicitly to `kubectl`. Preserve the default
+  local context and existing credentials.
+- GCP's total budget is EUR 10/month under the infrastructure repo's guidance.
+  Check existing spend and projected total, including workloads, storage,
+  networking, telemetry, and applicable taxes, before adding billable resources.
+  Keep test workloads short-lived and remove only test-owned resources after use;
+  preserve existing persistent data. A budget alert is not a spending cap.
+
+Relevant development/test deployments and service restarts in either environment
+are authorized within those limits. Keep installation identities, credentials,
+databases, and artifacts separate. Repository mutation authority, task intake,
+and model budgets still require their existing explicit configuration and scope.
+This adds an environment without migrating the local installation or changing
+the first-release acceptance gate. Record the actual environment for each test;
+local evidence does not establish GCP storage, network isolation, or workflow
+acceptance. RUN-10 and RUN-17 remain retired.
+
+The [2026-09-21 access check](../validation/gcp-access-2026-09-21.md) confirmed
+the cluster is running and authenticated Kubernetes reads work. It records local
+CLI setup; no Platform workload or acceptance exercise was run in GCP.
 
 ## Model and network interpretation
 

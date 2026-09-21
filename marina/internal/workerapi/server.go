@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -52,6 +53,8 @@ type Server struct {
 	mux       *http.ServeMux
 }
 
+var errProviderUnavailable = errors.New("work-control provider unavailable")
+
 func New(config Config, journal *sqlite.Store, store *artifacts.Store, provider workcontrol.WorkInspection, client *http.Client) *Server {
 	if client == nil {
 		client = &http.Client{Timeout: 10 * time.Minute}
@@ -93,7 +96,7 @@ func (server *Server) authorize(ctx context.Context, id, token string) (runtimea
 	defer cancel()
 	detail, err := server.provider.GetWork(checkCtx, record.ExternalWorkID)
 	if err != nil {
-		return attempt, record, err
+		return attempt, record, fmt.Errorf("%w: %v", errProviderUnavailable, err)
 	}
 	for _, run := range detail.Runs {
 		if run.ID == record.ExternalRunID && run.WorkItemID == record.ExternalWorkID && run.AgentID == record.AgentID && run.TaskVersion == record.TaskVersion &&
@@ -113,6 +116,10 @@ func (server *Server) admit(w http.ResponseWriter, r *http.Request) (runtimeapi.
 	}
 	attempt, record, err := server.authorize(r.Context(), r.PathValue("id"), token)
 	if err != nil {
+		if errors.Is(err, errProviderUnavailable) {
+			http.Error(w, "worker authority cannot currently be confirmed", http.StatusServiceUnavailable)
+			return attempt, record, false
+		}
 		http.Error(w, "worker authority is unavailable or revoked", 403)
 		return attempt, record, false
 	}

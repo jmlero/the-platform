@@ -135,12 +135,24 @@ the **imported containerd manifest digest**, which can differ from Podman's
 digest after archive conversion. Register the digest reference in containerd
 before using it without a registry.
 
-In a reviewed installation overlay, set `MARINA_CONFIG_FILE` to
-`/etc/marina/workflow.json`, remove `--intake-enabled=false`, enable Marina's
-service-account token, and add explicit controller egress for the Kubernetes
-API and chosen Git/model endpoints. Preserve worker isolation. Then complete
-the real coding, cancellation and recovery acceptance checks before relying on
-autonomous work.
+Use the [repository-workflow profile](../local-podman-workflow/kustomization.yaml)
+for the next preparation stage. In the existing private `kustomization.yaml`,
+change only the resource path ending in `deploy/kubernetes/local-podman` to
+`deploy/kubernetes/local-podman-workflow`. Preserve the pinned images, credentials,
+existing `appdeck-data` PVC override, and paired controller egress/host-alias files.
+This profile loads `/etc/marina/workflow.json` and enables Marina's Kubernetes
+service-account token while retaining `--intake-enabled=false`. Workers keep their
+separate identity, absent API token, and existing network restrictions.
+
+After the scoped Git credential is supplied, run configuration preflight, render
+privately, and apply the reviewed overlay using the commands above. Confirm
+workflow startup and readiness with intake still disabled. Before admitting the
+bounded acceptance tasks, add a final private Deployment patch setting Marina's
+`args: [serve]`, apply it, and verify the effective task budgets and authority.
+Restore `args: [serve, --intake-enabled=false]` after the exercises. Disabling
+intake does not stop already journaled executions; settle those first. Complete
+RUN-09 and RUN-11 through RUN-16 and record RUN-18 before relying on autonomous
+work; RUN-10 and RUN-17 are retired.
 
 ## Verified on 2026-09-17
 

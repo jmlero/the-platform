@@ -71,7 +71,7 @@ func TestGatewayCredentialRotationAndEmptyFilesFailClosed(t *testing.T) {
 				if r.Header.Get("Authorization") != header {
 					t.Error("wrong rotated credential")
 				}
-				return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"usage":{"input_tokens":2,"output_tokens":1}}`))}, nil
+				return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"status":"completed","usage":{"input_tokens":2,"output_tokens":1}}`))}, nil
 			})}
 			server := New(Config{SigningKey: key, SourceURL: spec.RepositoryURI, SourceTokenFile: path, Model: Model{Endpoint: "https://model.example/v1", Name: "fixture", TokenFile: path, MaxOutputTokens: 10}}, journal, store, p, client)
 			for _, token := range []string{"first-private-token", "replacement-private-token", ""} {

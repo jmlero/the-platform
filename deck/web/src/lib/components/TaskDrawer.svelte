@@ -17,7 +17,7 @@
     ShieldCheck,
     X
   } from '@lucide/svelte';
-  import { eventLabel, formatDate, initials, timeAgo } from '$lib/format';
+  import { deadlineForInput, deadlineFromInput, eventLabel, formatDate, initials, timeAgo } from '$lib/format';
   import { api } from '$lib/api';
   import type {
     Agent,
@@ -86,7 +86,7 @@
     currency = task.budget.currency;
     maxConcurrency = task.budget.max_concurrency;
     authority = task.budget.authority.join(', ');
-    deadline = task.budget.deadline_at ? new Date(task.budget.deadline_at).toISOString().slice(0, 16) : '';
+    deadline = deadlineForInput(task.budget.deadline_at);
     editing = false;
     tab = 'overview';
     error = '';
@@ -137,7 +137,7 @@
         budget_minutes: Number(budgetMinutes),
         budget: {
           time_minutes: Number(budgetMinutes),
-          ...(deadline ? { deadline_at: new Date(deadline).getTime() } : {}),
+          deadline_at: deadlineFromInput(deadline, task.budget.deadline_at),
           max_attempts: Number(maxAttempts),
           max_tokens: Number(maxTokens),
           max_cost_minor: Number(maxCostMinor),

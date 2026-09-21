@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -263,19 +264,24 @@ func (store *Store) CountActiveExecutionsForProject(ctx context.Context, project
 }
 
 const outboxColumns = `id, execution_id, sequence, kind, idempotency_key, payload_json, status,
-	attempts, next_eligible_at, last_error_class, exhaustion_reason, created_at, published_at`
+	attempts, next_eligible_at, last_error_class, exhaustion_reason, created_at, published_at, guard_json`
 
 func scanOutbox(source scanner) (execution.OutboxItem, error) {
 	var item execution.OutboxItem
-	var encoded string
+	var encoded, guard string
 	var next, published sql.NullInt64
 	var created int64
 	err := source.Scan(&item.ID, &item.ExecutionID, &item.Sequence, &item.Kind, &item.IdempotencyKey,
-		&encoded, &item.Status, &item.Attempts, &next, &item.LastErrorClass, &item.ExhaustionReason, &created, &published)
+		&encoded, &item.Status, &item.Attempts, &next, &item.LastErrorClass, &item.ExhaustionReason, &created, &published, &guard)
 	if err != nil {
 		return item, wrapNotFound(err)
 	}
 	item.Payload = unmarshalPayload(encoded)
+	if guard != "" {
+		if err := json.Unmarshal([]byte(guard), &item.Guard); err != nil {
+			return item, fmt.Errorf("decode outbox guard: %w", err)
+		}
+	}
 	item.CreatedAt = time.UnixMilli(created).UTC()
 	if next.Valid {
 		v := time.UnixMilli(next.Int64).UTC()
@@ -332,6 +338,30 @@ func (store *Store) EnqueueOutbox(ctx context.Context, executionID string, input
 
 func marshalJSONMap(value map[string]any) string { encoded, _ := marshalPayload(value); return encoded }
 
+func (store *Store) SaveOutboxGuard(ctx context.Context, id string, expected *execution.OutboxGuard, guard execution.OutboxGuard) (execution.OutboxItem, error) {
+	if guard.AgentID == "" || guard.ExpectedVersion < 1 || guard.FenceToken < 1 {
+		return execution.OutboxItem{}, execution.ErrInvalidInput
+	}
+	previous := ""
+	if expected != nil {
+		encoded, _ := json.Marshal(expected)
+		previous = string(encoded)
+	}
+	encoded, err := json.Marshal(guard)
+	if err != nil {
+		return execution.OutboxItem{}, err
+	}
+	result, err := store.db.ExecContext(ctx, `UPDATE provider_outbox SET guard_json = ?
+		WHERE id = ? AND status = 'pending' AND guard_json = ?`, string(encoded), id, previous)
+	if err != nil {
+		return execution.OutboxItem{}, err
+	}
+	if rows, err := result.RowsAffected(); err != nil || rows != 1 {
+		return execution.OutboxItem{}, execution.ErrConflict
+	}
+	return scanOutbox(store.db.QueryRowContext(ctx, "SELECT "+outboxColumns+" FROM provider_outbox WHERE id = ?", id))
+}
+
 func (store *Store) ListReadyOutbox(ctx context.Context, limit int) ([]execution.OutboxItem, error) {
 	limit = normalizedLimit(limit)
 	rows, err := store.db.QueryContext(ctx, "SELECT "+prefixedOutboxColumns("current")+` FROM provider_outbox current
@@ -382,9 +412,8 @@ func (store *Store) CompleteOutboxPublication(
 	leaseExpiresAt time.Time,
 	reason string,
 ) (execution.Execution, error) {
-	// Deck hashes the mutation guard into the idempotency digest, so the
-	// authority advance and published mark must commit together. Otherwise a
-	// retry sends the same key with a new guard and stalls the stream.
+	// Advance the local authority and publication together. The separately
+	// persisted guard still permits exact replay if either commit is interrupted.
 	tx, err := store.db.BeginTx(ctx, nil)
 	if err != nil {
 		return execution.Execution{}, fmt.Errorf("begin outbox publication: %w", err)

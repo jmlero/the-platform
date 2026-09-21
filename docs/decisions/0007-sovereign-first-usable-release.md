@@ -54,6 +54,14 @@ Keep the remaining task IDs stable and retire RUN-10 without reusing its ID.
 The broader always-on product direction is unchanged; local evidence must identify
 its host and does not claim operation while that host is asleep or powered off.
 
+### Worker-failure acceptance scope clarification — 2026-09-18
+
+The operator removed RUN-17: deliberately failing or evicting an active worker
+and demonstrating a follow-up task is not a first-release acceptance requirement.
+Retire its ID without reusing it. The remaining live exercises are RUN-09 and
+RUN-11 through RUN-16; RUN-18 records their results. This removes that acceptance
+exercise, not the invariant that a failed worker cannot produce false completion.
+
 ## First implementation
 
 One configured Codex CLI image uses one explicit Responses-compatible model
