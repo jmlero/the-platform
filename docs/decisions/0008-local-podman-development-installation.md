@@ -1,6 +1,6 @@
 # Local Podman development installation
 
-- Status: Accepted for local development
+- Status: accepted for local development; repository and two-workload acceptance later passed
 - Date: 2026-09-09
 - Scope: Deck and Marina installation
 
@@ -19,17 +19,19 @@ credentials outside the repository. Trust only the Deck leaf certificate for
 localhost in the operator's user keychain. A user LaunchAgent can start the
 existing VM and cluster independently of an interactive terminal.
 
-Repository and model selection remain explicit. The local profile runs Marina
-without a workflow and with new work intake disabled until those choices and
-their credentials/checks are supplied. Disabling intake preserves recovery of
-already journaled acquisitions, commands, and progress; it is not a pause switch.
-TLS must therefore be configurable without enabling repository execution.
+Repository and model selection remain explicit. The base local profile runs
+Marina with new work intake disabled; private overlays enable the repository and
+diagnostic workflows only after their credentials, checks, profiles, and budgets
+are supplied. Disabling intake preserves recovery of already journaled work; it
+is not a pause switch. TLS is configurable without enabling execution.
 
-This installation validates packaging, public HTTP integration, persistent stores,
-worker tooling, and network isolation. It does not validate model compatibility,
-repository mutations, or the complete autonomous workflow. It also does not
-satisfy the always-on requirement while the host Mac is asleep or off. The
-production cluster, backup policy, and full workflow acceptance remain open.
+The initial installation validated packaging, public HTTP integration, persistent
+stores, worker tooling, and network isolation. Later local exercises validated
+the repository and diagnostic workflows; see the
+[repository report](../validation/poc-mvp-2026-09-21.md) and
+[two-workload report](../validation/agent-11-13-2026-09-22.md). The profile still
+does not satisfy the always-on goal while the host Mac is asleep or off. GCP
+workflow acceptance and backup/restore remain outside this local result.
 
 See the [local installation guide](../../deploy/kubernetes/local-podman/README.md)
-for operation, reproduction, and the remaining execution prerequisites.
+for operation, reproduction, and revalidation requirements.

@@ -38,9 +38,9 @@ The following implementations and reusable foundations are present; the configur
 - Ordered command consumption in which cancellation and authority reduction fence ordinary progress before acknowledgement.
 - Time-bounded external calls, persisted classified backoff and exhaustion, non-overlapping cycles, lease safety windows, and durable normalized progress/failure projection.
 - A provider-neutral runtime lifecycle and immutable specification, with durable attempt, usage, artifact, and cleanup records plus explicit ambiguous-start and orphan recovery decisions.
-- Exact-revision local Git materialization, immutable provenance-rich context packages, and typed versioned policy snapshots with bounded authority and budget evaluation.
-- Structured Deck plan-revision submission and restart-safe approval/change-request reconciliation through durable checkpoints.
-- Narrow source-control and deterministic verification contracts, including repository-owned check manifests, evidence invalidation, and risk-based independent-review requirements.
+- Exact-revision worker Git checkout, immutable provenance-rich context packages, and typed versioned policy snapshots with bounded authority and budget evaluation.
+- Structured Deck plan-revision submission and restart-safe approval/change-request reconciliation through durable workflow checkpoints.
+- Guarded source-control publication and deterministic verification through configured checks, clean workers, and source-bound evidence.
 - Validated, correlated, classified, and deduplicated operational signals whose raw text remains untrusted and grants no mutation authority.
 - An offline `diagnostics` command that exports a deterministic, conservatively redacted journal view without exposing a new work-control API.
 
@@ -200,12 +200,9 @@ internal/deck/          Deck adapter
 internal/execution/        Durable execution model and recovery decisions
 internal/httpserver/       Marina liveness and readiness HTTP surface
 internal/journal/sqlite/   Transactional execution journal and migrations
-internal/planning/         Versioned plan and decision reconciliation
 internal/runtime/          Provider-neutral runtime lifecycle and recovery semantics
 internal/contextpack/      Immutable context manifests and trust boundaries
 internal/policy/           Versioned authority and budget evaluator
-internal/workspace/        Exact-revision local materialization
-internal/verification/     Repository checks and source-bound evidence evaluation
 internal/sourcecontrol/    Guarded provider-neutral source-control port
 internal/signals/          Validated observations and diagnostic-work boundary
 internal/reconcile/        Restart planning, ownership checks, and recovery control

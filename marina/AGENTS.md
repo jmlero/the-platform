@@ -120,35 +120,31 @@ Do not assume:
 
 Every new dependency or architectural commitment must earn its place against the first proof and the product principles.
 
-## Prioritize the first proof
+## Preserve the supported proof
 
 Prefer work that advances this complete repository workflow. Current acceptance
 uses local Podman/Kind with the Mac running and Deck on localhost; RUN-10 and
 second-device testing were removed from the local acceptance scope by the operator.
 
-1. The operator creates a bounded task through the Deck plugin.
+1. The operator creates a bounded task through Deck.
 2. Marina claims it with a lease and persists the plan and execution state.
 3. A runtime adapter starts an isolated Kubernetes workload at a pinned repository revision.
-4. The agent receives the frozen task and pinned repository and implements the change; the broader context-package helpers still need workflow integration.
+4. The agent receives the frozen task, repository binding, and selected immutable context, then implements the change.
 5. A separate clean verification Job produces deterministic check evidence. Independent semantic review is future work.
 6. Marina creates a pull request and observes required CI at its current head. Failed checks or requested changes block; automatic revision loops remain future work.
 7. Deck shows truthful state, cost, decisions, artifacts, and evidence across restarts.
 8. The run stops at a PR ready for human review or reports a focused blocker. It does not merge or deploy.
 
-Prefer one working vertical slice over broad scaffolding for later maturity stages.
+Prefer changes that strengthen this vertical slice or the next accepted backlog
+item over scaffolding for a hypothetical maturity stage.
 
-The next approved extension, AGENT-02 through AGENT-06, is implemented as a
-bounded diagnostic PoC using LangChain OSS. Follow the
-[workload profiles](docs/workloads/profiles-v1.md) and
-[local validation boundary](../docs/validation/agent-02-06-2026-09-21.md): share
-durable controls, keep repository steps out of analysis, and independently check
-source-bound reports. AGENT-07 through AGENT-10 add pinned API invocation,
-selected context, an attempt-scoped context-read tool and result/usage inspection;
-follow [decision 0016](../docs/decisions/0016-workload-invocation-and-context-tool.md).
-AGENT-11 through AGENT-13 complete the shared failure matrix and local MVP proof;
-follow the [installation guide](../deploy/kubernetes/agent-platform/README.md)
-and [evidence and limits](../docs/validation/agent-11-13-2026-09-22.md). Interrupted
-worker I/O may block; harness-step checkpoint/replay is not supported.
+The same foundation also runs one pinned LangChain diagnostic workload. Follow
+the [workload profiles](docs/workloads/profiles-v1.md),
+[decision 0016](../docs/decisions/0016-workload-invocation-and-context-tool.md),
+and the [installation guide](../deploy/kubernetes/agent-platform/README.md).
+Repository steps stay out of analysis, and each workload keeps its own evidence
+rules. Interrupted worker I/O may block; harness-step checkpoint/replay is not
+supported.
 
 ## Engineering workflow
 
@@ -181,7 +177,7 @@ worker I/O may block; harness-step checkpoint/replay is not supported.
 ### Documentation
 
 - Keep implemented behavior, proposed behavior, and future direction clearly separated.
-- Record consequential architecture decisions and their alternatives in a dedicated decision document once a documentation structure exists.
+- Record consequential architecture decisions and alternatives under `docs/decisions/`.
 - Update the vision only for product-direction changes, not ordinary implementation details.
 - Update `AGENTS.md` when repository-wide working constraints change.
 
@@ -196,11 +192,10 @@ worker I/O may block; harness-step checkpoint/replay is not supported.
 
 The following remain deliberately unresolved. Keep choices local and reversible until the user decides them:
 
-- Which operator-owned Kubernetes installation validates the first release.
-- Which runtime will validate portability after the first Kubernetes-hosted harness.
 - Which production feedback source will close the first operational loop.
 - Which actions must always require a human decision.
 - Which evidence and operating history permit autonomy beyond a PR ready for human review.
+- When backup/restore work becomes an active operator requirement.
 
 When a task requires one of these decisions, present the concrete trade-off and a recommendation. Do not let a library, framework, or provider selection decide it accidentally.
 

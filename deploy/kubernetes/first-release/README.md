@@ -17,21 +17,21 @@ and artifact stores. Backups and restore drills are deferred for this pilot.
 The generic configuration instructions below remain applicable to other installations.
 Image builds and cluster setup may download required dependencies normally; the
 running platform requires only GitHub services and OpenRouter externally. Package
-worker/check dependencies before execution. The exact OpenRouter model, repository,
-and credentials still need configuration; these choices do not enable intake.
+worker/check dependencies before execution. Each installation must configure and
+validate its exact model, repository, credentials, and budget; preparing those
+values does not enable intake.
 
-The [2026-09-17 local acceptance report](../../../docs/validation/run-01-18-2026-09-17.md)
-records completed installation/image/network/restart checks and the remaining
-live-run prerequisites. The private disposable repository is
+The [2026-09-21 local acceptance report](../../../docs/validation/poc-mvp-2026-09-21.md)
+records the complete installation, network, live workflow, restart, cancellation,
+failure, and budget results. The private disposable repository is
 [jmlero/marina-acceptance](https://github.com/jmlero/marina-acceptance); its
 [fixture source](acceptance-repository/) and pinned CI workflow are maintained
 here. [NETWORK.md](NETWORK.md) enumerates the selected destinations, data flows,
 DNS/IP enforcement limits and reproducible local probes.
 
-Use the [named live acceptance exercises](ACCEPTANCE.md) for RUN-09, RUN-11–16
-and the RUN-18 report (RUN-10 and RUN-17 are retired), and the
+Use the acceptance procedure below for a new installation and the
 [operations runbook](OPERATIONS.md) for certificate renewal, credential rotation,
-artifact retention and failure recovery. `python3 scripts/check-installation.py
+artifact retention, and failure recovery. `python3 scripts/check-installation.py
 <private-installation>` reports configuration blockers without exposing Secret
 data or changing intake. A passing preflight does not replace live acceptance.
 

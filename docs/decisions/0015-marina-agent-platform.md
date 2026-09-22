@@ -1,6 +1,6 @@
 # Decision 0015: Extend Marina into a bounded Kubernetes agent platform
 
-- Status: accepted; AGENT-01 through AGENT-06 PoC and AGENT-07 through AGENT-10 implementation complete; AGENT-11 through AGENT-13 pending
+- Status: accepted; AGENT-01 through AGENT-13 complete within the bounded two-workload scope
 - Date: 2026-09-21
 - Scope: Marina execution, Deck governance, and AGENT-01 through AGENT-13
 
@@ -90,11 +90,12 @@ and deployed v2 tool/context use, with safe-blocker recovery limits explicit.
 
 ## Delivery boundaries
 
-The [TODO](../../TODO.md#agent-platform-poc-and-mvp-on-kubernetes) defines two
-gates: AGENT-01 through AGENT-06 prove that two workloads and different harnesses
-share the execution foundation; AGENT-07 through AGENT-13 make that bounded
-platform usable through a documented API, governed tool/context access,
-inspectable outputs, failure recovery and a repeatable installation.
+The completed AGENT-01 through AGENT-06 gate proved that two workloads and
+different harnesses share the execution foundation. AGENT-07 through AGENT-13
+made that bounded platform usable through a documented API, governed
+tool/context access, inspectable outputs, failure recovery, and a repeatable
+installation. [TODO.md](../../TODO.md#completed-milestones) retains the milestone
+index; the validation reports keep the detailed evidence.
 
 Start with one operator, one active task, Kubernetes Jobs and the supported Deck
 pair. Interactive sessions, pause/resume, headless packaging, multi-tenancy, HA,

@@ -1,110 +1,89 @@
 # The Platform
 
-The Platform has two main components: **Deck** and **Marina**. They are independently deployable services that form one governed autonomous-software system. The monorepo also includes `platformctl`, a standalone operator client.
+The Platform is an operator-controlled system for running bounded agent work on
+Kubernetes. It has three independently built components:
 
-- [Deck](deck/README.md) is the human-facing work-control surface and authoritative task, decision, command, event, budget, and evidence ledger.
-- [Marina](marina/README.md) is the installable, Kubernetes-native, and extensible factory layer that reconciles bounded work, durable execution, policy, runtimes, verification, and delivery.
-- [Platform CLI](cli/README.md) is the stateless `platformctl` operator client for Deck's public HTTP/JSON API.
+- [Deck](deck/README.md) is the human-facing task, decision, command, and evidence
+  ledger.
+- [Marina](marina/README.md) executes authorized work, recovers it across
+  restarts, and publishes results back to Deck.
+- [platformctl](cli/README.md) is a stateless client for Deck's public HTTP/JSON
+  API.
 
-They evolve together through a versioned HTTP/JSON contract while retaining separate binaries, Go modules, container images, databases, service identities, deployment lifecycles, and product responsibilities. Neither product imports the other's internal packages.
+Deck and Marina use separate binaries, stores, identities, and deployments.
+They integrate only through the versioned contract described in
+[contracts/README.md](contracts/README.md).
 
-Open the [HTML project summary](docs/project-summary.html) in a browser for diagrams of the two components, their workflow, technology, and current focus.
+## Supported workflows
 
-The current release focuses on one outcome: an authorized repository fix becomes
-a verified pull request for human review, running on Kubernetes infrastructure
-you control. Deck opens with attention, active work and results. Marina runs
-one coding Job and a separate verification Job, with explicit Git/model endpoints,
-durable artifacts and bounded authority. The supported pair communicates over
-HTTP/JSON; standalone headless and in-process packaging are future work. The
-repository workflow supports cancellation, one implementation and one separate
-verification attempt. Failed checks or requested changes block; pause/resume,
-automatic revision loops, semantic review, merge and deployment authority are
-not implemented. A completed PR is ready for human review, not automatically
-approved for merge. See the [paired installation and
-acceptance guide](deploy/kubernetes/first-release/README.md).
+The repository workflow turns one authorized task into either a verified pull
+request for human review or a truthful blocker:
 
-The agent-platform PoC also runs one read-only diagnostic fixture with a pinned
-LangChain worker, sharing Marina's lifecycle, budgets and isolation. It produces
-an independently validated report without a repository or PR. Both harnesses
-passed [local Kubernetes acceptance](docs/validation/agent-02-06-2026-09-21.md).
-The [profile contract](marina/docs/workloads/profiles-v1.md) and
-[API client guide](marina/docs/workloads/api-v1.md) now cover installed-profile
-discovery and invocation, selected immutable context, a governed context-read
-tool, and shared progress/usage/evidence inspection. Their
-[validation report](docs/validation/agent-07-10-2026-09-21.md) distinguishes
-deterministic checks and observed isolation from deployed live-model acceptance.
-The [two-workload installation guide](deploy/kubernetes/agent-platform/README.md)
-and [MVP acceptance](docs/validation/agent-11-13-2026-09-22.md) complete AGENT-11
-through AGENT-13 with live API-invoked Jobs, shared failure checks and preserved
-stores. Interrupted worker I/O can still block; the report states that boundary.
+```text
+task and budget -> approved plan -> coding Job -> verification Job
+                -> pull request and CI -> evidence in Deck
+```
 
-For a Mac development installation, use the [local Podman profile](deploy/kubernetes/local-podman/README.md).
-It runs both services with TLS and persistent storage before repository/model
-configuration, with new task intake explicitly disabled.
+It supports one repository and one active task, with one implementation attempt
+and one separate deterministic verification attempt. Cancellation waits for
+worker termination. Failed checks, changed pull-request heads, and requested
+changes block. Pause/resume, automatic revision loops, semantic review, merge,
+and deployment authority are outside the supported workflow.
 
-Development and testing may also use the existing GKE Autopilot cluster
-`autopilot` in project `jmlero`, region `europe-west3`. Its infrastructure and
-operating instructions live in `/Users/jmolero/personal/github/infra-gcp`.
-See [decision 0010](docs/decisions/0010-initial-installation-services.md) for
-environment selection, access, and the GCP budget boundary.
+The same installation also supports one pinned diagnostic-analysis profile. It
+runs a LangChain worker against a fixed immutable fixture, permits one governed
+read-only context tool, and independently validates the report. This is a bounded
+second workload, not general agent hosting.
 
-Existing installations should follow the [Deck naming upgrade](docs/decisions/0012-deck-component-name.md)
-when updating binaries, configuration and persistent storage.
+Both workflows passed local Podman/Kind acceptance. See the
+[repository-workflow report](docs/validation/poc-mvp-2026-09-21.md), the
+[two-workload MVP report](docs/validation/agent-11-13-2026-09-22.md), and the
+[validation index](docs/README.md).
 
-Read the [Marina vision](VISION.md), [Deck vision](VISION_DECK.md), and [dark-factory definition](DARK_FACTORY.md) for product direction; [ARCHITECTURE.md](ARCHITECTURE.md) for joint boundaries and failure semantics; and [TODO.md](TODO.md) for the ordered implementation backlog. Consequential cross-product choices are recorded in the [monorepo decision](docs/decisions/0001-product-boundary-monorepo.md), [operator CLI decision](docs/decisions/0002-standalone-operator-cli.md), [service-authentication decision](docs/decisions/0003-service-authentication.md), [Milestone 1 safety decision](docs/decisions/0004-milestone-one-work-control-safety.md), [operator-authentication decision](docs/decisions/0005-operator-authentication.md), and [versioned Deck-ledger decision](docs/decisions/0006-versioned-deck-ledger.md).
+## Start here
 
-An illustrative pre-monorepo architecture export is preserved under [docs/architecture/](docs/architecture/); [ARCHITECTURE.md](ARCHITECTURE.md) is authoritative for current packaging and boundaries.
+- [VISION.md](VISION.md): product direction and scope
+- [ARCHITECTURE.md](ARCHITECTURE.md): ownership, invariants, lifecycle, and
+  failure behavior
+- [TODO.md](TODO.md): active backlog and completed milestone index
+- [Local Podman/Kind](deploy/kubernetes/local-podman/README.md): development
+  installation
+- [Repository workflow](deploy/kubernetes/first-release/README.md): configuration
+  and acceptance
+- [Two-workload installation](deploy/kubernetes/agent-platform/README.md):
+  diagnostic profile and upgrade path
+
+Consequential choices are recorded under [docs/decisions/](docs/decisions/).
+Those records explain why a choice was made; the documents above describe the
+current system.
 
 ## Development
 
-Requirements:
-
-- Go 1.26+
-- Node.js 24+
-- npm 11+
-- Python 3 and OpenSSL (installation configuration checks)
-
-Run the complete deterministic checks from the repository root:
+Requirements: Go 1.26+, Node.js 24+, npm 11+, Python 3, and OpenSSL.
 
 ```bash
 make check
-```
-
-Exercise Marina's consumer contract against a freshly built real Deck process, isolated database, and ephemeral scoped service credential:
-
-```bash
 make conformance
 ```
 
-Other useful commands:
+`make check` runs the deterministic product and installation checks.
+`make conformance` builds a real Deck process and exercises it through the CLI
+and Marina consumer contracts. It does not replace live model, Git, Kubernetes,
+or browser acceptance.
 
-```bash
-make build
-make test
-make vet
-make fmt
-```
+Other useful commands are `make build`, `make test`, `make vet`, and `make fmt`.
+The root `go.work` joins three independent Go modules; it does not create a root
+module.
 
-Project-local Makefiles remain usable from `cli/`, `deck/`, and `marina/`. The root [`go.work`](go.work) provides editor and local workspace integration without turning the projects into one Go module.
-
-## Layout
+## Repository layout
 
 ```text
-cli/                          Stateless platformctl operator client
-deck/                         Deck application, frontend, API, and database
-marina/                       Marina control service, journal, and controllers
-deck/api/                     Canonical Deck work-control OpenAPI and v1 fixtures
-marina/internal/workcontrol/  Provider-neutral consumer ports and conformance suite
-docs/                         Cross-product decisions and architecture artifacts
-VISION.md                     Marina product vision
-VISION_DECK.md                Deck product vision
-DARK_FACTORY.md               Operational definition of the north star
-ARCHITECTURE.md               Joint source-of-truth boundaries and failure semantics
-TODO.md                       Prioritized cross-product delivery backlog
-go.work                       Local workspace over three independent Go modules
+cli/                          platformctl
+deck/                         work-control service and web UI
+deck/api/                     canonical OpenAPI and wire fixtures
+marina/                       execution service and worker harnesses
+marina/internal/workcontrol/  provider-neutral consumer contract
+deploy/kubernetes/            installation profiles and runbooks
+docs/decisions/               architecture and product decisions
+docs/validation/              redacted acceptance evidence
 ```
-
-`marina serve --config workflow.json` enables the bounded repository workflow.
-Without that configuration, Marina retains its control-only compatibility mode.
-Real-process tests verify the workflow with deterministic Git/runtime doubles;
-the selected Kubernetes installation and coding model still need acceptance testing.

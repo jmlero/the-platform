@@ -1,6 +1,6 @@
 # Decision 0007: Own the execution system and focus the first usable release
 
-- Status: accepted product direction; implementation and deployment gates remain explicit
+- Status: accepted; the bounded local release gate passed on 2026-09-21
 - Date: 2026-09-09
 - Scope: Deck and Marina
 

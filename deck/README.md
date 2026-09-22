@@ -1,111 +1,80 @@
 # Deck
 
-Deck is the task authorization, decision and results surface for work carried
-out by Marina. Its default overview separates work needing attention, active
-work and reviewable results. Operators can approve a plan, cancel a run, inspect
-the PR and download verification evidence.
+Deck is the operator surface and authoritative work-control ledger for tasks run
+by Marina. It stores human intent, budgets, runs, plans, decisions, commands,
+events, evidence metadata, project context, and conversation history in SQLite.
+It does not execute workers or own Marina's journal.
 
-Use the [paired installation guide](../deploy/kubernetes/first-release/README.md)
-for the first repository workflow. It enables authenticated operator sessions,
-TLS, separate service credentials and digest-checked access to Marina's artifact
-store. Channel and operational APIs remain compatible; their expansion is deferred.
+The default overview separates work needing attention, active work, and results.
+Operators can create and authorize tasks, approve a plan, cancel a run, inspect
+its immutable inputs and usage, open its pull request, and download
+digest-checked evidence.
 
-This directory contains the first working prototype. Read the root [Deck vision](../VISION_DECK.md) for the product direction and [ARCHITECTURE.md](../ARCHITECTURE.md) for its boundary with Marina.
+Use the [paired workflow guide](../deploy/kubernetes/first-release/README.md) for
+repository work and the
+[two-workload guide](../deploy/kubernetes/agent-platform/README.md) for the pinned
+diagnostic profile. [VISION_DECK.md](../VISION_DECK.md) describes product
+direction; [ARCHITECTURE.md](../ARCHITECTURE.md) defines the Deck–Marina boundary.
 
-## What the prototype demonstrates
+## Current behavior
 
-- Persistent tasks backed by SQLite.
-- Optional authenticated human sessions backed by SQLite with CSRF-protected browser mutations.
-- Backlog refinement and a Kanban-style execution board.
-- Atomic task claims with expiring leases.
-- A durable distinction between a task and its execution runs.
-- Structured task budgets covering time, deadline, attempts, tokens, cost, concurrency, and explicit authority.
-- Agent registration, heartbeats, immutable numbered plan revisions, progress, and verification.
-- Focused, expiring human decisions bound to one run and plan revision; change requests preserve history and reopen planning.
-- Structured, source-bound evidence as the public completion gate, with a generated Markdown verification report.
-- Project-scoped human and agent channels with canonical ledger references and explicit promotion into a bounded task.
-- Append-only events streamed live to the browser with SSE.
-- Verification artifacts and their immutable metadata attached to completed runs.
-- Provider connectivity, synchronization, lease, dependency, and rejected-projection truth derived from ledger facts.
-- Provider-neutral environment, rollout, observation-window, rollback, and policy records.
-- A continuous operator trail from signal and decision through change, delivery, observation, verification, and outcome.
-- Deterministic, versioned project export and transactional import into an empty target project.
-- Optional service authentication with stable identities and explicit project and capability grants.
-- Durable idempotency records for claims and every run mutation.
-- Monotonic run versions and ownership fence tokens required on every service mutation.
-- Frozen task-version and acceptance-criteria digests on claimed runs.
-- Claim recovery and paginated active-run discovery for stable Marina controllers.
-- Durable command records and ordered acknowledgements. The configured Marina repository workflow implements cancel and rejects pause/resume, replan, retry, and reduce-authority; recording a command does not establish runtime support.
-- Producer-event and per-execution sequence deduplication for Marina projections.
-- A restart-resumable demo agent named **Atlas**.
-- A compiled frontend embedded in one Go application binary.
+Deck provides:
+
+- persistent projects, tasks, structured budgets, runs, plan revisions,
+  decisions, commands, events, channels, artifacts, and evidence;
+- optional operator sessions with CSRF-protected browser mutations;
+- scoped service identities and explicit project/capability grants;
+- atomic claims, lease expiry, monotonic versions, fence tokens, and idempotent
+  replay of successful mutations;
+- immutable task, acceptance-criteria, workload-profile, repository, and context
+  selections for active runs;
+- project-authored context sources and selected conversation excerpts;
+- versioned repository-association requests reconciled by Marina;
+- live server-sent event updates and paginated channel history;
+- deterministic project export/import; and
+- an embedded Svelte frontend in the Go binary.
+
+The repository workflow supports cancellation and ends at a verified PR for human
+review or a blocker. Deck can record additional command types, but the current
+Marina workflow rejects pause/resume, replan, retry, and authority reduction.
+Deck also exposes installed workload discovery and idempotent invocation for the
+bounded repository and diagnostic profiles.
 
 ## Quick start
 
-Requirements:
-
-- Go 1.26+
-- Node.js 24+
-- npm 11+
-
-Install, build, and run:
+Requirements: Go 1.26+, Node.js 24+, and npm 11+.
 
 ```bash
 make setup
 make run
 ```
 
-Open [http://localhost:8080](http://localhost:8080).
+Open [http://localhost:8080](http://localhost:8080). A new development database
+seeds a demo workspace and the Atlas demo agent. Runtime data defaults to
+`./data/deck.db`.
 
-On a new database Deck seeds a small demo workspace. Atlas claims the ready task and submits a plan. Open **Decisions**, approve the plan, and return to **Agent factory** to watch the durable lifecycle progress through execution, verification, and completion.
-
-Runtime data is stored in `./data/deck.db` by default.
-
-When updating an existing installation, follow the [Deck naming upgrade](../docs/decisions/0012-deck-component-name.md)
-to retain its database, credentials and persistent volume.
-
-## Frontend design
-
-The frontend uses **Harbor**, a light workspace with navy navigation and ocean
-teal accents. The [design system and master page template](web/DESIGN.md) define
-the palette, typography, shared components, responsive layout, and interaction
-rules for Deck and the wider Deck–Marina visual identity.
-
-## Development
-
-Run the backend and frontend in separate terminals:
+For separate backend and frontend processes:
 
 ```bash
 make dev-api
-```
-
-```bash
 make dev-web
 ```
 
-The Vite server runs at [http://localhost:5173](http://localhost:5173) and proxies API requests to the Go server on port 8080.
+The Vite frontend runs at [http://localhost:5173](http://localhost:5173) and
+proxies the API on port 8080.
 
 Useful commands:
 
 ```bash
-make check    # Go vet and Svelte diagnostics
-make test     # Go and frontend tests
-make build    # Static frontend plus one Go binary
-make image    # Build the Deck container image
-make manifests # Render the Kubernetes deployment base
+make check
+make test
+make build
+make image
+make manifests
 ```
 
-## Container
-
-```bash
-docker compose up --build
-```
-
-The image runs as an unprivileged user and stores its SQLite database in the `/data` volume.
-
-For an initial Kubernetes deployment, run a single replica with a persistent volume mounted at `/data`. SQLite WAL mode is intentionally a single-host design. A future multi-replica mode should introduce PostgreSQL rather than share the SQLite file across hosts.
-
-The hardened single-replica base is under [deploy/kubernetes/](deploy/kubernetes/). Render it with `make manifests`; use an environment overlay to select an immutable image, storage class, service-authentication Secret, encrypted transport, backup mechanism, and authenticated human ingress.
+The frontend design tokens and interaction rules are in
+[web/DESIGN.md](web/DESIGN.md).
 
 ## Configuration
 
@@ -115,159 +84,100 @@ The hardened single-replica base is under [deploy/kubernetes/](deploy/kubernetes
 | `DECK_DATA_DIR` | `./data` | Directory containing `deck.db` |
 | `DECK_DEMO_AGENT` | `true` | Seed demo tasks and run Atlas |
 | `DECK_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, or `error` |
-| `DECK_SERVICE_AUTH_FILE` | unset | Version-1 service-identity policy for authenticated machine API operations |
-| `DECK_OPERATOR_AUTH_FILE` | unset | Version-1 operator-token fingerprint policy used to create human sessions |
-| `DECK_OPERATOR_COOKIE_SECURE` | `true` | Require HTTPS for operator cookies; set `false` only for trusted local HTTP development |
+| `DECK_SERVICE_AUTH_FILE` | unset | Service identities and capability grants |
+| `DECK_OPERATOR_AUTH_FILE` | unset | Operator IDs and token fingerprints |
+| `DECK_OPERATOR_COOKIE_SECURE` | `true` | Require HTTPS for session cookies |
 
-## Operator authentication
+When operator authentication is enabled, the policy contains a stable operator
+ID and one or more SHA-256 fingerprints of tokens with at least 256 bits of
+entropy. Login exchanges the raw token for a 12-hour server-side session. Deck
+persists only digests of session and CSRF secrets, reloads the policy for each
+login/readiness check, and supports overlapping fingerprints during rotation.
+Keep the raw value in a secret file or manager. Use unauthenticated mode only for
+trusted loopback development. See
+[decision 0005](../docs/decisions/0005-operator-authentication.md).
 
-For an exposed installation, configure `DECK_OPERATOR_AUTH_FILE` with a stable operator ID and the SHA-256 fingerprint of a token containing at least 256 bits of cryptographically random material:
+Service authentication uses the same fingerprint pattern plus explicit project
+and capability grants. Deck reloads the policy on every request, rejects
+wildcards, and requires TLS outside loopback. Marina's credential cannot create
+an operator session. See
+[decision 0003](../docs/decisions/0003-service-authentication.md).
 
-```json
-{
-  "version": 1,
-  "operators": [
-    {
-      "id": "operator-primary",
-      "token_sha256": ["<64-lowercase-hex-characters>"]
-    }
-  ]
-}
-```
+## Public API
 
-The login page exchanges the raw token for a 12-hour server-side session. Deck persists only SHA-256 digests of the session and CSRF secrets, sets a host-only `HttpOnly` session cookie with `SameSite=Strict`, rejects cross-origin authenticated browser requests, and requires the browser to echo the separate CSRF cookie in `X-CSRF-Token` for mutations. Sessions survive process restart and are deleted on logout.
+The canonical machine contract is [api/openapi.yaml](api/openapi.yaml).
+`GET /api/v1/provider` publishes the protocol version, server time, and
+implemented capabilities.
 
-Deck reloads the policy for every login and readiness check, so token fingerprints can overlap during rotation without changing the operator ID. Existing sessions remain valid until logout or expiry. Keep the raw token in a secret manager or mounted secret file, never in this repository or Deck data. Outside trusted loopback, use TLS and leave secure cookies enabled.
+Every claim and run mutation requires `Idempotency-Key`. Deck stores the key,
+normalized request digest, and successful result in the same transaction as the
+state change. An exact retry returns the original result; a changed payload
+returns `409 conflict`. Active-run mutations also require the stable logical
+agent ID, exact run version, and current fence token.
 
-When `DECK_OPERATOR_AUTH_FILE` is unset, the local prototype keeps its original unauthenticated operator workflow. That mode must not be exposed to an untrusted network. The complete rationale is in [decision 0005](../docs/decisions/0005-operator-authentication.md).
+The normal service lifecycle is:
 
-## Service authentication
+1. register a logical agent and inspect provider capabilities;
+2. discover and atomically claim ready work;
+3. renew the lease and submit an immutable plan revision;
+4. wait for any revision-bound decision and start the approved run;
+5. publish progress, usage, operational state, artifacts, and evidence; and
+6. complete or block using the current evidence IDs.
 
-Set `DECK_SERVICE_AUTH_FILE` before connecting Marina outside the trusted local prototype. The JSON policy maps one or more SHA-256 token fingerprints to a stable identity, explicit Deck project IDs, and explicit protocol capabilities:
+Commands are durable records. Marina consumes them after a persisted cursor and
+acknowledges each result idempotently. Projected events are deduplicated by
+producer ID and execution sequence.
 
-```json
-{
-  "version": 1,
-  "identities": [
-    {
-      "id": "marina-primary",
-      "token_sha256": ["<64-lowercase-hex-characters>"],
-      "projects": ["prj_default"],
-      "capabilities": [
-        "provider.info", "agent.register", "work.ready.list", "work.inspect",
-        "work.claim.atomic", "work.claim.lookup", "run.assigned.list",
-        "run.lease.renew", "run.plan.submit", "run.start", "run.progress.append",
-        "run.verify", "evidence.record", "run.complete", "run.block",
-        "command.list", "command.ack", "event.append", "operation.report",
-        "channel.list", "channel.message.list", "channel.message.append"
-      ]
-    }
-  ]
-}
-```
+Repository tasks require acceptance criteria, at least two attempts, and explicit
+`source.read`, `source.write`, and `pull_request.create` authority before
+entering Ready. Drafts can remain in Backlog. This admission check does not
+provide credentials or guarantee cluster/model readiness.
 
-Use at least 256 bits of random token material and give the raw value only to Marina through its token-file reference. Deck reloads and validates the policy on every request, so two fingerprints can overlap during rotation without changing the identity. Wildcard grants, malformed policies, missing credentials, and unauthorized projects or capabilities fail closed. Bearer credentials require TLS or another authenticated encrypted transport outside single-host loopback.
+Channels are context, not execution authority. Only explicit promotion with
+acceptance criteria and a structured budget creates a task. Workload invocation
+similarly selects an installed immutable profile and creates one task through an
+idempotent operator request.
 
-The browser uses separate operator routes and, when configured, the human-session boundary above. Marina's service credential cannot create a human session. The complete service-authentication rationale and rotation sequence are in [decision 0003](../docs/decisions/0003-service-authentication.md).
+## Project context
 
-## Agent API
+The **Project context** view stores versioned instructions, goals, authored
+documents, exact-commit Git file references, and approved Deck decision
+references. Only explicit operator approval marks a source as guidance.
+Conversation excerpts remain task data.
 
-The machine-readable contract is in [api/openapi.yaml](api/openapi.yaml). The core agent loop is:
+When a task becomes Ready, Deck freezes selected source and message revisions.
+The task's **Sources** view shows the interpreted outcome, repository binding,
+immutable worker snapshot, provenance, trust, and omissions. Revision,
+deactivation, and revocation have distinct meanings; active work keeps its
+recorded revisions, while revocation denies further use.
 
-Protocol compatibility and readiness are available at `GET /api/v1/provider`. Version 1 uses UTC Unix milliseconds for domain timestamps, echoes or creates `X-Request-ID` on every request, and returns stable structured error codes while retaining the original `error` string for compatibility. Capability identifiers let Marina enable only behavior the installed Deck version actually supports. When service authentication is configured, every operation marked with `x-capability` requires a Bearer credential and enforces its capability plus the canonical resource's project scope.
+Marina owns repository configuration and validates association requests. Changing
+the repository never grants source-write or PR authority. See
+[decision 0014](../docs/decisions/0014-project-repository-and-knowledge.md).
 
-Claims and all `/runs/...` service mutations require `Idempotency-Key`. Deck stores the key, request digest, and original successful result in the same SQLite transaction as the state change. Repeating the same project, service identity, operation, key, resource, and payload returns that result without creating another run, event, decision, artifact, or command acknowledgement; changing the payload returns `409 conflict`. Records survive restart.
+## Deployment and boundary
 
-Every active-run mutation also requires the stable logical agent ID, exact run version, and current fence token. Claims freeze the task version and acceptance-criteria digest on the run. Lease expiry, cancellation, replan, and authority reduction advance the authority epoch so delayed writes from an older worker fail with `409 conflict`. Claim lookup and assigned-run pagination let a restarted controller resolve an ambiguous claim without issuing a new one.
+The container runs unprivileged and stores SQLite at `/data`. The Kubernetes
+base under [deploy/kubernetes/](deploy/kubernetes/) uses one replica,
+`ReadWriteOnce` storage, and `Recreate` updates. Choose immutable images,
+storage, TLS, ingress, authentication, and backup in a private overlay. Do not
+share the SQLite file between replicas.
 
-1. Register the agent.
-2. Discover ready tasks.
-3. Atomically claim one task with a lease.
-4. Send heartbeats while holding the lease.
-5. Submit an immutable structured plan revision and optionally request approval.
-6. Wait for the revision-bound decision and explicitly start the approved run. Deck preserves plan revisions; the configured Marina repository workflow blocks on requested changes rather than automatically revising.
-7. Report durable progress and provider-neutral operational state.
-8. Enter verification, record current structured evidence, and complete by referencing its IDs.
+Deck stores artifact metadata and proxies authorized downloads; Marina owns
+workflow artifact bytes. Deck does not schedule runtimes, mutate source, call
+models, or read Marina's database. Multi-user permissions, federated identity,
+HA, automatic task decomposition, and merge/deploy authority are outside the
+current release.
 
-Operator commands are durable resources rather than direct lifecycle-column edits. Marina lists them after its persisted cursor and acknowledges each result idempotently. Projected events are deduplicated by producer event ID and execution sequence before entering Deck's visible timeline. Provider state and display states are derived from admitted records, lease timestamps, evidence freshness, and synchronization lag; missing facts remain visibly unknown.
-
-Task creation and channel promotion use the same budget and PR-permission form, with two attempts by default. Tasks declaring `source.*` or `pull_request.*` authority identify repository work: entering or editing Ready requires acceptance criteria, at least two attempts, and explicit `source.read`, `source.write`, and `pull_request.create` permission. Save incomplete work in Backlog. Deck does not infer repository intent from prose; generic work remains compatible, and Marina independently checks every claimed repository task. This admission check does not grant permissions or guarantee cluster/model readiness.
-
-Channel history uses opaque, channel-scoped `cursor` / `next_cursor` pagination in append order (100 messages by default, maximum 200 per page). The browser follows every page and refreshes on message/promotion events and SSE reconnect, deduplicating by message ID. Reopening a channel recovers history even if live notifications were missed.
-
-Channels are conversation, not execution authority. Messages may reference canonical tasks, runs, decisions, artifacts, and evidence, but only an explicit operator promotion with acceptance criteria and a structured budget creates a task. Project export includes ledger records and artifact metadata in stable order while excluding credentials and artifact bytes; import refuses a non-empty target instead of inventing last-write-wins reconciliation.
-
-Example health check:
-
-```bash
-curl http://localhost:8080/healthz
-curl http://localhost:8080/readyz
-```
-
-## Project layout
+## Layout
 
 ```text
-cmd/deck/              application entry point
-internal/domain/          task, run, plan, decision, evidence, channel, operation, event, and artifact model
-internal/store/           SQLite repositories and migrations
-internal/httpapi/         REST and SSE API
-internal/demo/            restart-resumable demo agent
-internal/webui/           embedded production frontend
-web/                      SvelteKit and TypeScript application
-api/openapi.yaml          agent-facing HTTP contract
+cmd/deck/          application entry point
+internal/domain/   ledger model
+internal/store/    SQLite repositories and migrations
+internal/httpapi/  operator and service HTTP/SSE APIs
+internal/demo/     Atlas development agent
+internal/webui/    embedded frontend
+web/               SvelteKit application
+api/               OpenAPI and canonical fixtures
 ```
-
-## Prototype boundaries
-
-This release is single-user and single-process. Machine operations authenticate a scoped Marina service identity and use guarded, idempotent, fenced mutations; human routes use a separate optional operator session. Deck records provider-neutral work-control and operational facts but does not execute runtimes, mutate source control, operate deployments, or store artifact bytes. Multi-user permissions, password recovery, federated identity, distributed scheduling, autonomous task decomposition, and a general-purpose agent execution runtime remain outside the prototype.
-
-## Project context and repository association
-
-Open **Project context** to maintain versioned instructions, goals, authored
-documents, exact-commit Git file references, and approved Deck decision references.
-Only explicit operator approval marks a source as guidance; conversation is
-always task data. Active sources are selected when a task becomes Ready. Select
-up to 20 messages in Channels when promoting a task; later messages are excluded.
-A run keeps its selection even after the task or project sources change.
-
-The task drawer's **Sources** tab shows the captured outcome, source revisions,
-repository binding, full immutable worker snapshot and omissions. Revocation is
-separate from revision or deactivation: it withdraws a source from active use.
-Sources are limited to 32 per task, 16 KiB per authored/file input, and 128 KiB per
-assembled package. Expiry and declared conflicts can require clarification.
-
-The repository form submits a versioned request to Marina. Marina validates the
-repository and branch, persists the binding, and publishes a safe confirmation.
-Changing repository never grants task write/PR authority. Existing authorized
-work keeps its binding. Connection origins, credentials, policy, and runtime
-settings remain in Marina's installation configuration.
-
-Operator contracts live under `/api/v1/operator/projects/{project}/context/sources`
-and `/repository`, with task/run `/context` inspection. Source writes and
-repository requests use `expected_revision` and replay identical retries;
-repository requests also carry `expected_binding_version`. The service routes
-require `context.read`, `repository.read`, or `repository.write` and project scope.
-See [OpenAPI](api/openapi.yaml) and [validation](../docs/validation/ctx-02-08-2026-09-21.md).
-
-Project exports include source revision history and frozen task/run selections.
-Marina connection settings and pending repository requests are installation-local;
-import does not silently establish a repository connection in another installation.
-
-## Installed workload profiles
-
-`GET /api/v1/operator/provider` exposes safe protocol capabilities to an operator
-session. Discover Marina's current project profiles under
-`GET /api/v1/operator/projects/{project}/workloads`; invoke one with `POST` to
-the same path plus `/invoke`, an exact profile digest, explicit task authority
-and budgets, and a stable `Idempotency-Key`. Identical retries return the original
-task, including after the profile is withdrawn. Deck stores the pinned selection
-on that same task; Marina owns configuration and enforces the execution boundary.
-
-The task drawer shows workload/harness identity, progress, confirmed model usage
-and unresolved reservations for the current run. Analysis results link to their
-validated evidence download; repository results retain the PR review link.
-The Sources tab shows the immutable context for both workloads. Profile catalogs
-are installation-local, expire without a Marina refresh, and are not exported;
-task profile selections survive export/import. See the
-[API client guide](../marina/docs/workloads/api-v1.md) and
-[validation report](../docs/validation/agent-07-10-2026-09-21.md).

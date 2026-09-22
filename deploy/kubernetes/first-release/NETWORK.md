@@ -1,7 +1,7 @@
 # Pilot destinations and local enforcement
 
 The pilot uses GitHub, GHCR and OpenRouter under [decision 0010](../../../docs/decisions/0010-initial-installation-services.md).
-The [2026-09-17 acceptance report](../../../docs/validation/run-01-18-2026-09-17.md)
+The [2026-09-21 acceptance report](../../../docs/validation/poc-mvp-2026-09-21.md)
 records observed local results. This document distinguishes controller/worker
 traffic, node image loading, and build/setup downloads.
 

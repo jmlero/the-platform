@@ -1,113 +1,68 @@
-# First-release and operations follow-up — 2026-09-17
+# First-release operations validation — 2026-09-17
 
-Scope: RUN-03/05/08–18 and OPS-03–06 from TODO.md. This follows the
-[earlier local installation report](run-01-18-2026-09-17.md). No live OpenRouter
-inference, repository mutation, PR creation or laptop-off result is claimed.
+This record supports OPS-03, OPS-04, OPS-05, and OPS-06. It is a dated local
+Podman/Kind result, not current installation guidance. Use the
+[operations runbook](../../deploy/kubernetes/first-release/OPERATIONS.md) for
+procedures and the [final repository acceptance](poc-mvp-2026-09-21.md) for later
+live workflow results.
 
-The operator confirmed that only local Podman/Kind is available and deferred model
-selection, provider configuration and the test-spend decision. A private
-`model-token` file is now populated; its value was not printed, recorded or sent
-to a provider. The repository-scoped `git-token` remains absent/empty. Intake is
-still disabled. Backup/restore remains deferred, outside this work.
+## Results
 
-## Results by TODO item
-
-| Item | Result | Evidence / remaining condition |
+| Item | Result | Evidence |
 | --- | --- | --- |
-| RUN-03 | Prepared; open | GitHub read-only inspection confirms private `jmlero/marina-acceptance`, default branch `main`, not archived. Baseline `10a96c6221f5c8a128ccb2617d8be27213d7b296` and intentionally failing regression CI remain intact. The fixture, allowed paths and offline checks exist; scoped Git credentials are still missing. |
-| RUN-05 | Prepared; open | Added a local, redacted configuration preflight; private overlay pins the new Marina image below and retains existing stores/identities. Model placeholders, model rates, scoped Git credential and chosen test budget remain unresolved. No placeholder is treated as an executable model choice. |
-| RUN-08 | Open | The existing endpoint remains trusted localhost TLS. No independent host, permanent second-device ingress or second-device sign-in evidence was supplied. |
-| RUN-09 | Verify | No inference attempted. Exact model, nonzero pricing and authorized total spend remain necessary even though a private key file exists. |
-| RUN-10 | Verify | Requires RUN-09 plus a host independent of the Mac; local Kind cannot supply laptop-off evidence. |
-| RUN-11 | Verify | Certificate and image rollouts preserve the idle installation. Active implementation/CI-wait restarts still need a configured live workflow. |
-| RUN-12 | Verify | No live coding worker exists to cancel. Gateway fencing and cancellation checks remain deterministic evidence, not this acceptance result. |
-| RUN-13 | Verify | Real-process failed-verification and missing-CI cases pass. The known fixture CI remains failed. Selected-installation failed/missing gates still await live tasks. |
-| RUN-14 | Verify | Real-process changed-head rejection passes. There is no live verified PR to change. |
-| RUN-15 | Verify | Added precise provider recovery procedures. Live active-run provider interruptions are pending configuration. |
-| RUN-16 | Verify | Budget tests pass; added proof that locally missing model credentials do not reserve budget. Actual configured-model time/token/attempt/nonzero-cost exhaustion remains pending. |
-| RUN-17 | Verify | Failure and follow-up recovery procedures are documented. No Marina-managed model attempt was failed or evicted in this follow-up. |
-| RUN-18 | Partial report; open | This report records all scoped items and missing evidence. Live run/attempt IDs, PR revision and RUN-09–17 installation results do not yet exist. |
-| OPS-03 | Done locally | Both leaf certificates renewed and installed; served Deck certificate verified; existing session, task states and Marina identity survived both rollouts. Localhost leaf trust updated. |
-| OPS-04 | Partial; Verify | Live operator/service overlap, revocation, mounted-file rotation and session semantics passed without process restart. Original credentials restored. Git/model file-reload and fail-closed behavior pass local tests; actual issuer credential rotation and revocation remain pending. |
-| OPS-05 | Done | Implemented offline bounded retention with reviewed dry-run plans, historical reference protection, exclusive maintenance lock, active-work refusal and stale-plan/integrity checks. Behavior tests and CLI application against temporary real SQLite/filesystem stores pass. No production/persistent evidence was deleted. |
-| OPS-06 | Done | [Operations runbook](../../deploy/kubernetes/first-release/OPERATIONS.md) covers detection, containment and recovery for disk full, unavailable providers, stuck cancellation and failed workers without ledger edits; deferred restore procedures are explicitly excluded. |
+| OPS-03 | Passed locally | Both TLS leaf certificates were renewed without replacing the CA, operator/service credentials, task state, or Marina identity. Deck served the renewed certificate and both services restarted successfully. |
+| OPS-04 | Partially passed; remains Verify | Operator and Deck-service credentials overlapped, reloaded, and revoked without Pod restart. Existing sessions retained their documented lifetime. Git/model file reload and empty-file denial passed local tests; issuer-side Git/model revocation was not exercised. |
+| OPS-05 | Passed | Offline artifact retention produced a reviewable dry-run plan, protected every referenced artifact, refused active maintenance, bounded deletion, and rejected stale or modified plans. No persistent installation evidence was deleted. |
+| OPS-06 | Passed | The runbook covers disk-full, unavailable-provider, stuck-cancellation, and failed-worker recovery without direct ledger edits. Restore procedures remain deferred with OPS-01/02. |
 
-## Local TLS and identity evidence
+## Certificate and identity evidence
 
-`scripts/renew-installation-certificates.py` passed its behavior test, then renewed
-the existing installation's two leaf key/certificate pairs while preserving CA,
-operator/service credentials, signing key, artifact credential and all other
-configuration. Rollback files remain outside Git in the private installation's
-`certificate-backup-20260917T114103Z-b8f508f7` directory.
+`scripts/renew-installation-certificates.py` renewed only the existing Deck and
+Marina leaf key/certificate pairs. Rollback files remained outside Git.
 
 | Certificate | Serial | Validity (UTC) |
 | --- | --- | --- |
 | Deck | `6441A5B66FB705BB72DA84C7319D5A11` | 2026-09-17 11:41:03 through 2026-12-16 11:41:03 |
 | Marina | `D141AD2BCB88969930C4661CE59707C1` | 2026-09-17 11:41:03 through 2026-12-16 11:41:03 |
 
-The operations rehearsal checked the actual TLS leaf served by Deck against the
-renewed file, not merely certificate-chain validity. Both services rolled out
-successfully; the existing authenticated session and exact task-state/agent-ID
-sets survived. The Mac keychain now trusts the new Deck leaf for localhost only.
-CA rollover was not performed; the renewal helper intentionally preserves it.
+The rehearsal checked the certificate actually served by Deck. Existing
+authenticated session, task-state, and agent-ID sets survived both rollouts.
+CA rollover was not tested.
 
 ## Credential rotation evidence
 
-The finalized `verify-local-podman-operations.py` completed all four phases:
+`verify-local-podman-operations.py`:
 
-1. Added temporary operator/service fingerprints alongside the originals; both
-   generations authenticated without restarting Pods.
-2. Replaced Marina's mounted service credential, retired the old fingerprints,
-   observed rejection of old tokens and successful `/marina doctor` with the new
-   credential. Exact Pod UIDs and task/agent identities remained unchanged.
-3. Proved sessions created before token retirement remain valid, as documented.
-4. Restored original Secret data, revoked temporary fingerprints, checked Marina
-   connectivity and logged out temporary probe/rehearsal sessions. Private login
-   and service-token files were not replaced.
+1. added temporary operator and service fingerprints beside the originals;
+2. authenticated both generations without restarting Pods;
+3. replaced Marina's mounted service credential and observed rejection of the
+   retired value;
+4. confirmed pre-existing session behavior; and
+5. restored the original private configuration and logged out temporary sessions.
 
-New gateway/API tests also exposed and fixed empty-credential handling: a missing
-or empty configured Git/model token now prevents upstream requests; the model
-check happens before reservation. Actual sent requests with uncertain usage keep
-their reservation. Tests use local doubles and synthetic credentials; they do not
-establish OpenRouter/GitHub issuer revocation.
+Missing or empty Git/model credential files denied upstream requests. Model
+credential checks occurred before budget reservation; requests already sent with
+unknown usage retained their reservation. Provider-side token revocation was not
+part of this proof.
 
-## Source and deployed image
+## Artifact retention evidence
 
-Validation started from base `fdbed84fbb1e28eadf43e814226c113b2655889c` with the
-operations changes in the working tree. No registry publication or production
-deployment was performed.
+The retention CLI and behavior tests covered maintenance exclusion, historical
+reference protection, dry-run/apply integrity, stale plans, age and batch limits,
+and temporary real SQLite/filesystem stores. The runbook requires draining work,
+holding the maintenance lock, reviewing the plan, and verifying the result.
 
-The Marina Linux/ARM64 image was built with the repository Dockerfile (Go 1.26.5)
-and version `ops-20260917`, imported into the existing Kind node, and deployed by
-its containerd manifest digest:
+## Checks run
 
-`localhost/the-platform/marina@sha256:f6d22d81d3ff287ebe290ce7765e84dbdc70fb850245f01fc7fd88d0c21a2711`
+- `make check`
+- `make conformance`
+- certificate/identity preservation tests
+- credential reload and empty-file denial tests
+- artifact-retention and maintenance-exclusion tests
+- the local operations rehearsal
+- `verify-local-podman-ledger.py` after upgrade
 
-The private overlay pins the same digest; `kustomization.before-ops-20260917.yaml`
-retains its prior image configuration for rollback. Deck and worker image digests
-are unchanged from the earlier report. The existing `appdeck-data` and
-`marina-data` PVCs, disabled intake and local cluster were preserved. `/marina
-version` reports `ops-20260917`; `/marina doctor` reports Deck available.
-
-## Verification and next execution
-
-- `make check`: passed installation Python checks, all product tests, Go vet,
-  CLI packaging checks and Svelte diagnostics (zero errors/warnings).
-- `make conformance`: passed the CLI session test, provider conformance and real
-  Deck repository-flow tests for completion, promoted completion, failed local
-  verification, changed head, closed PR, missing CI and missing authority.
-- Narrow behavior-first tests: certificate/identity preservation; private
-  configuration blocker redaction; artifact retention and maintenance exclusion;
-  Git/model credential reload and empty-file denial without budget reservation.
-- Local operations rehearsal: passed renewed TLS and restored-credential checks.
-- Post-upgrade `verify-local-podman-ledger.py`: passed trusted TLS, authentication,
-  session/task/Marina identity persistence through another restart of each service
-  and disabled-intake behavior. Existing verification task
-  `tsk_5ed44aad5ca19be4a528` is cancelled with no execution run.
-
-The conformance suite uses real Deck with deterministic Git/runtime dependencies.
-It is not live model/provider/Kubernetes-workflow acceptance. The named remaining
-exercises and per-run evidence fields are in
-[ACCEPTANCE.md](../../deploy/kubernetes/first-release/ACCEPTANCE.md). Run preflight,
-choose model/rates/spend and configure scoped Git credentials before RUN-09. Keep
-RUN-10 open until an independent host and second-device result are available.
+The conformance suite used real Deck with deterministic Git/runtime dependencies.
+This report did not establish live model or repository-workflow acceptance; that
+evidence was recorded later in
+[poc-mvp-2026-09-21.md](poc-mvp-2026-09-21.md).

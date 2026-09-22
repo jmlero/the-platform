@@ -1,128 +1,63 @@
-# What Is a Dark Factory?
+# What is a dark software factory?
 
-A dark factory is an always-on production system that can complete its normal work without humans being present or continuously operating it.
+A dark factory is an always-on production system that completes normal work
+without people continuously operating it. For software, that means:
 
-In manufacturing, “lights-out” means automation can keep machines running overnight and workers return to completed parts. The factory still has designers, engineers, owners, maintenance, and safety rules—they simply are not required on the production floor for every unit produced. [FANUC describes this literally as leaving in the evening and returning to finished production.](https://crx.fanucamerica.com/articles/athena-achieves-lights-out-production)
+> An evidence-gated system that turns bounded intent or trusted signals into
+> verified outcomes within explicit policy, and escalates decisions outside its
+> authority.
 
-## Applied to software
+“Dark” means unattended. It does not mean opaque, unaccountable, or unlimited.
 
-For Marina, a dark software factory is:
-
-> An always-on, policy-constrained and evidence-gated software delivery system that can turn bounded intent or operational signals into verified software outcomes without synchronous human operation, escalating only decisions outside its authority.
-
-The key words matter:
-
-- **Always-on:** it runs independently of your laptop and terminal.
-- **Bounded intent:** it receives a defined outcome, not unlimited permission to “improve everything.”
-- **End-to-end:** it goes beyond writing code into testing, review, PR revision, delivery, observation, and remediation.
-- **Policy-constrained:** permissions, cost, risk, retries, and production authority are explicit.
-- **Evidence-gated:** “done” requires tests, checks, review evidence, and observed outcomes—not merely an agent saying it is done.
-- **Unattended:** the normal path continues while you sleep.
-- **Escalating:** ambiguity and high-risk decisions return to you.
-
-This matches emerging software-factory implementations that autonomously implement, review, revise, and merge work while humans retain architecture and specification responsibility. [Dark Factory](https://godarkfactory.com/) uses the formulation “humans design, agents build,” while [OpenAI’s harness-engineering experience](https://openai.com/index/harness-engineering/) describes agents working for hours while humans sleep and handling implementation, review feedback, CI failures, and merging.
-
-## The human is outside the hot loop
-
-A dark factory does not mean “no humans.”
-
-It means two different loops:
+## Two loops
 
 ```text
-Human governance loop
-Intent → architecture → policy → priorities → exceptional decisions
-                         ↓
-Autonomous factory loop
-Sense → plan → execute → verify → deliver → observe → remediate
-                         ↺
+Human governance
+intent -> architecture -> policy -> priorities -> exceptional decisions
+                              |
+                              v
+Factory operation
+sense -> plan -> execute -> verify -> deliver -> observe -> recover
+  ^                                                           |
+  +-----------------------------------------------------------+
 ```
 
-You remain responsible for:
+Humans remain responsible for product direction, architecture, acceptable risk,
+evidence standards, and decisions that must never be delegated. The factory owns
+the repeatable engineering work already authorized by those choices.
 
-- What should be built.
-- Architectural direction and technical taste.
-- Which actions agents may take.
-- What counts as acceptable evidence.
-- Which decisions always require you.
-- How the factory should improve after failures.
+## What Marina contributes
 
-The factory becomes responsible for repeatedly carrying out the bounded engineering process.
-
-## What the factory contains
-
-| Factory concept | Marina equivalent |
+| Factory concept | Platform component |
 | --- | --- |
-| Factory control system | Marina |
-| Operator control room | Deck plugin |
+| Control room | Deck |
+| Control system | Marina |
 | Factory floor | Kubernetes |
-| Autonomous work cell | Isolated agent runtime |
-| Machine and tooling | Agent harness, tools, and sandbox |
-| Work order | Task, outcome, constraints, and budget |
-| Materials and instructions | Repository plus assembled context |
-| Conveyor and routing | Durable workflow and agent loops |
-| Inspection stations | Tests, scans, evaluators, and independent review |
-| Safety interlocks | Identity, policy, approvals, limits, and kill switches |
-| Sensors | CI, deployments, logs, metrics, traces, and alerts |
-| Finished product | A verified software outcome in operation |
+| Work cell | Isolated worker Job |
+| Machine and tooling | Agent harness and sandbox |
+| Work order | Task, acceptance criteria, authority, and budget |
+| Materials | Pinned repository and immutable context |
+| Inspection | Tests, CI, policy checks, and independent validation |
+| Safety interlocks | Identity, leases, fences, limits, and cancellation |
+| Finished output | Evidence-backed result for human review |
 
-An individual agent is therefore not the dark factory. It is one replaceable worker or machine inside it.
+An individual agent is one replaceable worker inside the factory. A cron job,
+terminal agent, generated patch, or automatic merge does not by itself provide
+durable authority, recovery, and evidence.
 
-## What it is not
+## Scoped autonomy
 
-A dark factory is not:
+Autonomy is granted by repository, workload, change class, environment, and risk.
+A factory may handle dependency updates, documentation fixes, or known defect
+patterns unattended while still escalating architecture changes, destructive
+migrations, security-boundary changes, and production incidents.
 
-- A coding agent running in your terminal.
-- A cron job that launches Codex.
-- A collection of subagents with job titles.
-- A CI pipeline that generates code.
-- Automatic merging without risk controls.
-- A black box whose decisions cannot be inspected.
-- An AI system independently deciding company strategy.
-- An agent with permanent production credentials.
-- An infinite “keep trying until it works” loop.
+For example, a bounded vulnerability update can be implemented in an isolated
+worker, checked at the exact source revision, returned as a pull request, and
+blocked if tests, CI, authority, or budget fail. A migration requiring product or
+data judgment returns to the operator. Correct escalation is successful factory
+behavior.
 
-All of those could exist without producing a trustworthy autonomous factory.
-
-## A concrete example
-
-Imagine a dependency vulnerability is detected at 02:00:
-
-1. Marina receives the security signal.
-2. It validates and classifies the signal rather than treating its text as instructions.
-3. It creates or claims bounded work.
-4. It assembles repository, architecture, security, and dependency context.
-5. An isolated agent implements the upgrade.
-6. Tests and scanners run.
-7. An independent reviewer checks the change.
-8. The agent fixes resulting CI or review failures.
-9. It creates a merge-ready PR—or merges if policy permits.
-10. If deployed, Marina observes the canary and either confirms the outcome or rolls back.
-11. Deck contains the complete evidence when you wake up.
-
-If the upgrade requires a breaking database migration, Marina pauses and asks you. That does not mean the factory failed. Correct escalation is part of autonomous operation.
-
-## Darkness is scoped, not absolute
-
-A repository might be “dark” for:
-
-- Dependency updates.
-- Documentation repairs.
-- Test improvements.
-- Known defect patterns.
-- Low-risk application changes.
-
-But still require human decisions for:
-
-- New product direction.
-- Architecture changes.
-- Destructive migrations.
-- Security-boundary changes.
-- Broad production incidents.
-
-So autonomy is not one global switch. It is policy per repository, change class, environment, and risk level.
-
-The important metric is also not “percentage of work without humans.” It is:
-
-> How much verified value can the factory deliver per minute of human attention, without increasing operational risk?
-
-That is the dark-factory idea behind Marina: not eliminating you, but moving you from operating every task to designing and governing the system that continuously performs them.
+The useful measure is verified value per minute of human attention without added
+operational risk. Marina's goal is to move the operator from running every task
+to designing and governing the system that runs them.

@@ -1,36 +1,27 @@
-# Local Podman installation
+# Local Podman/Kind installation
 
-Deck and Marina run in a dedicated `kind-marina-local` Kubernetes context on
-the `podman-machine-default-root` connection. The ordinary rootless Podman
-connection and its containers are preserved. Everything below uses the CLI.
+This profile runs Deck and Marina in the dedicated `kind-marina-local` context
+on the `podman-machine-default-root` connection. It preserves the ordinary
+rootless Podman connection and its containers.
 
-Open **https://localhost:8443**. The login token is in
+Deck is available at **https://localhost:8443**. The operator token is stored at
 `~/.local/share/the-platform/marina-local/installation/operator-token`.
-This test installation remains localhost-only. The operator removed laptop-off
-acceptance and second-device/LAN testing; keep the Mac running because it hosts
-Kubernetes. See the [current local acceptance follow-up](../../../docs/validation/local-acceptance-follow-up-2026-09-17.md).
-To copy it without printing it in terminal history or logs:
+Copy it without printing it:
 
 ```sh
 pbcopy < ~/.local/share/the-platform/marina-local/installation/operator-token
 ```
 
-This profile runs authenticated TLS services with **new task intake disabled**.
-The mounted `workflow.json` now selects the disposable
-[acceptance repository](https://github.com/jmlero/marina-acceptance), its offline
-checks and a pinned worker image. The prepared model is `z-ai/glm-5.3-flash`;
-its private key and conservative USD budget rates are configured. The repository-scoped Git credential
-remains undecided, and the repository workflow is not enabled. No model credential
-or Git credential is inferred from the operator's development tools. No external
-coding run is implied by a healthy local installation.
+The installation is localhost-only and uses the Mac as its host, so the Mac must
+remain running. Laptop-off and LAN/second-device acceptance are outside this
+profile. New task intake stays disabled except during a bounded exercise.
 
-The pilot now selects OpenRouter and GitHub/GHCR under
-[decision 0010](../../../docs/decisions/0010-initial-installation-services.md).
-The operator authorized €5 total acceptance spend; GLM and Luna passed direct
-provider protocol probes and isolated fixture checks. The pinned harness, gateway and repository workflow still
-need live acceptance after scoped Git credentials are configured. SQLite
-databases and artifacts stay on their existing Kubernetes volumes. Backup/restore
-work is deferred for now.
+The validated private overlay contains pinned Deck, Marina, coding-worker, and
+analysis-worker images; the disposable acceptance repository; offline checks;
+and explicit Git/model credentials and budget rates. Credentials live in private
+files and are never inferred from developer logins. See the
+[repository acceptance](../../../docs/validation/poc-mvp-2026-09-21.md) and
+[two-workload acceptance](../../../docs/validation/agent-11-13-2026-09-22.md).
 
 ## Inspect and start
 
@@ -40,28 +31,26 @@ podman --connection podman-machine-default-root ps
 sh scripts/local-podman-start.sh
 ```
 
-The optional user LaunchAgent installed by
+The optional LaunchAgent installed by
 `python3 scripts/install-local-podman-startup.py` starts the existing VM and
 cluster at login. Its log is
 `~/.local/share/the-platform/marina-local/startup.log`. It does not recreate a
-deleted cluster or alter Podman's default connection. Running the start script
-manually is sufficient when no LaunchAgent is installed.
+deleted cluster or change Podman's default connection.
 
-Both databases use separate `standard` local-path PVCs inside the Kind node.
-They survive service and node restarts. Deleting the cluster or Podman VM removes
-this local storage; export/backup before doing either. A sleeping or powered-off
-Mac cannot execute work. This development installation is the current
-first-release acceptance environment; it does not claim always-on hosting.
+Deck and Marina use separate `standard` local-path PVCs in the Kind node. They
+survive service and node restarts. Deleting the cluster or Podman VM removes this
+storage; take a backup first if the data matters. Backup/restore automation is
+outside the current pilot.
 
 ## Reproduce on a Mac
 
-The validated installation uses an ARM64 Mac, Podman 6.1.1, an 8 GiB VM,
-Kind 0.33.0, the node image pinned in `kind.yaml`, Calico 3.32.2 and Codex CLI
-0.153.4. The worker's real model compatibility is still unverified.
+The accepted environment used an ARM64 Mac, Podman 6.1.1, an 8 GiB VM, Kind
+0.33.0, the node image pinned in `kind.yaml`, Calico 3.32.2, and Codex CLI
+0.153.4. Acceptance reports record the exact application image and profile
+digests.
 
-Install Kind if necessary (`brew install kind`). Before resizing an existing
-Podman VM, inspect its running containers and account for the interruption.
-The local cluster uses the existing root connection explicitly:
+Install Kind if needed. Inspect running containers before resizing or restarting
+an existing Podman VM.
 
 ```sh
 export KIND_EXPERIMENTAL_PROVIDER=podman
@@ -71,14 +60,13 @@ curl -fsSL https://raw.githubusercontent.com/projectcalico/calico/v3.32.2/manife
 kubectl --context kind-marina-local apply --server-side -f /private/tmp/marina-calico.yaml
 ```
 
-The [Kind configuration](https://kind.sigs.k8s.io/docs/user/configuration/)
-disables its default CNI; [Calico's Kind installation](https://docs.tigera.io/calico/latest/getting-started/kubernetes/kind)
-provides network policy enforcement. `deck-host-ingress.yaml` allows only the
-observed macOS Podman forwarding gateway, `192.168.127.1/32`. If it differs,
-inspect `podman machine ssh podman-machine-default ip -j route` and adjust that
-one address. The published host port remains bound to `127.0.0.1`.
+Kind's default CNI is disabled so Calico can enforce NetworkPolicy.
+`deck-host-ingress.yaml` permits the observed macOS Podman gateway
+`192.168.127.1/32`. If it differs, inspect
+`podman machine ssh podman-machine-default ip -j route` and change only that
+address. The published Deck port remains bound to `127.0.0.1`.
 
-Build and load images without a remote registry:
+Build and load the base images without a remote registry:
 
 ```sh
 podman build -f deck/Dockerfile -t localhost/the-platform/deck:local deck
@@ -90,8 +78,8 @@ podman save --format oci-archive -o /private/tmp/marina-local-worker.tar localho
 kind load image-archive --name marina-local /private/tmp/marina-local-worker.tar
 ```
 
-Prepare credentials once; the preparation command refuses to overwrite an
-existing directory. Reuse it on upgrades to preserve credentials and trust.
+Prepare credentials once. The helper refuses to overwrite an existing directory;
+reuse it on upgrades to preserve credentials and trust.
 
 ```sh
 python3 scripts/prepare-installation.py --local-podman ~/.local/share/the-platform/marina-local/installation
@@ -100,107 +88,54 @@ kubectl --context kind-marina-local -n marina-system rollout status deployment/d
 kubectl --context kind-marina-local -n marina-system rollout status deployment/marina
 ```
 
-Trust the generated **leaf certificate for localhost only** in your user keychain:
+Trust the generated **localhost leaf certificate only** in the user keychain:
 
 ```sh
 security add-trusted-cert -r trustAsRoot -p ssl -s localhost -k ~/Library/Keychains/login.keychain-db ~/.local/share/the-platform/marina-local/installation/deck.crt
 ```
 
-Clients using their own trust store should supply
+Other clients can use
 `--cacert ~/.local/share/the-platform/marina-local/installation/ca.crt`.
-The leaf certificates last 90 days. Renew them before expiry and update the
-Secrets and local leaf trust; do not regenerate operator/service credentials.
-Use the tested [certificate renewal and rotation procedures](../first-release/OPERATIONS.md).
+Leaf certificates last 90 days. Follow the
+[operations runbook](../first-release/OPERATIONS.md) to renew certificates
+without replacing service identities or credentials.
 
-## Verify
+## Verify the base
 
 ```sh
 python3 scripts/verify-local-podman-network.py
 python3 scripts/verify-local-podman-ledger.py ~/.local/share/the-platform/marina-local/installation
 ```
 
-The network check launches two temporary Jobs: an unrestricted baseline and an
-isolated worker. It checks installed tools, TLS to Marina, absent service-account
-credentials, and blocked API/internet connections. Jobs expire automatically.
-The ledger check restarts both Deployments and proves persistence of an operator
-session, a task and Marina's identity. It verifies intake is disabled and leaves
-its harmless verification task cancelled.
+The network check creates temporary unrestricted and isolated Jobs and verifies
+worker tools, Marina TLS, absent service-account credentials, and denied
+API/internet access. The ledger check restarts both services and proves that the
+operator session, a task, and Marina's identity survive. Intake must remain
+disabled.
 
-## Enable repository execution later
+## Configure repository execution
 
-Follow the [repository installation acceptance](../first-release/README.md).
-Populate the private workflow's GitHub/GHES repository, explicit model endpoint,
-credentials, trusted checks, allowed paths and required CI. Pin the worker using
-the **imported containerd manifest digest**, which can differ from Podman's
-digest after archive conversion. Register the digest reference in containerd
-before using it without a registry.
+Follow the [repository workflow guide](../first-release/README.md). Populate the
+private workflow with the GitHub/GHES repository, model endpoint, credential
+references, trusted checks, allowed paths, required CI, and budgets. Pin workers
+by the **imported containerd manifest digest**, which can differ from Podman's
+digest after archive conversion.
 
-Use the [repository-workflow profile](../local-podman-workflow/kustomization.yaml)
-for the next preparation stage. In the existing private `kustomization.yaml`,
-change only the resource path ending in `deploy/kubernetes/local-podman` to
-`deploy/kubernetes/local-podman-workflow`. Preserve the pinned images, credentials,
-existing `appdeck-data` PVC override, and paired controller egress/host-alias files.
-This profile loads `/etc/marina/workflow.json` and enables Marina's Kubernetes
-service-account token while retaining `--intake-enabled=false`. Workers keep their
-separate identity, absent API token, and existing network restrictions.
+Use the [repository-workflow profile](../local-podman-workflow/kustomization.yaml).
+In the private `kustomization.yaml`, change only the resource path ending in
+`deploy/kubernetes/local-podman` to
+`deploy/kubernetes/local-podman-workflow`. Preserve pinned images, credentials,
+the existing Deck PVC override, and the paired controller egress/host-alias
+files. This gives Marina its controller service-account token while workers keep
+their separate identity and no API token.
 
-After the scoped Git credential is supplied, run configuration preflight, render
-privately, and apply the reviewed overlay using the commands above. Confirm
-workflow startup and readiness with intake still disabled. Before admitting the
-bounded acceptance tasks, add a final private Deployment patch setting Marina's
-`args: [serve]`, apply it, and verify the effective task budgets and authority.
-Restore `args: [serve, --intake-enabled=false]` after the exercises. Disabling
-intake does not stop already journaled executions; settle those first. Complete
-RUN-09 and RUN-11 through RUN-16 and record RUN-18 before relying on autonomous
-work; RUN-10 and RUN-17 are retired.
+Run preflight, render privately, apply the reviewed overlay, and confirm readiness
+with intake still disabled. Enable intake only for the selected task, then restore
+`args: [serve, --intake-enabled=false]`. Disabling intake does not pause active
+work, so settle journaled executions first.
 
-## Verified on 2026-09-17
-
-The [operations follow-up](../../../docs/validation/first-release-operations-2026-09-17.md)
-records renewed TLS, operator/service credential rotation and the locally loaded
-`ops-20260917` Marina image with offline artifact retention and stricter provider
-credential handling. Original credentials and persistent identities were
-preserved; new task intake remains disabled. At that stage the private model-key
-file was populated, while model/rates/spend and scoped Git credentials were pending.
-
-The [model follow-up](../../../docs/validation/first-release-model-2026-09-17.md)
-records the later Luna configuration, operator-authorized €5 budget and two live
-OpenRouter streaming/tool-call requests costing $0.0001172. Private configuration
-and the cluster ConfigMap agree; repository intake remains disabled. Preflight
-now reports only the missing scoped Git credential. The provider probe does not
-pass RUN-09's Codex/gateway/fixture acceptance condition.
-
-The subsequent [GLM comparison](../../../docs/validation/glm-model-trial-2026-09-17.md)
-records the operator-requested switch to `z-ai/glm-5.3-flash`. Both models produced
-the same regression fix, passing all seven tests in isolated containers; GLM's
-single coding request was cheaper and slower. Total observed inference cost is
-$0.0004802. The private and cluster configurations now select GLM; the Luna
-configuration remains backed up. Intake is still disabled pending scoped Git
-credentials and the full harness/gateway acceptance run.
-
-The current Deck and Marina images were built and loaded locally, then the
-existing installation was upgraded while preserving its two bound PVCs,
-credentials, CA, task IDs and Marina identity. Deck intentionally continues to
-mount the original `appdeck-data` claim. Keep that override in the private overlay.
-The quiesced pre-upgrade snapshot is private under
-`~/.local/share/the-platform/marina-local/pre-deck-upgrade-20260917`.
-
-Authentication, TLS, session/task/identity persistence through both service
-restarts, disabled intake, worker isolation, controller egress and offline fixture
-checks passed. The local controller uses a paired IP allowlist and `hostAliases`
-snapshot for the selected GitHub/OpenRouter endpoints. See the
-[network preparation and probe procedure](../first-release/NETWORK.md) before
-refreshing those destinations or enabling execution.
-
-The [RUN-01–18 report](../../../docs/validation/run-01-18-2026-09-17.md) records
-image digests and earlier results. Scoped Git credentials remain TBD, and only
-local Kubernetes is available. No real coding run, verification PR or laptop-off
-acceptance is claimed; the later provider-only inference is recorded separately
-in the model follow-up above.
-
-## Earlier verification on 2026-09-09
-
-The local installation has running Deck/Marina Deployments, bound PVCs and a
-loaded worker image. Real worker tools and network isolation, authenticated TLS,
-operator login, disabled intake and both service restarts were checked. No real
-repository change, model inference or pull request has been executed.
+Before trusting a new repository, model, worker image, or network policy, repeat
+the [installation acceptance procedure](../first-release/README.md#installation-acceptance).
+Use [NETWORK.md](../first-release/NETWORK.md) when provider addresses change.
+For the diagnostic profile and its analysis image, follow the
+[two-workload guide](../agent-platform/README.md).

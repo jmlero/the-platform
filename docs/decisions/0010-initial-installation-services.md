@@ -1,6 +1,6 @@
 # Decision 0010: Initial installation services and storage
 
-- Status: accepted initial configuration direction; credentials, model, repository, and live validation remain pending
+- Status: accepted; local repository and two-workload validation passed, while backup/restore remains deferred
 - Date: 2026-09-17
 - Scope: Deck and Marina development installation and first repository pilot
 
@@ -14,7 +14,7 @@ does not require a cloud provider.
 
 | Area | Initial choice |
 | --- | --- |
-| Model inference | OpenRouter using an operator-supplied API token. Select and test a compatible model before the first live coding run. |
+| Model inference | OpenRouter using an operator-supplied API token. The local pilot validated `z-ai/glm-5.3-flash`; other installations must validate their selected model. |
 | Source control | GitHub for the acceptance repository, branches, pull requests, and configured CI checks. |
 | Durable application state | Keep the existing separate Deck and Marina SQLite databases on separate Kubernetes persistent volumes. |
 | Artifacts | Keep Marina's existing file artifact store on its persistent volume; Deck accesses it through the authenticated API. |
@@ -71,11 +71,10 @@ CLI setup; no Platform workload or acceptance exercise was run in GCP.
 ## Model and network interpretation
 
 OpenRouter documents a [Responses endpoint](https://openrouter.ai/docs/api/api-reference/responses/create-responses).
-The intended Marina configuration is base URL `https://openrouter.ai/api/v1`,
-which the existing gateway calls with the `/responses` suffix. This is a
-configuration candidate, not evidence that the pinned harness and chosen model
-already work together. Validate tool calls, streaming, and usage accounting under
-RUN-09. Keep the token in the installation's private credential mechanism and
+The Marina configuration uses base URL `https://openrouter.ai/api/v1`, which the
+gateway calls with the `/responses` suffix. The local pilot validated the pinned
+harness, selected model, tool calls, streaming, and usage accounting. A different
+installation or model requires its own acceptance. Keep the token in the installation's private credential mechanism and
 mount it into the controller; do not store its value in Git or task content.
 
 The cluster connects to OpenRouter for inference; OpenRouter in turn
@@ -100,15 +99,15 @@ The preparation exception does not authorize running agent Jobs or their
 verification commands to fetch packages from additional external registries.
 Use GHCR or locally loaded images for the application and worker runtime.
 
-## Remaining configuration
+## Validation and remaining boundary
 
-- Choose the exact OpenRouter model and bounded test budget; supply its token
-  through the private credential mechanism when preparing the live run.
-- Choose the disposable GitHub repository, GHCR image namespace, and scoped
-  credentials. Existing developer login alone is not a cluster credential.
-- Record image versions, storage configuration, and the concrete network rules,
-  then run the local checks. This decision alone marks no runtime test complete.
+The local pilot selected a disposable GitHub repository, explicit credentials,
+pinned local images, `z-ai/glm-5.3-flash`, conservative rates, and concrete
+network rules. The [repository acceptance](../validation/poc-mvp-2026-09-21.md)
+and [two-workload acceptance](../validation/agent-11-13-2026-09-22.md) record the
+result. Existing developer login is still not a cluster credential, and no other
+installation inherits this evidence.
 
 Backup/restore tasks may be revisited when the operator chooses to retain work
 that needs recovery beyond the existing volumes. The broader product remains
-configurable for other compatible services; these are the initial pilot choices.
+configurable for compatible services; these are the initial pilot choices.
