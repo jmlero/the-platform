@@ -1,0 +1,2214 @@
+{
+  "schema_version": 1,
+  "date": "2026-09-22",
+  "environment": {
+    "context": "kind-marina-local",
+    "podman_connection": "podman-machine-default-root",
+    "node": "marina-local-control-plane",
+    "operator_url": "https://localhost:8443",
+    "mac_running": true
+  },
+  "final_images": {
+    "deck": "localhost/the-platform/deck@sha256:fb6d8b7a2c8a2c39423f8f892e98bffc9092259b23be8dcfd921a3802e2ab338",
+    "marina": "localhost/the-platform/marina@sha256:34da47afc78bc89b7bbfe2c3248456a12bc12fbdf8cc252b27f9fb6f4a52028f",
+    "marina-analysis": "localhost/the-platform/marina-analysis@sha256:022c0818a9a05741927c2e302aa12ec6248a3ba056c155be6993af3a6b2627a8",
+    "marina-worker": "localhost/the-platform/marina-worker@sha256:caa563bfdd2a14d28af2c817a3f9696ed9f3cb41293b5fb003445fd16a4ba9c9"
+  },
+  "configuration": {
+    "sha256": "fcb4af805bbf803586d559f228b06eae8320621978c533fd6de5cfc8e9efe9a5",
+    "coding_image": "localhost/the-platform/marina-worker@sha256:caa563bfdd2a14d28af2c817a3f9696ed9f3cb41293b5fb003445fd16a4ba9c9",
+    "model": {
+      "endpoint": "https://openrouter.ai/api/v1",
+      "name": "z-ai/glm-5.3-flash",
+      "max_output_tokens": 4096,
+      "input_micros_per_million": 450000,
+      "output_micros_per_million": 1500000,
+      "currency": "USD"
+    },
+    "analysis": {
+      "authority": "analysis.run.6f2ae103ada3de76030d8cb736ead733d04f2a2decc409e53e6ed6a61a0f8db8",
+      "budget_minutes": 5,
+      "harness": "langchain-create-agent/v2",
+      "input_digest": "28b82a3e2af6aae3271f85b5e0cdf8c935a9ad9842cfbb9cb4b3f9606a2a4278",
+      "max_tokens": 20000,
+      "model": "z-ai/glm-5.3-flash",
+      "model_destination": "https://openrouter.ai/api/v1",
+      "profile_digest": "6f2ae103ada3de76030d8cb736ead733d04f2a2decc409e53e6ed6a61a0f8db8",
+      "profile_revision": 4,
+      "worker_image": "localhost/the-platform/marina-analysis@sha256:022c0818a9a05741927c2e302aa12ec6248a3ba056c155be6993af3a6b2627a8",
+      "workload": "diagnostic-analysis/v1"
+    },
+    "intake_enabled": false
+  },
+  "github": {
+    "pull_request": {
+      "base": "10a96c6221f5c8a128ccb2617d8be27213d7b296",
+      "head": "bfdfa51b9583535d2d0a78a565401768db5123db",
+      "merged": false,
+      "number": 12,
+      "state": "open",
+      "url": "https://github.com/jmlero/marina-acceptance/pull/12"
+    },
+    "commit": {
+      "author": {
+        "date": "2026-09-22T04:10:49Z",
+        "email": "jmlero@hotmail.com",
+        "name": "Marina"
+      },
+      "committer": {
+        "date": "2026-09-22T04:10:49Z",
+        "email": "jmlero@hotmail.com",
+        "name": "Marina"
+      },
+      "files": [
+        {
+          "filename": "src/clamp.cjs",
+          "patch": "@@ -3,7 +3,7 @@\n // Return value constrained to the inclusive [minimum, maximum] interval.\n function clamp(value, minimum, maximum) {\n   if (minimum > maximum) throw new RangeError(\"minimum exceeds maximum\");\n-  return Math.min(Math.max(value, minimum), maximum - 1);\n+  return Math.min(Math.max(value, minimum), maximum);\n }\n \n module.exports = { clamp };",
+          "status": "modified"
+        }
+      ],
+      "sha": "bfdfa51b9583535d2d0a78a565401768db5123db"
+    },
+    "ci": {
+      "checks": [
+        {
+          "conclusion": "success",
+          "head_sha": "bfdfa51b9583535d2d0a78a565401768db5123db",
+          "html_url": "https://github.com/jmlero/marina-acceptance/actions/runs/35685969113/job/106612706229",
+          "name": "acceptance-regression",
+          "status": "completed"
+        }
+      ]
+    }
+  },
+  "runs": [
+    {
+      "task_id": "tsk_02c29f1ea589ec231b85",
+      "title": "Agent MVP 2026-09-22 analysis restart-deck-planning",
+      "status": "blocked",
+      "invocation": {
+        "key": "agent-mvp-1790050150180589000",
+        "request": {
+          "profile_id": "diagnostic-analysis/v1",
+          "profile_digest": "6f2ae103ada3de76030d8cb736ead733d04f2a2decc409e53e6ed6a61a0f8db8",
+          "task": {
+            "project_id": "prj_default",
+            "title": "Agent MVP 2026-09-22 analysis restart-deck-planning",
+            "description": "Analyze only the installed synthetic blocked-runs diagnostic fixture. Do not mutate source or infrastructure.",
+            "acceptance_criteria": "Identify provider_unavailable and budget_exhausted with source IDs and verbatim causal evidence, excluding the healthy record. Independent validation must bind the profile, input and output digests.",
+            "status": "ready",
+            "priority": "urgent",
+            "budget_minutes": 5,
+            "budget": {
+              "time_minutes": 5,
+              "max_attempts": 1,
+              "max_tokens": 20000,
+              "max_cost_minor": 10,
+              "currency": "USD",
+              "max_concurrency": 1,
+              "authority": [
+                "analysis.run.6f2ae103ada3de76030d8cb736ead733d04f2a2decc409e53e6ed6a61a0f8db8"
+              ]
+            }
+          }
+        },
+        "replayed_task_id": "tsk_02c29f1ea589ec231b85"
+      },
+      "run": {
+        "id": "run_93e1ce3bdad84bfe93f4",
+        "agent_id": "agt_a18f00886390860b0b6137b9",
+        "status": "blocked",
+        "task_version": 1,
+        "fence_token": 1,
+        "started_at": 1790050150876,
+        "finished_at": 1790050210009,
+        "result_summary": "analyze worker failed; inspect the Kubernetes Job and create a revised task"
+      },
+      "executions": [
+        {
+          "id": "exec_3c48b28026a81820fa477288",
+          "project_id": "prj_default",
+          "work_provider": "deck",
+          "external_work_id": "tsk_02c29f1ea589ec231b85",
+          "external_run_id": "run_93e1ce3bdad84bfe93f4",
+          "state": "blocked",
+          "attempt": 1,
+          "used_tokens": 7605,
+          "used_cost_micros": 4605,
+          "pending_model_calls": 0,
+          "reserved_tokens": 0,
+          "reserved_cost_micros": 0,
+          "failure_class": "external",
+          "failure_message": "[OMITTED]",
+          "version": 28,
+          "updated_at_unix_milli": 1790050210010
+        }
+      ],
+      "attempts": [
+        {
+          "workload": "diagnostic-analysis/v1",
+          "profile_digest": "6f2ae103ada3de76030d8cb736ead733d04f2a2decc409e53e6ed6a61a0f8db8",
+          "context_digest": "sha256:7b05540744ce2ec30a78fa65180de6d32930475d0045e65aeae4ec28465e1bbd",
+          "id": "rtm_a24d9e700c280a556d487ad5",
+          "execution_id": "exec_3c48b28026a81820fa477288",
+          "attempt_number": 1,
+          "specification_digest": "sha256:f0c8ff59954ae8d958b819d9488708615110c5548de04c171ea289f8581a9582",
+          "provider_handle": "sha256:68ef9b72a51a6ff57addaac4e37ac995551d06b6d9541c313fb33e7fc00c16b4",
+          "state": "failed",
+          "deadline_at_unix_milli": 1790050450874,
+          "cleanup_state": "completed",
+          "outputs_collected": false,
+          "version": 17,
+          "observed_job": {
+            "name": "marina-5b3dfecf036639a0786d1dc6f024312f2e0a828d",
+            "namespace": "marina-workers",
+            "uid": "3756cbdc-f843-4c76-8443-c056d163e799"
+          }
+        }
+      ],
+      "model_calls": [
+        {
+          "id": "mdl_b841b2e2b417f297fb945a01",
+          "execution_id": "exec_3c48b28026a81820fa477288",
+          "attempt_id": "rtm_a24d9e700c280a556d487ad5",
+          "reserved_tokens": 14675,
+          "reserved_cost_micros": 10905,
+          "used_tokens": 4020,
+          "used_cost_micros": 2752,
+          "usage_known": true
+        },
+        {
+          "id": "mdl_14581ad54df9ec356730d63c",
+          "execution_id": "exec_3c48b28026a81820fa477288",
+          "attempt_id": "rtm_a24d9e700c280a556d487ad5",
+          "reserved_tokens": 15883,
+          "reserved_cost_micros": 11449,
+          "used_tokens": 3585,
+          "used_cost_micros": 1853,
+          "usage_known": true
+        }
+      ],
+      "tool_decisions": [
+        {
+          "execution_id": "exec_3c48b28026a81820fa477288",
+          "attempt_id": "rtm_a24d9e700c280a556d487ad5",
+          "tool": "read_context_source",
+          "allowed": true,
+          "reason": "allowed",
+          "argument_digest": "sha256:76e4eff0c210a664e01589dc36ae8ac3924a05e0eb2eb2bb78b981cd1a818955",
+          "context_digest": "sha256:7b05540744ce2ec30a78fa65180de6d32930475d0045e65aeae4ec28465e1bbd"
+        }
+      ],
+      "commands": [],
+      "evidence": [],
+      "downloads": [],
+      "events": [
+        {
+          "type": "run.blocked",
+          "message": "Run blocked: analyze worker failed; inspect the Kubernetes Job and create a revised task"
+        },
+        {
+          "type": "model.budget_exhausted",
+          "message": "token budget cannot admit model request: execution budget exhausted"
+        },
+        {
+          "type": "tool.decision",
+          "message": "Context tool: allowed"
+        }
+      ],
+      "context": {
+        "digest": "sha256:7b05540744ce2ec30a78fa65180de6d32930475d0045e65aeae4ec28465e1bbd",
+        "harness_version": "langchain-create-agent/v2",
+        "tool_versions": {
+          "worker_image": "localhost/the-platform/marina-analysis@sha256:022c0818a9a05741927c2e302aa12ec6248a3ba056c155be6993af3a6b2627a8"
+        }
+      },
+      "exercise": {
+        "exercise": "restart-deck-planning",
+        "run_id": "run_93e1ce3bdad84bfe93f4",
+        "decision_id": "dec_627412b7e0d8e41e2be7",
+        "preserved": true
+      },
+      "observed_worker_logs": [
+        "worker failed: analysis harness failed (harness_error); inspect the governed model diagnostics"
+      ]
+    },
+    {
+      "task_id": "tsk_1a4a0732ba504129c77e",
+      "title": "Agent MVP 2026-09-22 coding normal",
+      "status": "done",
+      "invocation": {
+        "key": "agent-mvp-1790050248965009000",
+        "request": {
+          "profile_id": "repository/v1",
+          "profile_digest": "b3792503787c9459bd2b24c8a22b75a01b9908cc9adfd4950fe980c84882a1f8",
+          "task": {
+            "project_id": "prj_default",
+            "title": "Agent MVP 2026-09-22 coding normal",
+            "description": "In src/clamp.cjs, clamp(value, minimum, maximum) wrongly returns maximum - 1 when value >= maximum. Change that branch to return maximum. Preserve all other behavior and existing tests. Run node --test tests/clamp.test.cjs, then finish. Only src/clamp.cjs may change. Do not merge or deploy.",
+            "acceptance_criteria": "All seven existing regression tests pass. A separate verification Job and required acceptance-regression CI verify the exact PR head; evidence is downloadable in Deck.",
+            "status": "ready",
+            "priority": "urgent",
+            "budget_minutes": 10,
+            "budget": {
+              "time_minutes": 10,
+              "max_attempts": 2,
+              "max_tokens": 200000,
+              "max_cost_minor": 20,
+              "currency": "USD",
+              "max_concurrency": 1,
+              "authority": [
+                "source.read",
+                "source.write",
+                "pull_request.create"
+              ]
+            }
+          }
+        },
+        "replayed_task_id": "tsk_1a4a0732ba504129c77e"
+      },
+      "run": {
+        "id": "run_0f447b68dd91b72711fc",
+        "agent_id": "agt_a18f00886390860b0b6137b9",
+        "status": "completed",
+        "task_version": 1,
+        "fence_token": 1,
+        "started_at": 1790050249670,
+        "finished_at": 1790050340218,
+        "result_summary": "Verified PR ready for human review: https://github.com/jmlero/marina-acceptance/pull/12 (commit bfdfa51b9583535d2d0a78a565401768db5123db)"
+      },
+      "executions": [
+        {
+          "id": "exec_990e91d28445da30bcf54eeb",
+          "project_id": "prj_default",
+          "work_provider": "deck",
+          "external_work_id": "tsk_1a4a0732ba504129c77e",
+          "external_run_id": "run_0f447b68dd91b72711fc",
+          "state": "completed",
+          "attempt": 2,
+          "used_tokens": 62069,
+          "used_cost_micros": 28944,
+          "pending_model_calls": 0,
+          "reserved_tokens": 0,
+          "reserved_cost_micros": 0,
+          "version": 55,
+          "updated_at_unix_milli": 1790050340221
+        }
+      ],
+      "attempts": [
+        {
+          "workload": "repository/v1",
+          "context_digest": "sha256:84dde4818988cec786cb8f14dcf9e0a64e2d43a6bbb4466056ec459677363364",
+          "id": "rtm_cfa127b2098b1fc1ad6416c1",
+          "execution_id": "exec_990e91d28445da30bcf54eeb",
+          "attempt_number": 1,
+          "specification_digest": "sha256:75257e92b75d77a81e4634abf0b13ae055a20f10c8a55689f27e303ada2ee07b",
+          "provider_handle": "sha256:c8ac674ed7733e31606525850d43a5c9f10dfe7281cc114574fe7e7f9c0f1aaa",
+          "state": "succeeded",
+          "deadline_at_unix_milli": 1790050849666,
+          "cleanup_state": "completed",
+          "outputs_collected": false,
+          "version": 13,
+          "observed_job": {
+            "name": "marina-c5ede94cdbc2283aa0f3071b852e1f821061f8c1",
+            "namespace": "marina-workers",
+            "uid": "30ac3a83-ace9-45ab-b2cf-a2912d2f3b81"
+          }
+        },
+        {
+          "workload": "repository/v1",
+          "context_digest": "sha256:84dde4818988cec786cb8f14dcf9e0a64e2d43a6bbb4466056ec459677363364",
+          "id": "rtm_b5c89dad4ddc66147f69af85",
+          "execution_id": "exec_990e91d28445da30bcf54eeb",
+          "attempt_number": 2,
+          "specification_digest": "sha256:cd541fa466a3763bcf157429bb29ebaac4164a698c9afc69ced59fdab154cc58",
+          "provider_handle": "sha256:57a07f8c859c885340d2a9e76d48d4d04eb6396a6169354b8ec34b2d29695188",
+          "state": "succeeded",
+          "deadline_at_unix_milli": 1790050849666,
+          "cleanup_state": "completed",
+          "outputs_collected": false,
+          "version": 6,
+          "observed_job": {
+            "name": "marina-ac185a4af40abba0868a142ca63c927cd3d45b83",
+            "namespace": "marina-workers",
+            "uid": "6cb6c22a-49d3-408d-970c-2c8fb8ba76a1"
+          }
+        }
+      ],
+      "model_calls": [
+        {
+          "id": "mdl_3edd615c05321d02d8b297f5",
+          "execution_id": "exec_990e91d28445da30bcf54eeb",
+          "attempt_id": "rtm_cfa127b2098b1fc1ad6416c1",
+          "reserved_tokens": 51745,
+          "reserved_cost_micros": 27587,
+          "used_tokens": 10430,
+          "used_cost_micros": 4948,
+          "usage_known": true
+        },
+        {
+          "id": "mdl_b2d35c1f7f2aaa942a2b2d7d",
+          "execution_id": "exec_990e91d28445da30bcf54eeb",
+          "attempt_id": "rtm_cfa127b2098b1fc1ad6416c1",
+          "reserved_tokens": 54609,
+          "reserved_cost_micros": 28875,
+          "used_tokens": 10916,
+          "used_cost_micros": 5055,
+          "usage_known": true
+        },
+        {
+          "id": "mdl_d568bdef9dc6d379e475366a",
+          "execution_id": "exec_990e91d28445da30bcf54eeb",
+          "attempt_id": "rtm_cfa127b2098b1fc1ad6416c1",
+          "reserved_tokens": 59889,
+          "reserved_cost_micros": 31251,
+          "used_tokens": 12338,
+          "used_cost_micros": 5739,
+          "usage_known": true
+        },
+        {
+          "id": "mdl_3d1c4a55b1569afcf4609452",
+          "execution_id": "exec_990e91d28445da30bcf54eeb",
+          "attempt_id": "rtm_cfa127b2098b1fc1ad6416c1",
+          "reserved_tokens": 65360,
+          "reserved_cost_micros": 33713,
+          "used_tokens": 13846,
+          "used_cost_micros": 6487,
+          "usage_known": true
+        },
+        {
+          "id": "mdl_406a93b31584e3ae916c1a2d",
+          "execution_id": "exec_990e91d28445da30bcf54eeb",
+          "attempt_id": "rtm_cfa127b2098b1fc1ad6416c1",
+          "reserved_tokens": 68626,
+          "reserved_cost_micros": 35183,
+          "used_tokens": 14539,
+          "used_cost_micros": 6715,
+          "usage_known": true
+        }
+      ],
+      "tool_decisions": [],
+      "commands": [],
+      "evidence": [
+        {
+          "id": "exec_990e91d28445da30bcf54eeb:check:0",
+          "task_id": "tsk_1a4a0732ba504129c77e",
+          "run_id": "run_0f447b68dd91b72711fc",
+          "plan_revision_id": "pln_3ab4c5455770a2350751",
+          "type": "test",
+          "producer": "rtm_cfa127b2098b1fc1ad6416c1",
+          "verifier": "rtm_b5c89dad4ddc66147f69af85",
+          "subject_digest": "bfdfa51b9583535d2d0a78a565401768db5123db",
+          "source_revision": "bfdfa51b9583535d2d0a78a565401768db5123db",
+          "command": "node --test tests/clamp.test.cjs",
+          "outcome": "passed",
+          "provenance_uri": "https://marina.marina-system.svc:8090/artifacts/sha256:0b32d6adfde8ea74d0b55d315061c779bfbde31ab4699914a421a1d589722485",
+          "provenance_digest": "sha256:0b32d6adfde8ea74d0b55d315061c779bfbde31ab4699914a421a1d589722485",
+          "observed_at": 1790050303689,
+          "expires_at": 1790136703689,
+          "artifact_uri": "https://marina.marina-system.svc:8090/artifacts/sha256:0b32d6adfde8ea74d0b55d315061c779bfbde31ab4699914a421a1d589722485",
+          "artifact_digest": "sha256:0b32d6adfde8ea74d0b55d315061c779bfbde31ab4699914a421a1d589722485",
+          "policy_version": "repository-fix-v1",
+          "admission_status": "current",
+          "created_at": 1790050333971
+        }
+      ],
+      "downloads": [
+        {
+          "digest": "sha256:0b32d6adfde8ea74d0b55d315061c779bfbde31ab4699914a421a1d589722485",
+          "bytes": 1482,
+          "value": {
+            "stage": "verify",
+            "source_revision": "bfdfa51b9583535d2d0a78a565401768db5123db",
+            "summary": "Independent repository checks completed",
+            "checks": [
+              {
+                "id": "regression",
+                "command": [
+                  "node",
+                  "--test",
+                  "tests/clamp.test.cjs"
+                ],
+                "directory": ".",
+                "exit_code": 0,
+                "output": "TAP version 13\n# Subtest: preserves values inside the interval\nok 1 - preserves values inside the interval\n  ---\n  duration_ms: 0.3345\n  type: 'test'\n  ...\n# Subtest: lower bound is inclusive\nok 2 - lower bound is inclusive\n  ---\n  duration_ms: 0.094667\n  type: 'test'\n  ...\n# Subtest: upper bound is inclusive\nok 3 - upper bound is inclusive\n  ---\n  duration_ms: 0.049125\n  type: 'test'\n  ...\n# Subtest: preserves a value at the upper bound\nok 4 - preserves a value at the upper bound\n  ---\n  duration_ms: 0.044292\n  type: 'test'\n  ...\n# Subtest: supports negative intervals\nok 5 - supports negative intervals\n  ---\n  duration_ms: 0.043917\n  type: 'test'\n  ...\n# Subtest: supports a single-value interval\nok 6 - supports a single-value interval\n  ---\n  duration_ms: 0.042084\n  type: 'test'\n  ...\n# Subtest: rejects an inverted interval\nok 7 - rejects an inverted interval\n  ---\n  duration_ms: 0.166042\n  type: 'test'\n  ...\n1..7\n# tests 7\n# suites 0\n# pass 7\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 32.925173\n",
+                "output_digest": "sha256:a3fd5f6e756a5891b14f9caa7f263048475b2b08f4ef82fdfa3302ba761cf26e"
+              }
+            ],
+            "tokens": 0,
+            "observed_at": "2026-09-22T04:11:43.689717641Z"
+          }
+        }
+      ],
+      "events": [],
+      "context": {
+        "digest": "sha256:84dde4818988cec786cb8f14dcf9e0a64e2d43a6bbb4466056ec459677363364",
+        "harness_version": "localhost/the-platform/marina-worker@sha256:caa563bfdd2a14d28af2c817a3f9696ed9f3cb41293b5fb003445fd16a4ba9c9",
+        "tool_versions": {
+          "worker_image": "localhost/the-platform/marina-worker@sha256:caa563bfdd2a14d28af2c817a3f9696ed9f3cb41293b5fb003445fd16a4ba9c9"
+        }
+      },
+      "artifact_redownload_after_final_upgrade": true
+    },
+    {
+      "task_id": "tsk_4e98c087d7fd974c6f1d",
+      "title": "Agent MVP 2026-09-22 analysis token-budget",
+      "status": "blocked",
+      "invocation": {
+        "key": "agent-mvp-1790050616108873000",
+        "request": {
+          "profile_id": "diagnostic-analysis/v1",
+          "profile_digest": "6f2ae103ada3de76030d8cb736ead733d04f2a2decc409e53e6ed6a61a0f8db8",
+          "task": {
+            "project_id": "prj_default",
+            "title": "Agent MVP 2026-09-22 analysis token-budget",
+            "description": "Analyze only the installed synthetic blocked-runs diagnostic fixture. Do not mutate source or infrastructure.",
+            "acceptance_criteria": "Identify provider_unavailable and budget_exhausted with source IDs and verbatim causal evidence, excluding the healthy record. Independent validation must bind the profile, input and output digests.",
+            "status": "ready",
+            "priority": "urgent",
+            "budget_minutes": 5,
+            "budget": {
+              "time_minutes": 5,
+              "max_attempts": 1,
+              "max_tokens": 1,
+              "max_cost_minor": 10,
+              "currency": "USD",
+              "max_concurrency": 1,
+              "authority": [
+                "analysis.run.6f2ae103ada3de76030d8cb736ead733d04f2a2decc409e53e6ed6a61a0f8db8"
+              ]
+            }
+          }
+        },
+        "replayed_task_id": "tsk_4e98c087d7fd974c6f1d"
+      },
+      "run": {
+        "id": "run_b64e90bb7bda63774fd2",
+        "agent_id": "agt_a18f00886390860b0b6137b9",
+        "status": "blocked",
+        "task_version": 1,
+        "fence_token": 1,
+        "started_at": 1790050616816,
+        "finished_at": 1790050639677,
+        "result_summary": "analyze worker failed; inspect the Kubernetes Job and create a revised task"
+      },
+      "executions": [
+        {
+          "id": "exec_1dc4b14767c6246e5fbae962",
+          "project_id": "prj_default",
+          "work_provider": "deck",
+          "external_work_id": "tsk_4e98c087d7fd974c6f1d",
+          "external_run_id": "run_b64e90bb7bda63774fd2",
+          "state": "blocked",
+          "attempt": 1,
+          "used_tokens": 0,
+          "used_cost_micros": 0,
+          "pending_model_calls": 0,
+          "reserved_tokens": 0,
+          "reserved_cost_micros": 0,
+          "failure_class": "external",
+          "failure_message": "[OMITTED]",
+          "version": 18,
+          "updated_at_unix_milli": 1790050639678
+        }
+      ],
+      "attempts": [
+        {
+          "workload": "diagnostic-analysis/v1",
+          "profile_digest": "6f2ae103ada3de76030d8cb736ead733d04f2a2decc409e53e6ed6a61a0f8db8",
+          "context_digest": "sha256:c2529b695bfbc9c557edcb9710c540c98af5f2951d16683ec2601280d6965c5b",
+          "id": "rtm_846ea3fd737fac61a2367574",
+          "execution_id": "exec_1dc4b14767c6246e5fbae962",
+          "attempt_number": 1,
+          "specification_digest": "sha256:e06739b2513898f6ec5a14756458f43ef12dee5e445317a71dc2ece54726ebfd",
+          "provider_handle": "sha256:2b17b7bc892a26e186cb8392958b29b2f8408eed63980a4a549a37de9d44138d",
+          "state": "failed",
+          "deadline_at_unix_milli": 1790050916814,
+          "cleanup_state": "completed",
+          "outputs_collected": false,
+          "version": 6,
+          "observed_job": {
+            "name": "marina-521e3ea080c4f1177aed02d77b75a6bb6e802b10",
+            "namespace": "marina-workers",
+            "uid": "d0eeea23-feb2-407e-b194-6a4707287435"
+          }
+        }
+      ],
+      "model_calls": [],
+      "tool_decisions": [],
+      "commands": [],
+      "evidence": [],
+      "downloads": [],
+      "events": [
+        {
+          "type": "model.budget_exhausted",
+          "message": "token budget cannot admit model request: execution budget exhausted"
+        },
+        {
+          "type": "run.blocked",
+          "message": "Run blocked: analyze worker failed; inspect the Kubernetes Job and create a revised task"
+        }
+      ],
+      "context": {
+        "digest": "sha256:c2529b695bfbc9c557edcb9710c540c98af5f2951d16683ec2601280d6965c5b",
+        "harness_version": "langchain-create-agent/v2",
+        "tool_versions": {
+          "worker_image": "localhost/the-platform/marina-analysis@sha256:022c0818a9a05741927c2e302aa12ec6248a3ba056c155be6993af3a6b2627a8"
+        }
+      }
+    },
+    {
+      "task_id": "tsk_6ffe99b82f7254060442",
+      "title": "Agent MVP 2026-09-22 analysis normal",
+      "status": "done",
+      "invocation": {
+        "key": "agent-mvp-1790052608320224000",
+        "request": {
+          "profile_id": "diagnostic-analysis/v1",
+          "profile_digest": "6f2ae103ada3de76030d8cb736ead733d04f2a2decc409e53e6ed6a61a0f8db8",
+          "task": {
+            "project_id": "prj_default",
+            "title": "Agent MVP 2026-09-22 analysis normal",
+            "description": "Analyze only the installed synthetic blocked-runs diagnostic fixture. Do not mutate source or infrastructure.",
+            "acceptance_criteria": "Identify provider_unavailable and budget_exhausted with source IDs and verbatim causal evidence, excluding the healthy record. Independent validation must bind the profile, input and output digests.",
+            "status": "ready",
+            "priority": "urgent",
+            "budget_minutes": 5,
+            "budget": {
+              "time_minutes": 5,
+              "max_attempts": 1,
+              "max_tokens": 20000,
+              "max_cost_minor": 10,
+              "currency": "USD",
+              "max_concurrency": 1,
+              "authority": [
+                "analysis.run.6f2ae103ada3de76030d8cb736ead733d04f2a2decc409e53e6ed6a61a0f8db8"
+              ]
+            }
+          }
+        },
+        "replayed_task_id": "tsk_6ffe99b82f7254060442"
+      },
+      "run": {
+        "id": "run_97e689d2a1e189d75a83",
+        "agent_id": "agt_a18f00886390860b0b6137b9",
+        "status": "completed",
+        "task_version": 1,
+        "fence_token": 1,
+        "started_at": 1790052608950,
+        "finished_at": 1790052655780,
+        "result_summary": "Validated diagnostic analysis: https://marina.marina-system.svc:8090/artifacts/sha256:4f0ce5a67c8822d28de023be17fafa7cc16fabf81c7293f79781065ae10a2008"
+      },
+      "executions": [
+        {
+          "id": "exec_35ef7670670fe08d41cc1f32",
+          "project_id": "prj_default",
+          "work_provider": "deck",
+          "external_work_id": "tsk_6ffe99b82f7254060442",
+          "external_run_id": "run_97e689d2a1e189d75a83",
+          "state": "completed",
+          "attempt": 1,
+          "used_tokens": 6643,
+          "used_cost_micros": 3193,
+          "pending_model_calls": 0,
+          "reserved_tokens": 0,
+          "reserved_cost_micros": 0,
+          "version": 34,
+          "updated_at_unix_milli": 1790052655781
+        }
+      ],
+      "attempts": [
+        {
+          "workload": "diagnostic-analysis/v1",
+          "profile_digest": "6f2ae103ada3de76030d8cb736ead733d04f2a2decc409e53e6ed6a61a0f8db8",
+          "context_digest": "sha256:b56a26f218e2cab65a3778f7ab88d52fea06c04e0ad2b99b06d5eb4c04ceb364",
+          "id": "rtm_0f847b3e7635e6d33fb4a9cb",
+          "execution_id": "exec_35ef7670670fe08d41cc1f32",
+          "attempt_number": 1,
+          "specification_digest": "sha256:e13f13d76eccc7b3d919312bcc2c5c1fdb21b3e05ec90728e9356289a1867ded",
+          "provider_handle": "sha256:886505d6c05b7c15ba6c7f72f7da0f20682447113fb2a35f54b6d8cc0627e92f",
+          "state": "succeeded",
+          "deadline_at_unix_milli": 1790052908948,
+          "cleanup_state": "completed",
+          "outputs_collected": false,
+          "version": 11,
+          "observed_job": {
+            "name": "marina-5fe06f9fe71f4aa8bb1ef1d865af3d94cfec83d3",
+            "namespace": "marina-workers",
+            "uid": "6044c1ed-a917-43ca-a5af-c6f10c58d85b"
+          }
+        }
+      ],
+      "model_calls": [
+        {
+          "id": "mdl_04eb0c33bdb2749acb2dc9f7",
+          "execution_id": "exec_35ef7670670fe08d41cc1f32",
+          "attempt_id": "rtm_0f847b3e7635e6d33fb4a9cb",
+          "reserved_tokens": 14660,
+          "reserved_cost_micros": 10898,
+          "used_tokens": 3152,
+          "used_cost_micros": 1454,
+          "usage_known": true
+        },
+        {
+          "id": "mdl_95c245e60f8488825711ced2",
+          "execution_id": "exec_35ef7670670fe08d41cc1f32",
+          "attempt_id": "rtm_0f847b3e7635e6d33fb4a9cb",
+          "reserved_tokens": 15640,
+          "reserved_cost_micros": 11339,
+          "used_tokens": 3491,
+          "used_cost_micros": 1739,
+          "usage_known": true
+        }
+      ],
+      "tool_decisions": [
+        {
+          "execution_id": "exec_35ef7670670fe08d41cc1f32",
+          "attempt_id": "rtm_0f847b3e7635e6d33fb4a9cb",
+          "tool": "read_context_source",
+          "allowed": true,
+          "reason": "allowed",
+          "argument_digest": "sha256:76e4eff0c210a664e01589dc36ae8ac3924a05e0eb2eb2bb78b981cd1a818955",
+          "context_digest": "sha256:b56a26f218e2cab65a3778f7ab88d52fea06c04e0ad2b99b06d5eb4c04ceb364"
+        }
+      ],
+      "commands": [],
+      "evidence": [
+        {
+          "id": "exec_35ef7670670fe08d41cc1f32:analysis-validation",
+          "task_id": "tsk_6ffe99b82f7254060442",
+          "run_id": "run_97e689d2a1e189d75a83",
+          "plan_revision_id": "pln_654c05f71fe8e9a89833",
+          "type": "test",
+          "producer": "rtm_0f847b3e7635e6d33fb4a9cb",
+          "verifier": "marina:diagnostic-validator/v1",
+          "subject_digest": "sha256:d446a55038c248178cd83ede5b1e9cbe2cc10acc00f3fb3ea1660a35233e8750",
+          "source_revision": "28b82a3e2af6aae3271f85b5e0cdf8c935a9ad9842cfbb9cb4b3f9606a2a4278",
+          "command": "marina diagnostic-validator/v1",
+          "outcome": "passed",
+          "provenance_uri": "https://marina.marina-system.svc:8090/artifacts/sha256:4f0ce5a67c8822d28de023be17fafa7cc16fabf81c7293f79781065ae10a2008",
+          "provenance_digest": "sha256:4f0ce5a67c8822d28de023be17fafa7cc16fabf81c7293f79781065ae10a2008",
+          "observed_at": 1790052649793,
+          "expires_at": 1790139049793,
+          "artifact_uri": "https://marina.marina-system.svc:8090/artifacts/sha256:4f0ce5a67c8822d28de023be17fafa7cc16fabf81c7293f79781065ae10a2008",
+          "artifact_digest": "sha256:4f0ce5a67c8822d28de023be17fafa7cc16fabf81c7293f79781065ae10a2008",
+          "policy_version": "repository-fix-v1",
+          "admission_status": "current",
+          "created_at": 1790052652782
+        }
+      ],
+      "downloads": [
+        {
+          "digest": "sha256:4f0ce5a67c8822d28de023be17fafa7cc16fabf81c7293f79781065ae10a2008",
+          "bytes": 1867,
+          "value": {
+            "context_digest": "sha256:b56a26f218e2cab65a3778f7ab88d52fea06c04e0ad2b99b06d5eb4c04ceb364",
+            "version": 1,
+            "validator": "marina:diagnostic-validator/v1",
+            "profile_digest": "6f2ae103ada3de76030d8cb736ead733d04f2a2decc409e53e6ed6a61a0f8db8",
+            "input_digest": "28b82a3e2af6aae3271f85b5e0cdf8c935a9ad9842cfbb9cb4b3f9606a2a4278",
+            "output_digest": "sha256:d446a55038c248178cd83ede5b1e9cbe2cc10acc00f3fb3ea1660a35233e8750",
+            "report": {
+              "summary": "Two blocked synthetic records identified (one provider outage, one budget denial); the healthy record was excluded. No mutation performed.",
+              "findings": [
+                {
+                  "code": "provider_unavailable",
+                  "source_id": "model-outage",
+                  "quote": "upstream HTTP 503",
+                  "explanation": "Provider outage blocks the run; operator action: await provider recovery (reservation remains held). No remediation performed."
+                },
+                {
+                  "code": "budget_exhausted",
+                  "source_id": "token-limit",
+                  "quote": "requested 12000 tokens; remaining budget 4000 tokens",
+                  "explanation": "Admission denied for insufficient token budget; operator action: authorize a new bounded task. No remediation performed."
+                }
+              ]
+            },
+            "sources": [
+              {
+                "id": "model-outage",
+                "content": "Synthetic task alpha. Model gateway request failed: upstream HTTP 503; no response usage was received. The run is blocked pending provider recovery. Its unknown usage reservation remains held."
+              },
+              {
+                "id": "token-limit",
+                "content": "Synthetic task beta. Model admission denied: requested 12000 tokens; remaining budget 4000 tokens. No request was forwarded. The operator must authorize a new bounded task to continue."
+              },
+              {
+                "id": "healthy-worker",
+                "content": "Synthetic task gamma. Worker completed successfully. Independent checks passed. The report was downloaded and its digest matched. No operator action is required."
+              }
+            ],
+            "checks": [
+              "required findings",
+              "no duplicate or invented findings",
+              "source IDs and verbatim causal quotes",
+              "immutable input/profile/output binding"
+            ]
+          }
+        }
+      ],
+      "events": [
+        {
+          "type": "tool.decision",
+          "message": "Context tool: allowed"
+        }
+      ],
+      "context": {
+        "digest": "sha256:b56a26f218e2cab65a3778f7ab88d52fea06c04e0ad2b99b06d5eb4c04ceb364",
+        "harness_version": "langchain-create-agent/v2",
+        "tool_versions": {
+          "worker_image": "localhost/the-platform/marina-analysis@sha256:022c0818a9a05741927c2e302aa12ec6248a3ba056c155be6993af3a6b2627a8"
+        }
+      },
+      "artifact_redownload_after_final_upgrade": true
+    },
+    {
+      "task_id": "tsk_7228d3b9f937e86b5f10",
+      "title": "Agent MVP 2026-09-22 analysis restart-marina",
+      "status": "blocked",
+      "invocation": {
+        "key": "agent-mvp-1790049237970600000",
+        "request": {
+          "profile_id": "diagnostic-analysis/v1",
+          "profile_digest": "5f10b0a4d1f1bbab0c4d4320d2f9b3aab9ac883f9abd4c6f148e162058b8ee13",
+          "task": {
+            "project_id": "prj_default",
+            "title": "Agent MVP 2026-09-22 analysis restart-marina",
+            "description": "Analyze only the installed synthetic blocked-runs diagnostic fixture. Do not mutate source or infrastructure.",
+            "acceptance_criteria": "Identify provider_unavailable and budget_exhausted with source IDs and verbatim causal evidence, excluding the healthy record. Independent validation must bind the profile, input and output digests.",
+            "status": "ready",
+            "priority": "urgent",
+            "budget_minutes": 5,
+            "budget": {
+              "time_minutes": 5,
+              "max_attempts": 1,
+              "max_tokens": 20000,
+              "max_cost_minor": 10,
+              "currency": "USD",
+              "max_concurrency": 1,
+              "authority": [
+                "analysis.run.5f10b0a4d1f1bbab0c4d4320d2f9b3aab9ac883f9abd4c6f148e162058b8ee13"
+              ]
+            }
+          }
+        },
+        "replayed_task_id": "tsk_7228d3b9f937e86b5f10"
+      },
+      "run": {
+        "id": "run_c503caca2706dd3a148a",
+        "agent_id": "agt_a18f00886390860b0b6137b9",
+        "status": "blocked",
+        "task_version": 1,
+        "fence_token": 1,
+        "started_at": 1790049238980,
+        "finished_at": 1790049260418,
+        "result_summary": "analyze worker failed; inspect the Kubernetes Job and create a revised task"
+      },
+      "executions": [
+        {
+          "id": "exec_8ef107cd0fec7dfc2de4e84a",
+          "project_id": "prj_default",
+          "work_provider": "deck",
+          "external_work_id": "tsk_7228d3b9f937e86b5f10",
+          "external_run_id": "run_c503caca2706dd3a148a",
+          "state": "blocked",
+          "attempt": 1,
+          "used_tokens": 0,
+          "used_cost_micros": 0,
+          "pending_model_calls": 0,
+          "reserved_tokens": 0,
+          "reserved_cost_micros": 0,
+          "failure_class": "external",
+          "failure_message": "[OMITTED]",
+          "version": 18,
+          "updated_at_unix_milli": 1790049260419
+        }
+      ],
+      "attempts": [
+        {
+          "workload": "diagnostic-analysis/v1",
+          "profile_digest": "5f10b0a4d1f1bbab0c4d4320d2f9b3aab9ac883f9abd4c6f148e162058b8ee13",
+          "context_digest": "sha256:7ac2bbeb9c09da9fce93a9af22fdea32f562381f68acf28c6a0d23ec99b30d3c",
+          "id": "rtm_eb60754dab31d49c79d05c82",
+          "execution_id": "exec_8ef107cd0fec7dfc2de4e84a",
+          "attempt_number": 1,
+          "specification_digest": "sha256:6cd5f3df6a2ae372402d3290ae8c2aed928913f23f050971b887e453297a9124",
+          "provider_handle": "sha256:6751d0bb52a75a9804c27eefd37db09b76b238a4449a401883c65f52d9e2e66f",
+          "state": "failed",
+          "deadline_at_unix_milli": 1790049538976,
+          "cleanup_state": "completed",
+          "outputs_collected": false,
+          "version": 5,
+          "observed_job": {
+            "name": "marina-a39b53f6f84c03f02545afa7371fa15a6d5a3bd0",
+            "namespace": "marina-workers",
+            "uid": "34dc8347-24e3-4b33-8787-cb728f98bd92"
+          }
+        }
+      ],
+      "model_calls": [],
+      "tool_decisions": [],
+      "commands": [],
+      "evidence": [],
+      "downloads": [],
+      "events": [
+        {
+          "type": "run.blocked",
+          "message": "Run blocked: analyze worker failed; inspect the Kubernetes Job and create a revised task"
+        }
+      ],
+      "context": {
+        "digest": "sha256:7ac2bbeb9c09da9fce93a9af22fdea32f562381f68acf28c6a0d23ec99b30d3c",
+        "harness_version": "langchain-create-agent/v2",
+        "tool_versions": {
+          "worker_image": "localhost/the-platform/marina-analysis@sha256:bd1679a9ad26b4bb1f40781722259ec24717dbc77f46f40d0b7749118258ae33"
+        }
+      },
+      "exercise": {
+        "exercise": "restart-marina",
+        "jobs_before": [
+          {
+            "name": "marina-a39b53f6f84c03f02545afa7371fa15a6d5a3bd0",
+            "uid": "34dc8347-24e3-4b33-8787-cb728f98bd92"
+          }
+        ],
+        "response": "Waiting for deployment \"marina\" rollout to finish: 0 out of 1 new replicas have been updated...\nWaiting for deployment \"marina\" rollout to finish: 0 out of 1 new replicas have been updated...\nWaiting for deployment \"marina\" rollout to finish: 0 out of 1 new replicas have been updated...\nWaiting for deployment \"marina\" rollout to finish: 0 of 1 updated replicas are available...\ndeployment \"marina\" successfully rolled out\n",
+        "jobs_after": [
+          {
+            "name": "marina-a39b53f6f84c03f02545afa7371fa15a6d5a3bd0",
+            "uid": "34dc8347-24e3-4b33-8787-cb728f98bd92"
+          }
+        ]
+      },
+      "observed_worker_logs": [
+        "worker failed: analysis harness failed; inspect the governed model diagnostics"
+      ]
+    },
+    {
+      "task_id": "tsk_9ee01c87ef6b5fd1a042",
+      "title": "Agent MVP 2026-09-22 coding restart-deck",
+      "status": "blocked",
+      "invocation": {
+        "key": "agent-mvp-1790049843804183000",
+        "request": {
+          "profile_id": "repository/v1",
+          "profile_digest": "b3792503787c9459bd2b24c8a22b75a01b9908cc9adfd4950fe980c84882a1f8",
+          "task": {
+            "project_id": "prj_default",
+            "title": "Agent MVP 2026-09-22 coding restart-deck",
+            "description": "Fix clamp's inclusive upper boundary without changing its public API or tests. Only src/clamp.cjs may change. Do not merge or deploy.",
+            "acceptance_criteria": "All seven existing regression tests pass. A separate verification Job and required acceptance-regression CI verify the exact PR head; evidence is downloadable in Deck.",
+            "status": "ready",
+            "priority": "urgent",
+            "budget_minutes": 10,
+            "budget": {
+              "time_minutes": 10,
+              "max_attempts": 2,
+              "max_tokens": 200000,
+              "max_cost_minor": 20,
+              "currency": "USD",
+              "max_concurrency": 1,
+              "authority": [
+                "source.read",
+                "source.write",
+                "pull_request.create"
+              ]
+            }
+          }
+        },
+        "replayed_task_id": "tsk_9ee01c87ef6b5fd1a042"
+      },
+      "run": {
+        "id": "run_6ab5c772dde9c2a1910c",
+        "agent_id": "agt_a18f00886390860b0b6137b9",
+        "status": "blocked",
+        "task_version": 1,
+        "fence_token": 1,
+        "started_at": 1790049844499,
+        "finished_at": 1790049869311,
+        "result_summary": "implement worker failed; inspect the Kubernetes Job and create a revised task"
+      },
+      "executions": [
+        {
+          "id": "exec_5b943bb303137fa0901e0e2c",
+          "project_id": "prj_default",
+          "work_provider": "deck",
+          "external_work_id": "tsk_9ee01c87ef6b5fd1a042",
+          "external_run_id": "run_6ab5c772dde9c2a1910c",
+          "state": "blocked",
+          "attempt": 1,
+          "used_tokens": 0,
+          "used_cost_micros": 0,
+          "pending_model_calls": 0,
+          "reserved_tokens": 0,
+          "reserved_cost_micros": 0,
+          "failure_class": "external",
+          "failure_message": "[OMITTED]",
+          "version": 17,
+          "updated_at_unix_milli": 1790049869312
+        }
+      ],
+      "attempts": [
+        {
+          "workload": "repository/v1",
+          "context_digest": "sha256:71d6fb2067104a1549eaac1eed94abd892a89954b91604e89ce2a88eb56a6e1c",
+          "id": "rtm_54c7910ecbc4eea48ccb3e8e",
+          "execution_id": "exec_5b943bb303137fa0901e0e2c",
+          "attempt_number": 1,
+          "specification_digest": "sha256:52a1803f58d1b63a84932a8a13b430fe24635564526178ceeab327e1fd09c798",
+          "provider_handle": "sha256:de81ef1b3db6220f51a90b445f09fbdb134f5c67a06dfef01920a51e033954d4",
+          "state": "failed",
+          "deadline_at_unix_milli": 1790050444496,
+          "cleanup_state": "completed",
+          "outputs_collected": false,
+          "version": 5,
+          "observed_job": {
+            "name": "marina-87aee6f7286169cb9285d4cbc2b4cc023fd0ab06",
+            "namespace": "marina-workers",
+            "uid": "020aa67a-e0f2-4955-bd1e-8863c41e1606"
+          }
+        }
+      ],
+      "model_calls": [],
+      "tool_decisions": [],
+      "commands": [],
+      "evidence": [],
+      "downloads": [],
+      "events": [
+        {
+          "type": "run.blocked",
+          "message": "Run blocked: implement worker failed; inspect the Kubernetes Job and create a revised task"
+        }
+      ],
+      "context": {
+        "digest": "sha256:71d6fb2067104a1549eaac1eed94abd892a89954b91604e89ce2a88eb56a6e1c",
+        "harness_version": "localhost/the-platform/marina-worker@sha256:caa563bfdd2a14d28af2c817a3f9696ed9f3cb41293b5fb003445fd16a4ba9c9",
+        "tool_versions": {
+          "worker_image": "localhost/the-platform/marina-worker@sha256:caa563bfdd2a14d28af2c817a3f9696ed9f3cb41293b5fb003445fd16a4ba9c9"
+        }
+      },
+      "exercise": {
+        "exercise": "restart-deck",
+        "jobs_before": [
+          {
+            "name": "marina-87aee6f7286169cb9285d4cbc2b4cc023fd0ab06",
+            "uid": "020aa67a-e0f2-4955-bd1e-8863c41e1606"
+          }
+        ],
+        "response": "Waiting for deployment \"deck\" rollout to finish: 0 out of 1 new replicas have been updated...\nWaiting for deployment \"deck\" rollout to finish: 0 out of 1 new replicas have been updated...\nWaiting for deployment \"deck\" rollout to finish: 0 out of 1 new replicas have been updated...\nWaiting for deployment \"deck\" rollout to finish: 0 of 1 updated replicas are available...\ndeployment \"deck\" successfully rolled out\n",
+        "jobs_after": []
+      },
+      "observed_worker_logs": [
+        "worker failed: repository operation failed: exit status 128"
+      ]
+    },
+    {
+      "task_id": "tsk_9fa6e13a26bf2a4e3cd7",
+      "title": "Agent MVP 2026-09-22 analysis normal",
+      "status": "blocked",
+      "invocation": {
+        "key": "agent-mvp-1790051005311910000",
+        "request": {
+          "profile_id": "diagnostic-analysis/v1",
+          "profile_digest": "6f2ae103ada3de76030d8cb736ead733d04f2a2decc409e53e6ed6a61a0f8db8",
+          "task": {
+            "project_id": "prj_default",
+            "title": "Agent MVP 2026-09-22 analysis normal",
+            "description": "Analyze only the installed synthetic blocked-runs diagnostic fixture. Do not mutate source or infrastructure.",
+            "acceptance_criteria": "Identify provider_unavailable and budget_exhausted with source IDs and verbatim causal evidence, excluding the healthy record. Independent validation must bind the profile, input and output digests.",
+            "status": "ready",
+            "priority": "urgent",
+            "budget_minutes": 5,
+            "budget": {
+              "time_minutes": 5,
+              "max_attempts": 1,
+              "max_tokens": 20000,
+              "max_cost_minor": 10,
+              "currency": "USD",
+              "max_concurrency": 1,
+              "authority": [
+                "analysis.run.6f2ae103ada3de76030d8cb736ead733d04f2a2decc409e53e6ed6a61a0f8db8"
+              ]
+            }
+          }
+        },
+        "replayed_task_id": "tsk_9fa6e13a26bf2a4e3cd7"
+      },
+      "run": {
+        "id": "run_c68f70112a95c06dedc8",
+        "agent_id": "agt_a18f00886390860b0b6137b9",
+        "status": "blocked",
+        "task_version": 1,
+        "fence_token": 1,
+        "started_at": 1790051006035,
+        "finished_at": 1790051038172,
+        "result_summary": "analyze worker failed; inspect the Kubernetes Job and create a revised task"
+      },
+      "executions": [
+        {
+          "id": "exec_49f35d5530156cd72b7d4a35",
+          "project_id": "prj_default",
+          "work_provider": "deck",
+          "external_work_id": "tsk_9fa6e13a26bf2a4e3cd7",
+          "external_run_id": "run_c68f70112a95c06dedc8",
+          "state": "blocked",
+          "attempt": 1,
+          "used_tokens": 3649,
+          "used_cost_micros": 2190,
+          "pending_model_calls": 0,
+          "reserved_tokens": 0,
+          "reserved_cost_micros": 0,
+          "failure_class": "external",
+          "failure_message": "[OMITTED]",
+          "version": 22,
+          "updated_at_unix_milli": 1790051038174
+        }
+      ],
+      "attempts": [
+        {
+          "workload": "diagnostic-analysis/v1",
+          "profile_digest": "6f2ae103ada3de76030d8cb736ead733d04f2a2decc409e53e6ed6a61a0f8db8",
+          "context_digest": "sha256:6d18c79fdf58df18918d4a1412cb6a7f4e2e0f382e7781dcc62762dc532fc505",
+          "id": "rtm_949b39cb34de74c9a179d560",
+          "execution_id": "exec_49f35d5530156cd72b7d4a35",
+          "attempt_number": 1,
+          "specification_digest": "sha256:40f95ee16058788c4244b21636191c448d3e04142b583f18106a315baa065454",
+          "provider_handle": "sha256:e5bc6e07f206a9c2fa78efdcaf4894dd969714aaea4d6e451e09dec0b5afc228",
+          "state": "failed",
+          "deadline_at_unix_milli": 1790051306032,
+          "cleanup_state": "completed",
+          "outputs_collected": false,
+          "version": 9,
+          "observed_job": {
+            "name": "marina-4e4a188d4cfa76fe8537c0bfb5d8835c7865706c",
+            "namespace": "marina-workers",
+            "uid": "482f4fca-7b0a-4eb4-ab6b-6be80dd12494"
+          }
+        }
+      ],
+      "model_calls": [
+        {
+          "id": "mdl_b8ea6b4abef17204c3431653",
+          "execution_id": "exec_49f35d5530156cd72b7d4a35",
+          "attempt_id": "rtm_949b39cb34de74c9a179d560",
+          "reserved_tokens": 14660,
+          "reserved_cost_micros": 10898,
+          "used_tokens": 3649,
+          "used_cost_micros": 2190,
+          "usage_known": true
+        }
+      ],
+      "tool_decisions": [
+        {
+          "execution_id": "exec_49f35d5530156cd72b7d4a35",
+          "attempt_id": "rtm_949b39cb34de74c9a179d560",
+          "tool": "read_context_source",
+          "allowed": true,
+          "reason": "allowed",
+          "argument_digest": "sha256:656baa58af8b48eb09fd0aacfdf2171bf6f135d47540cd95691902dc018a972c",
+          "context_digest": "sha256:6d18c79fdf58df18918d4a1412cb6a7f4e2e0f382e7781dcc62762dc532fc505"
+        }
+      ],
+      "commands": [],
+      "evidence": [],
+      "downloads": [],
+      "events": [
+        {
+          "type": "run.blocked",
+          "message": "Run blocked: analyze worker failed; inspect the Kubernetes Job and create a revised task"
+        },
+        {
+          "type": "tool.decision",
+          "message": "Context tool: allowed"
+        }
+      ],
+      "context": {
+        "digest": "sha256:6d18c79fdf58df18918d4a1412cb6a7f4e2e0f382e7781dcc62762dc532fc505",
+        "harness_version": "langchain-create-agent/v2",
+        "tool_versions": {
+          "worker_image": "localhost/the-platform/marina-analysis@sha256:022c0818a9a05741927c2e302aa12ec6248a3ba056c155be6993af3a6b2627a8"
+        }
+      },
+      "observed_worker_logs": [
+        "worker failed: analysis harness failed (tool_denied); inspect the governed model diagnostics"
+      ]
+    },
+    {
+      "task_id": "tsk_a715c3e851fb87d483ab",
+      "title": "Agent MVP 2026-09-22 analysis restart-marina-planning",
+      "status": "blocked",
+      "invocation": {
+        "key": "agent-mvp-1790049542265540000",
+        "request": {
+          "profile_id": "diagnostic-analysis/v1",
+          "profile_digest": "5f10b0a4d1f1bbab0c4d4320d2f9b3aab9ac883f9abd4c6f148e162058b8ee13",
+          "task": {
+            "project_id": "prj_default",
+            "title": "Agent MVP 2026-09-22 analysis restart-marina-planning",
+            "description": "Analyze only the installed synthetic blocked-runs diagnostic fixture. Do not mutate source or infrastructure.",
+            "acceptance_criteria": "Identify provider_unavailable and budget_exhausted with source IDs and verbatim causal evidence, excluding the healthy record. Independent validation must bind the profile, input and output digests.",
+            "status": "ready",
+            "priority": "urgent",
+            "budget_minutes": 5,
+            "budget": {
+              "time_minutes": 5,
+              "max_attempts": 1,
+              "max_tokens": 20000,
+              "max_cost_minor": 10,
+              "currency": "USD",
+              "max_concurrency": 1,
+              "authority": [
+                "analysis.run.5f10b0a4d1f1bbab0c4d4320d2f9b3aab9ac883f9abd4c6f148e162058b8ee13"
+              ]
+            }
+          }
+        },
+        "replayed_task_id": "tsk_a715c3e851fb87d483ab"
+      },
+      "run": {
+        "id": "run_de347e82a1452a80132c",
+        "agent_id": "agt_a18f00886390860b0b6137b9",
+        "status": "blocked",
+        "task_version": 1,
+        "fence_token": 1,
+        "started_at": 1790049542906,
+        "finished_at": 1790049603780,
+        "result_summary": "analyze worker failed; inspect the Kubernetes Job and create a revised task"
+      },
+      "executions": [
+        {
+          "id": "exec_dd411f6165b4fadd12961210",
+          "project_id": "prj_default",
+          "work_provider": "deck",
+          "external_work_id": "tsk_a715c3e851fb87d483ab",
+          "external_run_id": "run_de347e82a1452a80132c",
+          "state": "blocked",
+          "attempt": 1,
+          "used_tokens": 2815,
+          "used_cost_micros": 1916,
+          "pending_model_calls": 0,
+          "reserved_tokens": 0,
+          "reserved_cost_micros": 0,
+          "failure_class": "external",
+          "failure_message": "[OMITTED]",
+          "version": 22,
+          "updated_at_unix_milli": 1790049603780
+        }
+      ],
+      "attempts": [
+        {
+          "workload": "diagnostic-analysis/v1",
+          "profile_digest": "5f10b0a4d1f1bbab0c4d4320d2f9b3aab9ac883f9abd4c6f148e162058b8ee13",
+          "context_digest": "sha256:42ed839c50fb6ef3045aa14f21a047b8b3518258f18ee9ab776b07f291e9861f",
+          "id": "rtm_fcce9495fb5fe40eec7c631b",
+          "execution_id": "exec_dd411f6165b4fadd12961210",
+          "attempt_number": 1,
+          "specification_digest": "sha256:91f54d55551e342771e544387cdc4ba10775ede7ae11a24ee926aac67b6ff90a",
+          "provider_handle": "sha256:deeba4f2b6cd9a82da13f0593eab09931fe56e9c025817615f1970dbc7b45cd7",
+          "state": "failed",
+          "deadline_at_unix_milli": 1790049842904,
+          "cleanup_state": "completed",
+          "outputs_collected": false,
+          "version": 16,
+          "observed_job": {
+            "name": "marina-739cc192026216191d086d532b559f02dadd5e71",
+            "namespace": "marina-workers",
+            "uid": "e68609ed-d6ab-43a2-917e-777a645ad5d9"
+          }
+        }
+      ],
+      "model_calls": [
+        {
+          "id": "mdl_66c698819d58ecaabf5c3c07",
+          "execution_id": "exec_dd411f6165b4fadd12961210",
+          "attempt_id": "rtm_fcce9495fb5fe40eec7c631b",
+          "reserved_tokens": 14677,
+          "reserved_cost_micros": 10906,
+          "used_tokens": 2815,
+          "used_cost_micros": 1916,
+          "usage_known": true
+        }
+      ],
+      "tool_decisions": [],
+      "commands": [],
+      "evidence": [],
+      "downloads": [],
+      "events": [
+        {
+          "type": "run.blocked",
+          "message": "Run blocked: analyze worker failed; inspect the Kubernetes Job and create a revised task"
+        }
+      ],
+      "context": {
+        "digest": "sha256:42ed839c50fb6ef3045aa14f21a047b8b3518258f18ee9ab776b07f291e9861f",
+        "harness_version": "langchain-create-agent/v2",
+        "tool_versions": {
+          "worker_image": "localhost/the-platform/marina-analysis@sha256:bd1679a9ad26b4bb1f40781722259ec24717dbc77f46f40d0b7749118258ae33"
+        }
+      },
+      "exercise": {
+        "exercise": "restart-marina-planning",
+        "run_id": "run_de347e82a1452a80132c",
+        "decision_id": "dec_a336d996e2f0f96655a8",
+        "preserved": true
+      },
+      "observed_worker_logs": [
+        "worker failed: analysis harness failed; inspect the governed model diagnostics"
+      ]
+    },
+    {
+      "task_id": "tsk_acea0e7462403296f0cc",
+      "title": "Agent MVP 2026-09-22 coding restart-marina-planning",
+      "status": "blocked",
+      "invocation": {
+        "key": "agent-mvp-1790049997883967000",
+        "request": {
+          "profile_id": "repository/v1",
+          "profile_digest": "b3792503787c9459bd2b24c8a22b75a01b9908cc9adfd4950fe980c84882a1f8",
+          "task": {
+            "project_id": "prj_default",
+            "title": "Agent MVP 2026-09-22 coding restart-marina-planning",
+            "description": "Fix clamp's inclusive upper boundary without changing its public API or tests. Only src/clamp.cjs may change. Do not merge or deploy.",
+            "acceptance_criteria": "All seven existing regression tests pass. A separate verification Job and required acceptance-regression CI verify the exact PR head; evidence is downloadable in Deck.",
+            "status": "ready",
+            "priority": "urgent",
+            "budget_minutes": 10,
+            "budget": {
+              "time_minutes": 10,
+              "max_attempts": 2,
+              "max_tokens": 200000,
+              "max_cost_minor": 20,
+              "currency": "USD",
+              "max_concurrency": 1,
+              "authority": [
+                "source.read",
+                "source.write",
+                "pull_request.create"
+              ]
+            }
+          }
+        },
+        "replayed_task_id": "tsk_acea0e7462403296f0cc"
+      },
+      "run": {
+        "id": "run_620e16b50e104bdd350e",
+        "agent_id": "agt_a18f00886390860b0b6137b9",
+        "status": "blocked",
+        "task_version": 1,
+        "fence_token": 1,
+        "started_at": 1790049998567,
+        "finished_at": 1790050098449,
+        "result_summary": "implement worker failed; inspect the Kubernetes Job and create a revised task"
+      },
+      "executions": [
+        {
+          "id": "exec_943de4279412eae204925515",
+          "project_id": "prj_default",
+          "work_provider": "deck",
+          "external_work_id": "tsk_acea0e7462403296f0cc",
+          "external_run_id": "run_620e16b50e104bdd350e",
+          "state": "blocked",
+          "attempt": 1,
+          "used_tokens": 113780,
+          "used_cost_micros": 53437,
+          "pending_model_calls": 0,
+          "reserved_tokens": 0,
+          "reserved_cost_micros": 0,
+          "failure_class": "external",
+          "failure_message": "[OMITTED]",
+          "version": 44,
+          "updated_at_unix_milli": 1790050098449
+        }
+      ],
+      "attempts": [
+        {
+          "workload": "repository/v1",
+          "context_digest": "sha256:1c1dfb1cfb077a7d375c7f7f218d53db49817e4c6c028525fd979a0022baadd7",
+          "id": "rtm_a247ab85488801cff99cf15d",
+          "execution_id": "exec_943de4279412eae204925515",
+          "attempt_number": 1,
+          "specification_digest": "sha256:7ab7590aa6379b811f26f9e0c147d81c0728d8ff956c103f80371f51edd34ec7",
+          "provider_handle": "sha256:f7419265c51c9b0f306377e9225d305c544030b1d45b1be972a86e0c016722ff",
+          "state": "failed",
+          "deadline_at_unix_milli": 1790050598565,
+          "cleanup_state": "completed",
+          "outputs_collected": false,
+          "version": 29,
+          "observed_job": {
+            "name": "marina-b69d6568dc1d08c17d5b96aedce0d65c5a050ae8",
+            "namespace": "marina-workers",
+            "uid": "6ddf03a8-e5de-485c-b486-03e5d26924a5"
+          }
+        }
+      ],
+      "model_calls": [
+        {
+          "id": "mdl_80e37668a248a54202191013",
+          "execution_id": "exec_943de4279412eae204925515",
+          "attempt_id": "rtm_a247ab85488801cff99cf15d",
+          "reserved_tokens": 51449,
+          "reserved_cost_micros": 27453,
+          "used_tokens": 10391,
+          "used_cost_micros": 4975,
+          "usage_known": true
+        },
+        {
+          "id": "mdl_56ea72f14ca07bc8984f35bc",
+          "execution_id": "exec_943de4279412eae204925515",
+          "attempt_id": "rtm_a247ab85488801cff99cf15d",
+          "reserved_tokens": 54409,
+          "reserved_cost_micros": 28785,
+          "used_tokens": 10892,
+          "used_cost_micros": 5019,
+          "usage_known": true
+        },
+        {
+          "id": "mdl_d7e0f600d3b937ddeeeb22c0",
+          "execution_id": "exec_943de4279412eae204925515",
+          "attempt_id": "rtm_a247ab85488801cff99cf15d",
+          "reserved_tokens": 59620,
+          "reserved_cost_micros": 31130,
+          "used_tokens": 12318,
+          "used_cost_micros": 5738,
+          "usage_known": true
+        },
+        {
+          "id": "mdl_ff1caedc811ac101871b65bc",
+          "execution_id": "exec_943de4279412eae204925515",
+          "attempt_id": "rtm_a247ab85488801cff99cf15d",
+          "reserved_tokens": 65153,
+          "reserved_cost_micros": 33620,
+          "used_tokens": 13721,
+          "used_cost_micros": 6322,
+          "usage_known": true
+        },
+        {
+          "id": "mdl_936b09cf9ee87148583fd78d",
+          "execution_id": "exec_943de4279412eae204925515",
+          "attempt_id": "rtm_a247ab85488801cff99cf15d",
+          "reserved_tokens": 66307,
+          "reserved_cost_micros": 34139,
+          "used_tokens": 14218,
+          "used_cost_micros": 6881,
+          "usage_known": true
+        },
+        {
+          "id": "mdl_da38c4f4d65285fd41b96a0c",
+          "execution_id": "exec_943de4279412eae204925515",
+          "attempt_id": "rtm_a247ab85488801cff99cf15d",
+          "reserved_tokens": 73022,
+          "reserved_cost_micros": 37161,
+          "used_tokens": 15841,
+          "used_cost_micros": 7508,
+          "usage_known": true
+        },
+        {
+          "id": "mdl_5b7bb8e4ff75c8a570c2e70c",
+          "execution_id": "exec_943de4279412eae204925515",
+          "attempt_id": "rtm_a247ab85488801cff99cf15d",
+          "reserved_tokens": 79317,
+          "reserved_cost_micros": 39994,
+          "used_tokens": 17446,
+          "used_cost_micros": 8208,
+          "usage_known": true
+        },
+        {
+          "id": "mdl_06a80324dd8806044579ddfc",
+          "execution_id": "exec_943de4279412eae204925515",
+          "attempt_id": "rtm_a247ab85488801cff99cf15d",
+          "reserved_tokens": 85455,
+          "reserved_cost_micros": 42756,
+          "used_tokens": 18953,
+          "used_cost_micros": 8786,
+          "usage_known": true
+        }
+      ],
+      "tool_decisions": [],
+      "commands": [],
+      "evidence": [],
+      "downloads": [],
+      "events": [
+        {
+          "type": "run.blocked",
+          "message": "Run blocked: implement worker failed; inspect the Kubernetes Job and create a revised task"
+        },
+        {
+          "type": "model.budget_exhausted",
+          "message": "token budget cannot admit model request: execution budget exhausted"
+        }
+      ],
+      "context": {
+        "digest": "sha256:1c1dfb1cfb077a7d375c7f7f218d53db49817e4c6c028525fd979a0022baadd7",
+        "harness_version": "localhost/the-platform/marina-worker@sha256:caa563bfdd2a14d28af2c817a3f9696ed9f3cb41293b5fb003445fd16a4ba9c9",
+        "tool_versions": {
+          "worker_image": "localhost/the-platform/marina-worker@sha256:caa563bfdd2a14d28af2c817a3f9696ed9f3cb41293b5fb003445fd16a4ba9c9"
+        }
+      },
+      "exercise": {
+        "exercise": "restart-marina-planning",
+        "run_id": "run_620e16b50e104bdd350e",
+        "decision_id": "dec_09a38e9ca57d1a7d9bc3",
+        "preserved": true
+      }
+    },
+    {
+      "task_id": "tsk_bc31dab930b4da717b3e",
+      "title": "Agent MVP 2026-09-22 analysis restart-marina",
+      "status": "blocked",
+      "invocation": {
+        "key": "agent-mvp-1790048839741151000",
+        "request": {
+          "profile_id": "diagnostic-analysis/v1",
+          "profile_digest": "7a555183d0fb65a935417a564e37450cea0d875f7c756de72d70b0b3da03c272",
+          "task": {
+            "project_id": "prj_default",
+            "title": "Agent MVP 2026-09-22 analysis restart-marina",
+            "description": "Analyze only the installed synthetic blocked-runs diagnostic fixture. Do not mutate source or infrastructure.",
+            "acceptance_criteria": "Identify provider_unavailable and budget_exhausted with source IDs and verbatim causal evidence, excluding the healthy record. Independent validation must bind the profile, input and output digests.",
+            "status": "ready",
+            "priority": "urgent",
+            "budget_minutes": 5,
+            "budget": {
+              "time_minutes": 5,
+              "max_attempts": 1,
+              "max_tokens": 20000,
+              "max_cost_minor": 10,
+              "currency": "USD",
+              "max_concurrency": 1,
+              "authority": [
+                "analysis.run.7a555183d0fb65a935417a564e37450cea0d875f7c756de72d70b0b3da03c272"
+              ]
+            }
+          }
+        },
+        "replayed_task_id": "tsk_bc31dab930b4da717b3e"
+      },
+      "run": {
+        "id": "run_76e0d67ad141854040f8",
+        "agent_id": "agt_a18f00886390860b0b6137b9",
+        "status": "blocked",
+        "task_version": 1,
+        "fence_token": 1,
+        "started_at": 1790048840410,
+        "finished_at": 1790048862287,
+        "result_summary": "analyze worker failed; inspect the Kubernetes Job and create a revised task"
+      },
+      "executions": [
+        {
+          "id": "exec_bf114dd2ff13dd661d11b0de",
+          "project_id": "prj_default",
+          "work_provider": "deck",
+          "external_work_id": "tsk_bc31dab930b4da717b3e",
+          "external_run_id": "run_76e0d67ad141854040f8",
+          "state": "blocked",
+          "attempt": 1,
+          "used_tokens": 0,
+          "used_cost_micros": 0,
+          "pending_model_calls": 0,
+          "reserved_tokens": 0,
+          "reserved_cost_micros": 0,
+          "failure_class": "external",
+          "failure_message": "[OMITTED]",
+          "version": 18,
+          "updated_at_unix_milli": 1790048862288
+        }
+      ],
+      "attempts": [
+        {
+          "workload": "diagnostic-analysis/v1",
+          "profile_digest": "7a555183d0fb65a935417a564e37450cea0d875f7c756de72d70b0b3da03c272",
+          "context_digest": "sha256:290483b8fedec0235779e04c86034e23d83ebb2e7ee2dad4912c9dab97884fed",
+          "id": "rtm_e4333d14bc2e91d7df8fa3ce",
+          "execution_id": "exec_bf114dd2ff13dd661d11b0de",
+          "attempt_number": 1,
+          "specification_digest": "sha256:035846843d7788bf166b9532945d9c7fdb3f50c5287ecfae3fb7622c7a5033a2",
+          "provider_handle": "sha256:36b1b4a547b5e6619b8f97e113ae15115a1e0ac8e36f0192eceaec5d2e05b09d",
+          "state": "failed",
+          "deadline_at_unix_milli": 1790049140407,
+          "cleanup_state": "completed",
+          "outputs_collected": false,
+          "version": 5,
+          "observed_job": {
+            "name": "marina-cc893176454f86e3142f9bb9114363388951df9a",
+            "namespace": "marina-workers",
+            "uid": "05b120a4-80a8-4f22-9fb7-cd18b08d0da4"
+          }
+        }
+      ],
+      "model_calls": [],
+      "tool_decisions": [],
+      "commands": [],
+      "evidence": [],
+      "downloads": [],
+      "events": [
+        {
+          "type": "run.blocked",
+          "message": "Run blocked: analyze worker failed; inspect the Kubernetes Job and create a revised task"
+        }
+      ],
+      "context": {
+        "digest": "sha256:290483b8fedec0235779e04c86034e23d83ebb2e7ee2dad4912c9dab97884fed",
+        "harness_version": "langchain-create-agent/v2",
+        "tool_versions": {
+          "worker_image": "localhost/the-platform/marina-analysis@sha256:8514f1712e4122f529cdc31cffc3e948b83905dd1a469f72bc83dbaeecc35017"
+        }
+      },
+      "exercise": {
+        "exercise": "restart-marina",
+        "jobs_before": [
+          {
+            "name": "marina-cc893176454f86e3142f9bb9114363388951df9a",
+            "uid": "05b120a4-80a8-4f22-9fb7-cd18b08d0da4"
+          }
+        ],
+        "response": "Waiting for deployment \"marina\" rollout to finish: 0 out of 1 new replicas have been updated...\nWaiting for deployment \"marina\" rollout to finish: 0 out of 1 new replicas have been updated...\nWaiting for deployment \"marina\" rollout to finish: 0 out of 1 new replicas have been updated...\nWaiting for deployment \"marina\" rollout to finish: 0 of 1 updated replicas are available...\ndeployment \"marina\" successfully rolled out\n",
+        "jobs_after": [
+          {
+            "name": "marina-cc893176454f86e3142f9bb9114363388951df9a",
+            "uid": "05b120a4-80a8-4f22-9fb7-cd18b08d0da4"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "tsk_c10ab08e45514cdc1cc2",
+      "title": "Agent MVP 2026-09-22 coding restart-deck",
+      "status": "blocked",
+      "invocation": {
+        "key": "agent-mvp-1790049709414607000",
+        "request": {
+          "profile_id": "repository/v1",
+          "profile_digest": "c481b47b55a39b48fdaa05804d79f68ec808662eff28c474969774962db00f61",
+          "task": {
+            "project_id": "prj_default",
+            "title": "Agent MVP 2026-09-22 coding restart-deck",
+            "description": "Fix clamp's inclusive upper boundary without changing its public API or tests. Only src/clamp.cjs may change. Do not merge or deploy.",
+            "acceptance_criteria": "All seven existing regression tests pass. A separate verification Job and required acceptance-regression CI verify the exact PR head; evidence is downloadable in Deck.",
+            "status": "ready",
+            "priority": "urgent",
+            "budget_minutes": 10,
+            "budget": {
+              "time_minutes": 10,
+              "max_attempts": 2,
+              "max_tokens": 200000,
+              "max_cost_minor": 20,
+              "currency": "USD",
+              "max_concurrency": 1,
+              "authority": [
+                "source.read",
+                "source.write",
+                "pull_request.create"
+              ]
+            }
+          }
+        },
+        "replayed_task_id": "tsk_c10ab08e45514cdc1cc2"
+      },
+      "run": {
+        "id": "run_ef573c09c4e09ae14179",
+        "agent_id": "agt_a18f00886390860b0b6137b9",
+        "status": "blocked",
+        "task_version": 1,
+        "fence_token": 1,
+        "started_at": 1790049710091,
+        "finished_at": 1790049713118,
+        "result_summary": "The original repository binding is unavailable or its installation profile changed; authorize new work after reviewing the installation"
+      },
+      "executions": [
+        {
+          "id": "exec_585c1c27e4c9f3bbf938ed16",
+          "project_id": "prj_default",
+          "work_provider": "deck",
+          "external_work_id": "tsk_c10ab08e45514cdc1cc2",
+          "external_run_id": "run_ef573c09c4e09ae14179",
+          "state": "blocked",
+          "attempt": 1,
+          "used_tokens": 0,
+          "used_cost_micros": 0,
+          "pending_model_calls": 0,
+          "reserved_tokens": 0,
+          "reserved_cost_micros": 0,
+          "failure_class": "external",
+          "failure_message": "[OMITTED]",
+          "version": 3,
+          "updated_at_unix_milli": 1790049713119
+        }
+      ],
+      "attempts": [],
+      "model_calls": [],
+      "tool_decisions": [],
+      "commands": [],
+      "evidence": [],
+      "downloads": [],
+      "events": [
+        {
+          "type": "run.blocked",
+          "message": "Run blocked: The original repository binding is unavailable or its installation profile changed; authorize new work after reviewing the installation"
+        }
+      ]
+    },
+    {
+      "task_id": "tsk_e17e6866f33b37b15390",
+      "title": "Agent MVP 2026-09-22 analysis cancel",
+      "status": "cancelled",
+      "invocation": {
+        "key": "agent-mvp-1790050455536858000",
+        "request": {
+          "profile_id": "diagnostic-analysis/v1",
+          "profile_digest": "6f2ae103ada3de76030d8cb736ead733d04f2a2decc409e53e6ed6a61a0f8db8",
+          "task": {
+            "project_id": "prj_default",
+            "title": "Agent MVP 2026-09-22 analysis cancel",
+            "description": "Analyze only the installed synthetic blocked-runs diagnostic fixture. Do not mutate source or infrastructure.",
+            "acceptance_criteria": "Identify provider_unavailable and budget_exhausted with source IDs and verbatim causal evidence, excluding the healthy record. Independent validation must bind the profile, input and output digests.",
+            "status": "ready",
+            "priority": "urgent",
+            "budget_minutes": 5,
+            "budget": {
+              "time_minutes": 5,
+              "max_attempts": 1,
+              "max_tokens": 20000,
+              "max_cost_minor": 10,
+              "currency": "USD",
+              "max_concurrency": 1,
+              "authority": [
+                "analysis.run.6f2ae103ada3de76030d8cb736ead733d04f2a2decc409e53e6ed6a61a0f8db8"
+              ]
+            }
+          }
+        },
+        "replayed_task_id": "tsk_e17e6866f33b37b15390"
+      },
+      "run": {
+        "id": "run_629c558affe01aec3e8a",
+        "agent_id": "agt_a18f00886390860b0b6137b9",
+        "status": "cancelled",
+        "task_version": 1,
+        "fence_token": 2,
+        "started_at": 1790050456225,
+        "finished_at": 1790050479092,
+        "result_summary": "analyze worker failed; inspect the Kubernetes Job and create a revised task"
+      },
+      "executions": [
+        {
+          "id": "exec_e251f511a230b4e2cf3c64df",
+          "project_id": "prj_default",
+          "work_provider": "deck",
+          "external_work_id": "tsk_e17e6866f33b37b15390",
+          "external_run_id": "run_629c558affe01aec3e8a",
+          "state": "blocked",
+          "attempt": 1,
+          "used_tokens": 0,
+          "used_cost_micros": 0,
+          "pending_model_calls": 0,
+          "reserved_tokens": 0,
+          "reserved_cost_micros": 0,
+          "failure_class": "external",
+          "failure_message": "[OMITTED]",
+          "version": 21,
+          "updated_at_unix_milli": 1790050479096
+        }
+      ],
+      "attempts": [
+        {
+          "workload": "diagnostic-analysis/v1",
+          "profile_digest": "6f2ae103ada3de76030d8cb736ead733d04f2a2decc409e53e6ed6a61a0f8db8",
+          "context_digest": "sha256:dc944e027c044b8417b3a97241008dca8b1f2e653fd3c869010776da989b0e99",
+          "id": "rtm_ce89b439baa2454fdde4744c",
+          "execution_id": "exec_e251f511a230b4e2cf3c64df",
+          "attempt_number": 1,
+          "specification_digest": "sha256:08835760f71f71bfe1b4dcf09f338a5ea0d37cea5bc22eee38a77da027a9334d",
+          "provider_handle": "sha256:8f1edbf7a6bf46cec083008af73b1009eb5ebf49eee473b1d80e7a1172ba17f2",
+          "state": "failed",
+          "deadline_at_unix_milli": 1790050756223,
+          "cleanup_state": "completed",
+          "outputs_collected": false,
+          "version": 5,
+          "observed_job": {
+            "name": "marina-27d28796e9511020dcee1676667aea6d9efd63ce",
+            "namespace": "marina-workers",
+            "uid": "d1c2d938-fca0-4bfe-ae58-699c3e713967"
+          }
+        }
+      ],
+      "model_calls": [],
+      "tool_decisions": [],
+      "commands": [
+        {
+          "id": "cmd_01eaada01fc8b816b782",
+          "run_id": "run_629c558affe01aec3e8a",
+          "sequence": 1,
+          "type": "cancel",
+          "status": "completed",
+          "reason": "MVP observed active worker cancellation",
+          "requested_by": "operator:owner",
+          "result": "Worker termination confirmed",
+          "run_version": 9,
+          "fence_token": 2,
+          "created_at": 1790050473850,
+          "updated_at": 1790050479092
+        }
+      ],
+      "evidence": [],
+      "downloads": [],
+      "events": [
+        {
+          "type": "run.blocked",
+          "message": "Run blocked: analyze worker failed; inspect the Kubernetes Job and create a revised task"
+        }
+      ],
+      "context": {
+        "digest": "sha256:dc944e027c044b8417b3a97241008dca8b1f2e653fd3c869010776da989b0e99",
+        "harness_version": "langchain-create-agent/v2",
+        "tool_versions": {
+          "worker_image": "localhost/the-platform/marina-analysis@sha256:022c0818a9a05741927c2e302aa12ec6248a3ba056c155be6993af3a6b2627a8"
+        }
+      },
+      "exercise": {
+        "exercise": "cancel",
+        "jobs_before": [
+          {
+            "name": "marina-27d28796e9511020dcee1676667aea6d9efd63ce",
+            "uid": "d1c2d938-fca0-4bfe-ae58-699c3e713967"
+          }
+        ],
+        "response": {
+          "id": "cmd_01eaada01fc8b816b782",
+          "run_id": "run_629c558affe01aec3e8a",
+          "sequence": 1,
+          "type": "cancel",
+          "status": "pending",
+          "reason": "MVP observed active worker cancellation",
+          "requested_by": "operator:owner",
+          "run_version": 9,
+          "fence_token": 2,
+          "created_at": 1790050473850,
+          "updated_at": 1790050473850
+        },
+        "jobs_after": [
+          {
+            "name": "marina-27d28796e9511020dcee1676667aea6d9efd63ce",
+            "uid": "d1c2d938-fca0-4bfe-ae58-699c3e713967"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "tsk_ef971cafa1001a54f901",
+      "title": "Agent MVP 2026-09-22 analysis normal",
+      "status": "done",
+      "invocation": {
+        "key": "agent-mvp-1790048971293280000",
+        "request": {
+          "profile_id": "diagnostic-analysis/v1",
+          "profile_digest": "7a555183d0fb65a935417a564e37450cea0d875f7c756de72d70b0b3da03c272",
+          "task": {
+            "project_id": "prj_default",
+            "title": "Agent MVP 2026-09-22 analysis normal",
+            "description": "Analyze only the installed synthetic blocked-runs diagnostic fixture. Do not mutate source or infrastructure.",
+            "acceptance_criteria": "Identify provider_unavailable and budget_exhausted with source IDs and verbatim causal evidence, excluding the healthy record. Independent validation must bind the profile, input and output digests.",
+            "status": "ready",
+            "priority": "urgent",
+            "budget_minutes": 5,
+            "budget": {
+              "time_minutes": 5,
+              "max_attempts": 1,
+              "max_tokens": 20000,
+              "max_cost_minor": 10,
+              "currency": "USD",
+              "max_concurrency": 1,
+              "authority": [
+                "analysis.run.7a555183d0fb65a935417a564e37450cea0d875f7c756de72d70b0b3da03c272"
+              ]
+            }
+          }
+        },
+        "replayed_task_id": "tsk_ef971cafa1001a54f901"
+      },
+      "run": {
+        "id": "run_ead36b5e9943471206f8",
+        "agent_id": "agt_a18f00886390860b0b6137b9",
+        "status": "completed",
+        "task_version": 1,
+        "fence_token": 1,
+        "started_at": 1790048971952,
+        "finished_at": 1790049045748,
+        "result_summary": "Validated diagnostic analysis: https://marina.marina-system.svc:8090/artifacts/sha256:60596740dc1655e00c2b5cb26d390bcc01afb14e4ae48ce694620c1f9b5e89f5"
+      },
+      "executions": [
+        {
+          "id": "exec_9f594b5c2543ccc20f58633b",
+          "project_id": "prj_default",
+          "work_provider": "deck",
+          "external_work_id": "tsk_ef971cafa1001a54f901",
+          "external_run_id": "run_ead36b5e9943471206f8",
+          "state": "completed",
+          "attempt": 1,
+          "used_tokens": 6906,
+          "used_cost_micros": 3667,
+          "pending_model_calls": 0,
+          "reserved_tokens": 0,
+          "reserved_cost_micros": 0,
+          "version": 35,
+          "updated_at_unix_milli": 1790049045750
+        }
+      ],
+      "attempts": [
+        {
+          "workload": "diagnostic-analysis/v1",
+          "profile_digest": "7a555183d0fb65a935417a564e37450cea0d875f7c756de72d70b0b3da03c272",
+          "context_digest": "sha256:e07a71e3ee7495621fd8ae4a0228acc36d03732fa6ca10042451d1d39a55a84d",
+          "id": "rtm_84ae83b629d7d13f08d42589",
+          "execution_id": "exec_9f594b5c2543ccc20f58633b",
+          "attempt_number": 1,
+          "specification_digest": "sha256:fadea4c554d87bfdb51bf51ff3cf0c21ae60691f8975d91aa75c8d82e9bff6b0",
+          "provider_handle": "sha256:99d76e3af64b3096a7d4555fe3b272342cc592e79731d4e1049bad4286511e86",
+          "state": "succeeded",
+          "deadline_at_unix_milli": 1790049271950,
+          "cleanup_state": "completed",
+          "outputs_collected": false,
+          "version": 20,
+          "observed_job": {
+            "name": "marina-e5c73531266085cfb15e483e81e4131ecff5cb62",
+            "namespace": "marina-workers",
+            "uid": "5cae8555-ef71-47c7-8db8-667f4ed27746"
+          }
+        }
+      ],
+      "model_calls": [
+        {
+          "id": "mdl_27b95147a4ebd985960a8784",
+          "execution_id": "exec_9f594b5c2543ccc20f58633b",
+          "attempt_id": "rtm_84ae83b629d7d13f08d42589",
+          "reserved_tokens": 14650,
+          "reserved_cost_micros": 10894,
+          "used_tokens": 3117,
+          "used_cost_micros": 1441,
+          "usage_known": true
+        },
+        {
+          "id": "mdl_c314c3adf79dae57646fce42",
+          "execution_id": "exec_9f594b5c2543ccc20f58633b",
+          "attempt_id": "rtm_84ae83b629d7d13f08d42589",
+          "reserved_tokens": 15652,
+          "reserved_cost_micros": 11345,
+          "used_tokens": 3789,
+          "used_cost_micros": 2226,
+          "usage_known": true
+        }
+      ],
+      "tool_decisions": [
+        {
+          "execution_id": "exec_9f594b5c2543ccc20f58633b",
+          "attempt_id": "rtm_84ae83b629d7d13f08d42589",
+          "tool": "read_context_source",
+          "allowed": true,
+          "reason": "allowed",
+          "argument_digest": "sha256:76e4eff0c210a664e01589dc36ae8ac3924a05e0eb2eb2bb78b981cd1a818955",
+          "context_digest": "sha256:e07a71e3ee7495621fd8ae4a0228acc36d03732fa6ca10042451d1d39a55a84d"
+        }
+      ],
+      "commands": [],
+      "evidence": [
+        {
+          "id": "exec_9f594b5c2543ccc20f58633b:analysis-validation",
+          "task_id": "tsk_ef971cafa1001a54f901",
+          "run_id": "run_ead36b5e9943471206f8",
+          "plan_revision_id": "pln_ba2c566af186e33ac623",
+          "type": "test",
+          "producer": "rtm_84ae83b629d7d13f08d42589",
+          "verifier": "marina:diagnostic-validator/v1",
+          "subject_digest": "sha256:f1973e2412a7bc6fe2dc77b64c379cc3a7ecbbb397d28cf49bf8454e3296c2b4",
+          "source_revision": "28b82a3e2af6aae3271f85b5e0cdf8c935a9ad9842cfbb9cb4b3f9606a2a4278",
+          "command": "marina diagnostic-validator/v1",
+          "outcome": "passed",
+          "provenance_uri": "https://marina.marina-system.svc:8090/artifacts/sha256:60596740dc1655e00c2b5cb26d390bcc01afb14e4ae48ce694620c1f9b5e89f5",
+          "provenance_digest": "sha256:60596740dc1655e00c2b5cb26d390bcc01afb14e4ae48ce694620c1f9b5e89f5",
+          "observed_at": 1790049039756,
+          "expires_at": 1790135439756,
+          "artifact_uri": "https://marina.marina-system.svc:8090/artifacts/sha256:60596740dc1655e00c2b5cb26d390bcc01afb14e4ae48ce694620c1f9b5e89f5",
+          "artifact_digest": "sha256:60596740dc1655e00c2b5cb26d390bcc01afb14e4ae48ce694620c1f9b5e89f5",
+          "policy_version": "repository-fix-v1",
+          "admission_status": "current",
+          "created_at": 1790049042749
+        }
+      ],
+      "downloads": [
+        {
+          "digest": "sha256:60596740dc1655e00c2b5cb26d390bcc01afb14e4ae48ce694620c1f9b5e89f5",
+          "bytes": 2339,
+          "value": {
+            "context_digest": "sha256:e07a71e3ee7495621fd8ae4a0228acc36d03732fa6ca10042451d1d39a55a84d",
+            "version": 1,
+            "validator": "marina:diagnostic-validator/v1",
+            "profile_digest": "7a555183d0fb65a935417a564e37450cea0d875f7c756de72d70b0b3da03c272",
+            "input_digest": "28b82a3e2af6aae3271f85b5e0cdf8c935a9ad9842cfbb9cb4b3f9606a2a4278",
+            "output_digest": "sha256:f1973e2412a7bc6fe2dc77b64c379cc3a7ecbbb397d28cf49bf8454e3296c2b4",
+            "report": {
+              "summary": "Analyzed the synthetic blocked-runs fixture: two blocked records identified (model-outage: provider outage; token-limit: token budget denial); healthy-worker excluded as healthy. Analysis only \u2014 no source or infrastructure mutation performed and no remediation claimed.",
+              "findings": [
+                {
+                  "code": "provider_unavailable",
+                  "source_id": "model-outage",
+                  "quote": "upstream HTTP 503",
+                  "explanation": "Model gateway request failed against the upstream provider, so the run is blocked pending provider recovery; its unknown usage reservation remains held. Operator action: wait for provider recovery / retry the blocked run and release the held reservation. No remediation was performed; this is a diagnosis of record model-outage only."
+                },
+                {
+                  "code": "budget_exhausted",
+                  "source_id": "token-limit",
+                  "quote": "requested 12000 tokens; remaining budget 4000 tokens",
+                  "explanation": "Model admission was denied because the requested tokens exceeded the remaining budget and no request was forwarded. Operator action: authorize a new bounded task to continue. No remediation was performed; this is a diagnosis of record token-limit only."
+                }
+              ]
+            },
+            "sources": [
+              {
+                "id": "model-outage",
+                "content": "Synthetic task alpha. Model gateway request failed: upstream HTTP 503; no response usage was received. The run is blocked pending provider recovery. Its unknown usage reservation remains held."
+              },
+              {
+                "id": "token-limit",
+                "content": "Synthetic task beta. Model admission denied: requested 12000 tokens; remaining budget 4000 tokens. No request was forwarded. The operator must authorize a new bounded task to continue."
+              },
+              {
+                "id": "healthy-worker",
+                "content": "Synthetic task gamma. Worker completed successfully. Independent checks passed. The report was downloaded and its digest matched. No operator action is required."
+              }
+            ],
+            "checks": [
+              "required findings",
+              "no duplicate or invented findings",
+              "source IDs and verbatim causal quotes",
+              "immutable input/profile/output binding"
+            ]
+          }
+        }
+      ],
+      "events": [
+        {
+          "type": "tool.decision",
+          "message": "Context tool: allowed"
+        }
+      ],
+      "context": {
+        "digest": "sha256:e07a71e3ee7495621fd8ae4a0228acc36d03732fa6ca10042451d1d39a55a84d",
+        "harness_version": "langchain-create-agent/v2",
+        "tool_versions": {
+          "worker_image": "localhost/the-platform/marina-analysis@sha256:8514f1712e4122f529cdc31cffc3e948b83905dd1a469f72bc83dbaeecc35017"
+        }
+      },
+      "observed_worker_logs": [
+        "PASS trusted TLS connection to Marina\nPASS kubernetes.default.svc blocked\nPASS 1.1.1.1 blocked\nPASS no Kubernetes credential"
+      ]
+    }
+  ],
+  "preservation": {
+    "tasks": [
+      {
+        "id": "tsk_2ac0ea27ac482de1d146",
+        "title": "Agent PoC 2026-09-21 coding",
+        "status": "done"
+      },
+      {
+        "id": "tsk_fbcc6eb5b53348f7c7d4",
+        "title": "Agent PoC 2026-09-21 analysis",
+        "status": "done"
+      },
+      {
+        "id": "tsk_0ba33bd70ae6c0cdb67c",
+        "title": "Acceptance 2026-09-21 RUN15-outage-deck-tcp-final",
+        "status": "done"
+      },
+      {
+        "id": "tsk_a255b99fc83a89548bae",
+        "title": "Acceptance 2026-09-21 RUN15-outage-git-tcp-final",
+        "status": "done"
+      },
+      {
+        "id": "tsk_c9654f5ada0032254c8d",
+        "title": "Acceptance 2026-09-21 RUN15-outage-model-tcp-final",
+        "status": "done"
+      },
+      {
+        "id": "tsk_8416e809c431913abc61",
+        "title": "Acceptance 2026-09-21 RUN15-outage-model-final",
+        "status": "done"
+      },
+      {
+        "id": "tsk_14737898d76c65235d34",
+        "title": "Acceptance 2026-09-21 RUN11-final",
+        "status": "done"
+      },
+      {
+        "id": "tsk_ee249abcf9f1e6e8e1cf",
+        "title": "Acceptance 2026-09-21 run13-missing-ci",
+        "status": "blocked"
+      },
+      {
+        "id": "tsk_5c6c8be10a74f8ec66eb",
+        "title": "Acceptance 2026-09-21 run14-head-retest",
+        "status": "blocked"
+      },
+      {
+        "id": "tsk_3eed97b559994c1fca85",
+        "title": "Acceptance 2026-09-21 run16-token-final",
+        "status": "blocked"
+      },
+      {
+        "id": "tsk_3a6caedb2fbe14fce68f",
+        "title": "Acceptance 2026-09-21 run16-cost-cap",
+        "status": "blocked"
+      },
+      {
+        "id": "tsk_f99f4085d40509eaf9b6",
+        "title": "Acceptance 2026-09-21 run14-changed-head",
+        "status": "blocked"
+      },
+      {
+        "id": "tsk_331c9b04bf4003f61b57",
+        "title": "Acceptance 2026-09-21 run16-token-retest",
+        "status": "blocked"
+      },
+      {
+        "id": "tsk_9b0150d9ec22ffeb9a0f",
+        "title": "Acceptance 2026-09-21 run13-ci-failure",
+        "status": "blocked"
+      },
+      {
+        "id": "tsk_68cf14e0cc4ff50974e8",
+        "title": "Acceptance 2026-09-21 run13-local-failure",
+        "status": "blocked"
+      },
+      {
+        "id": "tsk_d37a14a358bc8b5a02a8",
+        "title": "Acceptance 2026-09-21 run16-token-cap",
+        "status": "blocked"
+      },
+      {
+        "id": "tsk_78a33bd75e933e36b74c",
+        "title": "Acceptance 2026-09-21 run12-cancellation",
+        "status": "cancelled"
+      },
+      {
+        "id": "tsk_71b38daf49930a923409",
+        "title": "Acceptance 2026-09-21 run11-retry-fix",
+        "status": "blocked"
+      },
+      {
+        "id": "tsk_a66b91fad7a5557bd66a",
+        "title": "Acceptance 2026-09-21 run11-restart-retest",
+        "status": "backlog"
+      },
+      {
+        "id": "tsk_10223b097654c269723d",
+        "title": "Acceptance 2026-09-21 run11-active-restarts",
+        "status": "blocked"
+      },
+      {
+        "id": "tsk_25ebbec4926ff048f5ee",
+        "title": "Acceptance 2026-09-21 run09-poc-200k",
+        "status": "done"
+      },
+      {
+        "id": "tsk_9274053f69f6bc4beacb",
+        "title": "Acceptance 2026-09-21 run09-poc",
+        "status": "blocked"
+      },
+      {
+        "id": "tsk_8da208ea623c02d198b8",
+        "title": "test",
+        "status": "ready"
+      },
+      {
+        "id": "tsk_5ed44aad5ca19be4a528",
+        "title": "Local installation verification",
+        "status": "cancelled"
+      }
+    ],
+    "pvcs": [
+      {
+        "name": "appdeck-data",
+        "uid": "f0748990-48d1-4f05-82fe-a36c843494e4",
+        "volume": "pvc-f0748990-48d1-4f05-82fe-a36c843494e4"
+      },
+      {
+        "name": "marina-data",
+        "uid": "88ea8759-3a36-4438-8cf7-44b0da7531de",
+        "volume": "pvc-88ea8759-3a36-4438-8cf7-44b0da7531de"
+      }
+    ],
+    "old_executions_preserved": 22,
+    "old_attempts_preserved": 34,
+    "old_record_fields_unchanged": true,
+    "deployments": [
+      {
+        "name": "deck",
+        "image": "localhost/the-platform/deck@sha256:fb6d8b7a2c8a2c39423f8f892e98bffc9092259b23be8dcfd921a3802e2ab338",
+        "args": []
+      },
+      {
+        "name": "marina",
+        "image": "localhost/the-platform/marina@sha256:34da47afc78bc89b7bbfe2c3248456a12bc12fbdf8cc252b27f9fb6f4a52028f",
+        "args": [
+          "serve",
+          "--intake-enabled=false"
+        ]
+      }
+    ],
+    "remaining_ready_tasks": [
+      {
+        "id": "tsk_8da208ea623c02d198b8",
+        "title": "test",
+        "status": "ready"
+      }
+    ],
+    "runtime_objects_remaining": [],
+    "test_context_source": {
+      "id": "agent-mvp-guidance",
+      "revision": 2,
+      "state": "inactive"
+    }
+  },
+  "network": [
+    {
+      "namespace": "marina-system",
+      "job": {
+        "name": "agent-network-1790054087882708000",
+        "uid": "1cbf12db-6826-42eb-a71d-1027faea0dda"
+      },
+      "image": "localhost/the-platform/marina-analysis@sha256:022c0818a9a05741927c2e302aa12ec6248a3ba056c155be6993af3a6b2627a8",
+      "logs": "PASS kubernetes.default.svc baseline reachable\nPASS 1.1.1.1 baseline reachable\nPASS no Kubernetes credential\n",
+      "deleted_after_probe": true
+    },
+    {
+      "namespace": "marina-workers",
+      "job": {
+        "name": "agent-network-1790054091085902000",
+        "uid": "9ab234c2-ca9d-423e-b3bb-210bbe5aacbc"
+      },
+      "image": "localhost/the-platform/marina-analysis@sha256:022c0818a9a05741927c2e302aa12ec6248a3ba056c155be6993af3a6b2627a8",
+      "logs": "PASS trusted TLS connection to Marina\nPASS kubernetes.default.svc blocked\nPASS 1.1.1.1 blocked\nPASS no Kubernetes credential\n",
+      "deleted_after_probe": true
+    }
+  ],
+  "usage": {
+    "currency": "USD",
+    "source": "configured gateway admission rates; not provider invoice",
+    "baseline_confirmed_micros": 642209,
+    "baseline_reserved_micros": 191050,
+    "new_confirmed_micros": 97952,
+    "new_reserved_micros": 0,
+    "new_tokens": 203467,
+    "sum_new_task_cost_caps_minor": 170
+  },
+  "checks": [
+    "make check",
+    "make conformance",
+    "make check-installation",
+    "go test ./internal/journal/sqlite -run TestConcurrentToolDecisions -count=10",
+    "pinned Python harness: 2 deterministic tests",
+    "artifact SHA-256 verification",
+    "preservation and cleanup assertions"
+  ]
+}

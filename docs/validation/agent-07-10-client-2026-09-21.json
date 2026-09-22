@@ -1,0 +1,17 @@
+{
+  "date": "2026-09-21",
+  "environment": "isolated HTTPS Deck process with temporary SQLite, private synthetic credentials and trusted test CA",
+  "checks": {
+    "operator_capability_discovery": true,
+    "profile_discovery": true,
+    "pinned_invocation": true,
+    "idempotent_replay": true,
+    "task_inspection": true,
+    "cancel_command_recorded": true
+  },
+  "task_id": "tsk_f147b11a0710fdcaa60f",
+  "run_id": "run_d3f05a80419835a4d97e",
+  "model_calls": 0,
+  "kubernetes_jobs": 0,
+  "scope": "Exact documented Python client exercised; no worker execution or new live-model acceptance."
+}

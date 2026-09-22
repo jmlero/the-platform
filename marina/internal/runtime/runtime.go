@@ -101,6 +101,12 @@ type CredentialReference struct {
 }
 
 type Specification struct {
+	Tools []string `json:"tools,omitempty"`
+	// Empty Workload preserves the original repository specification and digest.
+	Workload             string                `json:"workload,omitempty"`
+	InputDigest          string                `json:"input_digest,omitempty"`
+	ProfileDigest        string                `json:"profile_digest,omitempty"`
+	WorkerImage          string                `json:"worker_image,omitempty"`
 	ExecutionID          string                `json:"execution_id"`
 	AttemptID            string                `json:"attempt_id"`
 	IdempotencyKey       string                `json:"idempotency_key"`
@@ -119,11 +125,30 @@ type Specification struct {
 }
 
 func (specification Specification) Validate(now time.Time) error {
+	if len(specification.Tools) > 1 || len(specification.Tools) == 1 && (specification.Tools[0] != "read_context_source" || specification.Workload != "diagnostic-analysis/v1" || specification.HarnessVersion != "langchain-create-agent/v2") {
+		return fmt.Errorf("unsupported runtime tool: %w", ErrInvalidInput)
+	}
 	required := []string{
 		specification.ExecutionID, specification.AttemptID, specification.IdempotencyKey,
-		specification.RepositoryURI, specification.SourceRevision, specification.ContextURI,
+		specification.ContextURI,
 		specification.ContextDigest, specification.HarnessVersion, specification.NetworkPolicy,
 		specification.FilesystemPolicy, specification.PolicyVersion,
+	}
+	switch specification.Workload {
+	case "", "repository/v1":
+		required = append(required, specification.RepositoryURI, specification.SourceRevision)
+	case "diagnostic-analysis/v1":
+		for _, digest := range []string{specification.InputDigest, specification.ProfileDigest} {
+			decoded, err := hex.DecodeString(digest)
+			if err != nil || len(decoded) != 32 {
+				return fmt.Errorf("analysis inputs and profile must be digest-bound: %w", ErrInvalidInput)
+			}
+		}
+		if specification.RepositoryURI != "" || specification.SourceRevision != "" || specification.WorkerImage == "" {
+			return fmt.Errorf("analysis requires its worker image and no repository fields: %w", ErrInvalidInput)
+		}
+	default:
+		return fmt.Errorf("unsupported workload: %w", ErrInvalidInput)
 	}
 	for _, value := range required {
 		if strings.TrimSpace(value) == "" {

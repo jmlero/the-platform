@@ -45,7 +45,7 @@ func TestRealRepositoryWorkflow(t *testing.T) {
 		t.Fatal(err)
 	}
 	var approved workcontrol.ContextSource
-	for _, scenario := range []string{"completed", "promoted_completed", "verification_failed", "head_changed", "pr_closed", "ci_missing", "missing_authority", "context_first", "context_reuse", "context_revised", "context_revoked"} {
+	for _, scenario := range []string{"completed", "profile_completed", "promoted_completed", "verification_failed", "head_changed", "pr_closed", "ci_missing", "missing_authority", "context_first", "context_reuse", "context_revised", "context_revoked"} {
 		t.Run(scenario, func(t *testing.T) {
 			directory := t.TempDir()
 			db := filepath.Join(directory, "journal.db")
@@ -69,6 +69,8 @@ func TestRealRepositoryWorkflow(t *testing.T) {
 			if scenario == "context_first" {
 				approved = registerApprovedContext(t, ctx, client, identity.LogicalAgentID, workcontrol.ContextSource{}, "Keep the API stable")
 			}
+			config := flow.Config{ProjectID: "prj_default", PublicURL: "https://marina.internal", PolicyVersion: "test", MaxTokens: 100000, BudgetMinutes: 30, AllowedPaths: []string{"src"}, Checks: []worker.Check{{ID: "regression", Directory: ".", Command: []string{"go", "test", "./..."}}}, RequiredCI: []string{"required-test"}, Git: github.Config{Repository: "acme/repo", BaseBranch: "main", CloneURL: "https://git.internal/acme/repo.git"}}
+			config.Kubernetes.Image = "worker@sha256:" + strings.Repeat("d", 64)
 			var taskResponse taskDTO
 			authority := []string{"source.read", "source.write", "pull_request.create"}
 			if scenario == "missing_authority" {
@@ -93,6 +95,12 @@ func TestRealRepositoryWorkflow(t *testing.T) {
 					t.Fatal(err)
 				}
 				err = client.do(ctx, "POST", "/api/v1/tasks/"+taskResponse.ID+"/move", map[string]string{"status": "ready"}, &taskResponse)
+			} else if scenario == "profile_completed" {
+				if err = client.PublishWorkloads(ctx, "prj_default", workcontrol.WorkloadCatalog{Profiles: config.WorkloadProfiles(), ExpiresAt: time.Now().Add(time.Minute).UnixMilli()}); err != nil {
+					t.Fatal(err)
+				}
+				invoke := map[string]any{"profile_id": "repository/v1", "profile_digest": config.Digest(), "task": input}
+				err = client.doIdempotent(ctx, "POST", "/api/v1/operator/projects/prj_default/workloads/invoke", "repository-invocation", invoke, &taskResponse)
 			} else {
 				err = client.do(ctx, "POST", "/api/v1/tasks", input, &taskResponse)
 			}
@@ -132,8 +140,6 @@ func TestRealRepositoryWorkflow(t *testing.T) {
 			if err = journal.MarkAcquisitionBound(ctx, intent.ID, run.ID); err != nil {
 				t.Fatal(err)
 			}
-			config := flow.Config{ProjectID: task.ProjectID, PublicURL: "https://marina.internal", PolicyVersion: "test", MaxTokens: 100000, BudgetMinutes: 30, AllowedPaths: []string{"src"}, Checks: []worker.Check{{ID: "regression", Directory: ".", Command: []string{"go", "test", "./..."}}}, RequiredCI: []string{"required-test"}, Git: github.Config{Repository: "acme/repo", BaseBranch: "main", CloneURL: "https://git.internal/acme/repo.git"}}
-			config.Kubernetes.Image = "worker@sha256:" + strings.Repeat("d", 64)
 			source := &workflowSource{head: strings.Repeat("a", 40), scenario: scenario}
 			runtime := &workflowRuntime{journal: journal, artifacts: store, scenario: scenario, observations: map[string]runtimeapi.Observation{}}
 			controller := &flow.Controller{Config: config, Journal: journal, Provider: client, Runtime: runtime, Artifacts: store, Source: func(execution.Execution) (sourcecontrol.Port, error) { return source, nil }}
@@ -177,7 +183,7 @@ func TestRealRepositoryWorkflow(t *testing.T) {
 			want := execution.StateCompleted
 			if scenario == "ci_missing" {
 				want = execution.StateRunning
-			} else if scenario != "completed" && scenario != "promoted_completed" && !strings.HasPrefix(scenario, "context_") || scenario == "context_revoked" {
+			} else if scenario != "completed" && scenario != "profile_completed" && scenario != "promoted_completed" && !strings.HasPrefix(scenario, "context_") || scenario == "context_revoked" {
 				want = execution.StateBlocked
 			}
 			if e.State != want {
@@ -187,7 +193,7 @@ func TestRealRepositoryWorkflow(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if scenario == "completed" || scenario == "promoted_completed" || (strings.HasPrefix(scenario, "context_") && scenario != "context_revoked") {
+			if scenario == "completed" || scenario == "profile_completed" || scenario == "promoted_completed" || (strings.HasPrefix(scenario, "context_") && scenario != "context_revoked") {
 				if detail.Runs[0].Status != workcontrol.RunCompleted || !strings.Contains(detail.Runs[0].ResultSummary, "https://git.internal/pr/1") {
 					t.Fatalf("result not projected: %#v", detail.Runs)
 				}

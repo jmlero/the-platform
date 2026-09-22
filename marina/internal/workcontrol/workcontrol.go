@@ -70,7 +70,8 @@ const (
 )
 
 type WorkItem struct {
-	Context            *TaskContext `json:",omitempty"`
+	Workload           *WorkloadProfile `json:",omitempty"`
+	Context            *TaskContext     `json:",omitempty"`
 	ID                 string
 	ProjectID          string
 	Title              string

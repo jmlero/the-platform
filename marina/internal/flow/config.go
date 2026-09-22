@@ -1,4 +1,4 @@
-// Package flow connects the supported repository-fix workflow to durable ports.
+// Package flow connects bounded repository and analysis workloads to durable ports.
 package flow
 
 import (
@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/jmlero/the-platform/marina/internal/analysis"
 	"github.com/jmlero/the-platform/marina/internal/kubernetes"
 	"github.com/jmlero/the-platform/marina/internal/sourcecontrol/github"
 	"github.com/jmlero/the-platform/marina/internal/worker"
@@ -19,6 +20,8 @@ import (
 )
 
 type Config struct {
+	Version           int               `json:"version,omitempty"`
+	Analysis          *analysis.Profile `json:"analysis,omitempty"`
 	ProjectID         string            `json:"project_id"`
 	PublicURL         string            `json:"public_url"`
 	TLSCertFile       string            `json:"tls_cert_file"`
@@ -45,11 +48,27 @@ func safeURL(value string) bool {
 }
 
 func (c Config) Validate() error {
-	if c.ProjectID == "" || c.PolicyVersion == "" || !safeURL(c.PublicURL) || !safeURL(c.Git.APIURL) || !safeURL(c.Git.CloneURL) || !safeURL(c.Model.Endpoint) ||
+	if c.Version < 0 || c.Version > 1 {
+		return errors.New("unsupported workflow configuration version")
+	}
+	if c.ProjectID == "" || c.PolicyVersion == "" || !safeURL(c.PublicURL) || !safeURL(c.Model.Endpoint) ||
 		c.Model.Name == "" || c.Model.MaxOutputTokens < 1 || c.Model.MaxOutputTokens > 65536 || c.MaxTokens < 10000 || c.MaxTokens > 10000000 ||
-		c.BudgetMinutes < 1 || c.BudgetMinutes > 1440 || len(c.Checks) == 0 || len(c.Checks) > 20 || len(c.AllowedPaths) == 0 ||
-		!filepath.IsAbs(c.ArtifactDirectory) || c.SigningKeyFile == "" || c.ArtifactTokenFile == "" || c.Git.AuthorName == "" || c.Git.AuthorEmail == "" || c.Git.BaseBranch == "" {
+		c.BudgetMinutes < 1 || c.BudgetMinutes > 1440 ||
+		!filepath.IsAbs(c.ArtifactDirectory) || c.SigningKeyFile == "" || c.ArtifactTokenFile == "" {
 		return errors.New("explicit project, HTTPS destinations, identity, secrets, bounded budget, file scope and trusted checks are required")
+	}
+	if c.Analysis != nil {
+		if err := c.Analysis.Validate(); err != nil {
+			return err
+		}
+		if c.Analysis.MaxTokens > c.MaxTokens || c.Analysis.BudgetMinutes > c.BudgetMinutes {
+			return errors.New("analysis limits cannot exceed installation limits")
+		}
+	}
+	if c.RepositoryEnabled() || c.Analysis == nil {
+		if !safeURL(c.Git.APIURL) || !safeURL(c.Git.CloneURL) || c.Git.Repository == "" || c.Git.AuthorName == "" || c.Git.AuthorEmail == "" || c.Git.BaseBranch == "" || len(c.Checks) == 0 || len(c.Checks) > 20 || len(c.AllowedPaths) == 0 {
+			return errors.New("repository profile requires explicit Git destinations, identity, scope and trusted checks")
+		}
 	}
 	if strings.HasPrefix(c.PublicURL, "https:") && (c.TLSCertFile == "" || c.TLSKeyFile == "") {
 		return errors.New("HTTPS worker gateway requires TLS certificate and key")
@@ -96,3 +115,18 @@ func (c Config) Digest() string {
 	h := sha256.Sum256(b)
 	return hex.EncodeToString(h[:])
 }
+
+func (c Config) RepositoryEnabled() bool {
+	return c.Git.Repository != "" || c.Git.CloneURL != "" || c.Git.APIURL != ""
+}
+
+// The scoped grant in the task budget binds the model and its
+// credential reference as well as the fixture, harness image and all limits.
+func (c Config) AnalysisDigest() string {
+	return analysis.Digest(struct {
+		Profile *analysis.Profile
+		Model   workerapi.Model
+		Policy  string
+	}{c.Analysis, c.Model, c.PolicyVersion})
+}
+func (c Config) AnalysisAuthority() string { return "analysis.run." + c.AnalysisDigest() }

@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -74,7 +75,7 @@ func (server *Server) model(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	input, err := server.Input(r.Context(), attempt)
-	if err != nil || input.Stage != "implement" {
+	if err != nil || (input.Stage != "implement" && input.Stage != "analyze") {
 		http.Error(w, "this worker has no model authority", 403)
 		return
 	}
@@ -91,6 +92,10 @@ func (server *Server) model(w http.ResponseWriter, r *http.Request) {
 	var requestBody map[string]any
 	if json.Unmarshal(body, &requestBody) != nil || requestBody == nil || forbiddenModelInput(requestBody) || !localTools(requestBody["tools"]) {
 		http.Error(w, "only self-contained text and local tools are supported", 400)
+		return
+	}
+	if input.Stage == "analyze" && !analysisTools(requestBody["tools"], attempt.Specification.Tools) {
+		http.Error(w, "analysis tool is not in the frozen profile allowlist", 403)
 		return
 	}
 	requestBody["model"] = model.Name
@@ -128,6 +133,23 @@ func (server *Server) model(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "model request exceeds remaining authority or budget", 429)
 		return
 	}
+	var usage struct {
+		Input  int64 `json:"input_tokens"`
+		Output int64 `json:"output_tokens"`
+	}
+	known := false
+	defer func() {
+		if known {
+			accountCtx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 5*time.Second)
+			defer cancel()
+			_ = server.journal.FinishModelCall(accountCtx, callID, usage.Input+usage.Output, price(usage.Input, model.InputMicrosPerMillion)+price(usage.Output, model.OutputMicrosPerMillion))
+		}
+		reportCtx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 5*time.Second)
+		defer cancel()
+		if totals, err := server.journal.ExecutionModelTotals(reportCtx, record.ID); err == nil {
+			_, _, _ = server.journal.EnqueueOutbox(reportCtx, record.ID, execution.OutboxInput{Kind: "event", IdempotencyKey: "model-usage:" + callID, Payload: map[string]any{"type": "model.usage", "message": "Model usage recorded; unresolved calls retain their reservations", "execution_id": record.ID, "attempt_id": attempt.ID, "model_call_id": callID, "reported_tokens": totals.Tokens, "reported_cost_micros": totals.CostMicros, "pending_model_calls": totals.PendingCalls, "reserved_tokens": totals.ReservedTokens, "reserved_cost_micros": totals.ReservedCostMicros, "currency": model.Currency}})
+		}
+	}()
 	ctx, cancel := server.liveContext(r)
 	defer cancel()
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(model.Endpoint, "/")+"/responses", bytes.NewReader(encoded))
@@ -153,18 +175,6 @@ func (server *Server) model(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", response.Header.Get("Content-Type"))
 	w.Header().Set("Cache-Control", "no-store")
 	streaming := strings.Contains(response.Header.Get("Content-Type"), "text/event-stream")
-	var usage struct {
-		Input  int64 `json:"input_tokens"`
-		Output int64 `json:"output_tokens"`
-	}
-	known := false
-	defer func() {
-		if known {
-			accountCtx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 5*time.Second)
-			defer cancel()
-			_ = server.journal.FinishModelCall(accountCtx, callID, usage.Input+usage.Output, price(usage.Input, model.InputMicrosPerMillion)+price(usage.Output, model.OutputMicrosPerMillion))
-		}
-	}()
 	observe := func(data []byte) {
 		type tokenUsage struct {
 			Input  *int64 `json:"input_tokens"`
@@ -227,4 +237,23 @@ func (server *Server) model(w http.ResponseWriter, r *http.Request) {
 		observe(payload)
 		_, _ = w.Write(payload)
 	}
+}
+
+// DiagnosticReport is an output schema, not a tool with external side effects.
+// HTTP context reads require the immutable runtime allowlist as well.
+func analysisTools(value any, allowed []string) bool {
+	if value == nil {
+		return true
+	}
+	items, ok := value.([]any)
+	if !ok || len(items) > 1+len(allowed) {
+		return false
+	}
+	for _, item := range items {
+		tool, ok := item.(map[string]any)
+		if !ok || tool["type"] != "function" || (tool["name"] != "DiagnosticReport" && !(tool["name"] == "read_context_source" && slices.Contains(allowed, "read_context_source"))) {
+			return false
+		}
+	}
+	return true
 }

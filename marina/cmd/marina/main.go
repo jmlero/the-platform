@@ -50,6 +50,8 @@ func run(arguments []string, stdout io.Writer, stderr io.Writer) int {
 	}
 
 	switch arguments[0] {
+	case "workload-profile":
+		return runWorkloadProfile(arguments[1:], stdout, stderr)
 	case "worker":
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
@@ -162,8 +164,9 @@ func runServe(arguments []string, stderr io.Writer) int {
 		return 2
 	}
 	address := flags.String("addr", envOrDefault("MARINA_ADDR", ":8090"), "HTTP listen address")
-	configPath := flags.String("config", envOrDefault("MARINA_CONFIG_FILE", ""), "repository workflow configuration file; absent selects control-only mode")
+	configPath := flags.String("config", envOrDefault("MARINA_CONFIG_FILE", ""), "workload configuration file; absent selects control-only mode")
 	intakeEnabled := flags.Bool("intake-enabled", true, "discover new work; disabling preserves reconciliation of journaled work")
+	intakeTaskID := flags.String("intake-task-id", "", "limit new discovery to one task; existing work still reconciles")
 	tlsCertFile := flags.String("tls-cert-file", envOrDefault("MARINA_TLS_CERT_FILE", ""), "server TLS certificate; also available without a workflow")
 	tlsKeyFile := flags.String("tls-key-file", envOrDefault("MARINA_TLS_KEY_FILE", ""), "server TLS private key")
 	serverURL := flags.String("deck-url", envOrDefault("MARINA_DECK_URL", "http://localhost:8080"), "Deck server URL")
@@ -297,7 +300,7 @@ func runServe(arguments []string, stderr io.Writer) int {
 	}
 	// Tasks authorized before Deck first confirmed a repository retain the
 	// installation's original binding across later association changes.
-	if *configPath != "" {
+	if *configPath != "" && workflowConfig.RepositoryEnabled() {
 		baseline, baselineErr := journal.FirstRepositoryVersion(startupCtx, binding.ProjectID)
 		if baselineErr != nil {
 			logger.Error("load original repository binding", "error", baselineErr)
@@ -345,6 +348,7 @@ func runServe(arguments []string, stderr io.Writer) int {
 		return 1
 	}
 	controlController.WithIntakeEnabled(*intakeEnabled)
+	controlController.WithIntakeWorkID(*intakeTaskID)
 	if !*intakeEnabled {
 		logger.Info("new work intake disabled; journaled work continues to reconcile")
 	}
@@ -360,6 +364,9 @@ func runServe(arguments []string, stderr io.Writer) int {
 	}
 	if controllerEnabled {
 		if workflow != nil {
+			if err := workflow.PublishWorkloads(startupCtx); err != nil {
+				logger.Warn("workload discovery publication deferred", "error", err)
+			}
 			if err := workflow.ReconcileRepository(startupCtx); err != nil {
 				logger.Warn("repository association deferred", "error", err)
 			}
@@ -415,6 +422,9 @@ func runServe(arguments []string, stderr io.Writer) int {
 				}
 				if workflow != nil {
 					op, cancel := context.WithTimeout(ctx, 30*time.Second)
+					if err := workflow.PublishWorkloads(op); err != nil {
+						logger.Warn("workload discovery publication deferred", "error", err)
+					}
 					err := workflow.ReconcileRepository(op)
 					cancel()
 					if err != nil {
@@ -570,6 +580,7 @@ func writeUsage(writer io.Writer) {
 	_, _ = fmt.Fprintln(writer, "Usage: marina <command> [options]")
 	_, _ = fmt.Fprintln(writer)
 	_, _ = fmt.Fprintln(writer, "Commands:")
+	_, _ = fmt.Fprintln(writer, "  workload-profile  Inspect the installed analysis profile and task authority grant")
 	_, _ = fmt.Fprintln(writer, "  diagnostics  Export a deterministic, redacted view of the local journal")
 	_, _ = fmt.Fprintln(writer, "  artifact-retention  Plan or apply offline cleanup of expired unreferenced artifacts")
 	_, _ = fmt.Fprintln(writer, "  doctor   Check the configured work-control dependency")

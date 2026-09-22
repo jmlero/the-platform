@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -28,6 +29,7 @@ import (
 var dnsName = regexp.MustCompile(`^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$`)
 
 type Config struct {
+	AdditionalImages  []string                                                     `json:"-"`
 	ServerURL         string                                                       `json:"server_url"`
 	Namespace         string                                                       `json:"namespace"`
 	TokenFile         string                                                       `json:"token_file"`
@@ -49,6 +51,11 @@ type Adapter struct {
 var _ runtimeapi.Adapter = (*Adapter)(nil)
 
 func New(config Config, client *http.Client) (*Adapter, error) {
+	for _, image := range config.AdditionalImages {
+		if !regexp.MustCompile(`^.+@sha256:[a-f0-9]{64}$`).MatchString(image) {
+			return nil, errors.New("additional worker images must be pinned by digest")
+		}
+	}
 	if !dnsName.MatchString(config.Namespace) || !dnsName.MatchString(config.ServiceAccount) || len(config.SigningKey) < 32 ||
 		!regexp.MustCompile(`^.+@sha256:[a-f0-9]{64}$`).MatchString(config.Image) {
 		return nil, errors.New("worker namespace, service account, image digest, and signing key are required")
@@ -117,6 +124,9 @@ type job struct {
 }
 
 func (adapter *Adapter) Start(ctx context.Context, spec runtimeapi.Specification) (runtimeapi.Observation, error) {
+	if spec.WorkerImage != "" && spec.WorkerImage != adapter.config.Image && !slices.Contains(adapter.config.AdditionalImages, spec.WorkerImage) {
+		return runtimeapi.Observation{}, errors.New("worker image is not installed in an approved profile")
+	}
 	if err := spec.Validate(time.Now().UTC()); err != nil {
 		return runtimeapi.Observation{}, err
 	}
@@ -171,6 +181,10 @@ func (adapter *Adapter) Start(ctx context.Context, spec runtimeapi.Specification
 }
 
 func (adapter *Adapter) manifest(spec runtimeapi.Specification, name, digest string) map[string]any {
+	image := adapter.config.Image
+	if spec.WorkerImage != "" {
+		image = spec.WorkerImage
+	}
 	labels := map[string]string{"app.kubernetes.io/name": "marina-worker", "marina.dev/attempt": spec.AttemptID}
 	volumes := []any{map[string]any{"name": "work", "emptyDir": map[string]any{"sizeLimit": strconv.FormatInt(spec.Limits.EphemeralStorageBytes, 10)}},
 		map[string]any{"name": "credential", "secret": map[string]any{"secretName": name, "defaultMode": int32(0440)}}}
@@ -186,7 +200,7 @@ func (adapter *Adapter) manifest(spec runtimeapi.Specification, name, digest str
 	pod := map[string]any{"serviceAccountName": adapter.config.ServiceAccount, "automountServiceAccountToken": false,
 		"enableServiceLinks": false, "restartPolicy": "Never", "terminationGracePeriodSeconds": 10,
 		"securityContext": map[string]any{"runAsNonRoot": true, "runAsUser": 65532, "runAsGroup": 65532, "fsGroup": 65532, "seccompProfile": map[string]string{"type": "RuntimeDefault"}},
-		"containers": []any{map[string]any{"name": "worker", "image": adapter.config.Image, "imagePullPolicy": "IfNotPresent",
+		"containers": []any{map[string]any{"name": "worker", "image": image, "imagePullPolicy": "IfNotPresent",
 			"command": []string{"/marina", "worker"}, "env": env, "volumeMounts": mounts,
 			"securityContext": map[string]any{"allowPrivilegeEscalation": false, "readOnlyRootFilesystem": true, "capabilities": map[string]any{"drop": []string{"ALL"}}},
 			"resources": map[string]any{"requests": map[string]string{"cpu": "100m", "memory": "128Mi"},

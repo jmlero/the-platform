@@ -98,9 +98,11 @@ func New(store *store.Store, logger *slog.Logger, options ...Option) *Server {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	s.contextRoutes(mux)
+	s.workloadRoutes(mux)
 	mux.HandleFunc("GET /healthz", s.health)
 	mux.HandleFunc("GET /readyz", s.readiness)
 	mux.HandleFunc("GET /api/v1/provider", s.requireService(capabilityProviderInfo, s.providerInfo))
+	mux.HandleFunc("GET /api/v1/operator/provider", s.requireOperator(s.providerInfo))
 	mux.HandleFunc("POST /api/v1/operator/session", s.createOperatorSession)
 	mux.HandleFunc("GET /api/v1/operator/session", s.requireOperator(s.getOperatorSession))
 	mux.HandleFunc("DELETE /api/v1/operator/session", s.requireOperator(s.deleteOperatorSession))

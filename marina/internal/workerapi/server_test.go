@@ -16,7 +16,6 @@ import (
 	"github.com/jmlero/the-platform/marina/internal/kubernetes"
 	runtimeapi "github.com/jmlero/the-platform/marina/internal/runtime"
 	"github.com/jmlero/the-platform/marina/internal/workcontrol"
-	"github.com/jmlero/the-platform/marina/internal/worker"
 )
 
 type provider struct {
@@ -29,70 +28,83 @@ func (p *provider) GetWork(context.Context, string) (workcontrol.WorkDetail, err
 }
 
 func TestWorkerCredentialCannotOutliveProviderFence(t *testing.T) {
-	ctx := context.Background()
-	journal, err := sqlite.Open(ctx, ":memory:")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer journal.Close()
-	now := time.Now().UTC()
-	lease := now.Add(time.Minute)
-	record, _, err := journal.EnsureExecution(ctx, execution.NewExecution{WorkProvider: "deck", ExternalWorkID: "task", ExternalRunID: "run", AgentID: "agent", LeaseExpiresAt: lease, Budget: execution.Budget{DeadlineAt: now.Add(time.Hour), MaxAttempts: 3, MaxTokens: 10000}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	record, err = journal.Transition(ctx, record.ID, execution.Transition{ExpectedVersion: record.Version, Target: execution.StateRunning, Message: "start test"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	spec := runtimeapi.Specification{IdempotencyKey: "job", RepositoryURI: "https://git.example/owner/repo.git", SourceRevision: strings.Repeat("a", 40), ContextURI: "https://marina.example/context", ContextDigest: "sha256:context", HarnessVersion: "test", Limits: runtimeapi.Limits{CPUMillis: 1000, MemoryBytes: 1024, EphemeralStorageBytes: 1024, WallTimeSeconds: 60, MaxProcesses: 64}, NetworkPolicy: "restricted", FilesystemPolicy: "ephemeral", AuthorityFence: 1, DeadlineAt: now.Add(time.Minute), PolicyVersion: "test"}
-	record, attempt, _, err := journal.EnsureRuntimeAttempt(ctx, record.ID, record.Version, spec)
-	if err != nil {
-		t.Fatal(err)
-	}
-	input, _ := json.Marshal(worker.Input{Stage: "verify", SourceRevision: spec.SourceRevision})
-	_, _, _, err = journal.SaveCheckpoint(ctx, record.ID, record.Version, execution.CheckpointInput{Key: "worker-input:" + attempt.ID, Phase: "worker_input", Payload: map[string]any{"input": string(input)}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	store, err := artifacts.New(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	key := []byte(strings.Repeat("s", 32))
-	p := &provider{run: workcontrol.Run{ID: "run", WorkItemID: "task", AgentID: "agent", TaskVersion: 1, Version: 1, FenceToken: 1, Status: workcontrol.RunRunning, LeaseExpiresAt: &lease}}
-	var contextErr error
-	server := New(Config{ContextCheck: func(context.Context, execution.Execution) error { return contextErr }, PublicURL: "https://marina.example", SigningKey: key}, journal, store, p, nil)
-	request := func() int {
-		r := httptest.NewRequest(http.MethodGet, "/workers/"+attempt.ID+"/input", nil)
-		r.Header.Set("Authorization", "Bearer "+kubernetes.Token(key, attempt.Specification))
-		w := httptest.NewRecorder()
-		server.ServeHTTP(w, r)
-		return w.Code
-	}
-	if status := request(); status != 200 {
-		t.Fatalf("valid worker returned %d", status)
-	}
-	p.err = errors.New("temporary Deck outage")
-	if status := request(); status != 503 {
-		t.Fatalf("temporary provider outage must deny access without reporting revocation: %d", status)
-	}
-	p.err = nil
-	if status := request(); status != 200 {
-		t.Fatalf("worker did not recover after provider restoration: %d", status)
-	}
-	contextErr = workcontrol.ErrContextUnavailable
-	if status := request(); status != 503 {
-		t.Fatalf("context outage returned %d", status)
-	}
-	contextErr = errors.New("selected source revoked")
-	if status := request(); status != 403 {
-		t.Fatalf("revoked context returned %d", status)
-	}
-	contextErr = nil
-	p.run.FenceToken = 2
-	if status := request(); status != 403 {
-		t.Fatalf("revoked worker returned %d", status)
+	for _, workload := range []string{"repository", "analysis"} {
+		t.Run(workload, func(t *testing.T) {
+			ctx := context.Background()
+			journal, err := sqlite.Open(ctx, ":memory:")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer journal.Close()
+			now := time.Now().UTC()
+			lease := now.Add(time.Minute)
+			record, _, err := journal.EnsureExecution(ctx, execution.NewExecution{WorkProvider: "deck", ExternalWorkID: "task", ExternalRunID: "run", AgentID: "agent", LeaseExpiresAt: lease, Budget: execution.Budget{DeadlineAt: now.Add(time.Hour), MaxAttempts: 3, MaxTokens: 10000}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			record, err = journal.Transition(ctx, record.ID, execution.Transition{ExpectedVersion: record.Version, Target: execution.StateRunning, Message: "start test"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			spec := gatewayWorkloadSpec(workload, runtimeapi.Specification{IdempotencyKey: "job", RepositoryURI: "https://git.example/owner/repo.git", SourceRevision: strings.Repeat("a", 40), ContextURI: "https://marina.example/context", ContextDigest: "sha256:context", HarnessVersion: "test", Limits: runtimeapi.Limits{CPUMillis: 1000, MemoryBytes: 1024, EphemeralStorageBytes: 1024, WallTimeSeconds: 60, MaxProcesses: 64}, NetworkPolicy: "restricted", FilesystemPolicy: "ephemeral", AuthorityFence: 1, DeadlineAt: now.Add(time.Minute), PolicyVersion: "test"})
+			record, attempt, _, err := journal.EnsureRuntimeAttempt(ctx, record.ID, record.Version, spec)
+			if err != nil {
+				t.Fatal(err)
+			}
+			input, _ := json.Marshal(gatewayWorkloadInput(workload, attempt.Specification))
+			_, _, _, err = journal.SaveCheckpoint(ctx, record.ID, record.Version, execution.CheckpointInput{Key: "worker-input:" + attempt.ID, Phase: "worker_input", Payload: map[string]any{"input": string(input)}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			store, err := artifacts.New(t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			key := []byte(strings.Repeat("s", 32))
+			p := &provider{run: workcontrol.Run{ID: "run", WorkItemID: "task", AgentID: "agent", TaskVersion: 1, Version: 1, FenceToken: 1, Status: workcontrol.RunRunning, LeaseExpiresAt: &lease}}
+			var contextErr error
+			server := New(Config{ContextCheck: func(context.Context, execution.Execution) error { return contextErr }, PublicURL: "https://marina.example", SigningKey: key}, journal, store, p, nil)
+			request := func() int {
+				r := httptest.NewRequest(http.MethodGet, "/workers/"+attempt.ID+"/input", nil)
+				r.Header.Set("Authorization", "Bearer "+kubernetes.Token(key, attempt.Specification))
+				w := httptest.NewRecorder()
+				server.ServeHTTP(w, r)
+				return w.Code
+			}
+			if status := request(); status != 200 {
+				t.Fatalf("valid worker returned %d", status)
+			}
+			p.err = errors.New("temporary Deck outage")
+			if status := request(); status != 503 {
+				t.Fatalf("temporary provider outage must deny access without reporting revocation: %d", status)
+			}
+			p.err = nil
+			if status := request(); status != 200 {
+				t.Fatalf("worker did not recover after provider restoration: %d", status)
+			}
+			contextErr = workcontrol.ErrContextUnavailable
+			if status := request(); status != 503 {
+				t.Fatalf("context outage returned %d", status)
+			}
+			contextErr = errors.New("selected source revoked")
+			if status := request(); status != 403 {
+				t.Fatalf("revoked context returned %d", status)
+			}
+			contextErr = nil
+			expired := now.Add(-time.Second)
+			p.run.LeaseExpiresAt = &expired
+			if status := request(); status != 403 {
+				t.Fatalf("expired lease returned %d", status)
+			}
+			p.run.LeaseExpiresAt = &lease
+			if status := request(); status != 200 {
+				t.Fatalf("restored lease returned %d", status)
+			}
+			p.run.FenceToken = 2
+			if status := request(); status != 403 {
+				t.Fatalf("revoked worker returned %d", status)
+			}
+		})
 	}
 }
 

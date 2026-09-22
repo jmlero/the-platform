@@ -35,7 +35,7 @@ def main():
     token("worker-signing-key")
     write("git-token", "")
     write("model-token", "")
-    capabilities = ["provider.info", "agent.register", "work.ready.list", "work.inspect", "context.read", "repository.read", "repository.write",
+    capabilities = ["provider.info", "agent.register", "work.ready.list", "work.inspect", "context.read", "repository.read", "repository.write", "workload.publish",
                     "work.claim.atomic", "work.claim.lookup", "run.assigned.list", "run.lease.renew",
                     "run.plan.submit", "run.start", "run.verify", "run.complete", "run.block",
                     "run.progress.append", "command.list", "command.ack", "event.append",

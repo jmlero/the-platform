@@ -36,7 +36,14 @@ export interface Budget {
   authority: string[];
 }
 
+export interface WorkloadProfile {
+  id: string; digest: string; harness: string; authority: string[];
+  max_tokens: number; budget_minutes: number; min_attempts: number;
+  tools: string[]; context_kinds: string[];
+}
+
 export interface Task {
+  workload?: WorkloadProfile;
   context?: TaskContext;
   id: string;
   project_id: string;

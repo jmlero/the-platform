@@ -1,0 +1,26 @@
+{
+  "profiles": [
+    {
+      "id": "diagnostic-analysis/v1",
+      "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "harness": "langchain-create-agent/v2",
+      "authority": [
+        "analysis.run.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      ],
+      "max_tokens": 20000,
+      "budget_minutes": 5,
+      "min_attempts": 1,
+      "tools": [
+        "read_context_source"
+      ],
+      "context_kinds": [
+        "instruction",
+        "goal",
+        "document",
+        "decision",
+        "message"
+      ]
+    }
+  ],
+  "expires_at": 1790000120000
+}

@@ -36,6 +36,10 @@ func contextOverride(text string) bool {
 
 func (c *Controller) assembleContext(now time.Time, e execution.Execution, task workcontrol.WorkItem, s state, resolved workcontrol.ResolvedContext) (contextpack.Package, error) {
 	input := contextpack.BuildInput{ProjectID: e.ProjectID, ExecutionID: e.ID, PolicyVersion: c.Config.PolicyVersion, SourceRevision: s.Base, HarnessVersion: c.Config.Kubernetes.Image, ToolVersions: map[string]string{"worker_image": c.Config.Kubernetes.Image}}
+	if s.Analysis != nil {
+		input.HarnessVersion = s.Analysis.HarnessVersion
+		input.ToolVersions["worker_image"] = s.Analysis.Image
+	}
 	add := func(kind contextpack.Kind, uri, title, owner, revision, content string, trust contextpack.Trust, expires time.Time) {
 		input.Inputs = append(input.Inputs, contextpack.Input{Kind: kind, URI: uri, Title: title, Owner: owner, Revision: revision, Content: content, Digest: artifacts.Digest([]byte(content)), Trust: trust, Scope: e.ProjectID, ObservedAt: now, ExpiresAt: expires})
 	}
@@ -52,12 +56,26 @@ func (c *Controller) assembleContext(now time.Time, e execution.Execution, task 
 	}{c.Config.PolicyVersion, c.Config.AllowedPaths, c.Config.Checks, e.DeadlineAt, e.BindingVersion})
 	add(contextpack.KindTaskSnapshot, "work://"+e.ProjectID+"/"+task.ID, "Authorized outcome and acceptance criteria", "work-control", fmt.Sprint(task.Version), string(taskBytes), contextpack.TrustTrusted, e.DeadlineAt)
 	add(contextpack.KindPolicy, "policy://"+c.Config.PolicyVersion, "Execution limits", "marina", c.Config.PolicyVersion, string(policyBytes), contextpack.TrustTrusted, e.DeadlineAt)
-	add(contextpack.KindSourceRevision, c.Config.Git.CloneURL+"@"+s.Base, "Pinned repository", "git", s.Base, s.Base, contextpack.TrustTrusted, e.DeadlineAt)
-	add(contextpack.KindTool, "worker://image", "Worker image", "marina", c.Config.Kubernetes.Image, c.Config.Kubernetes.Image, contextpack.TrustTrusted, e.DeadlineAt)
+	if s.Analysis == nil {
+		add(contextpack.KindSourceRevision, c.Config.Git.CloneURL+"@"+s.Base, "Pinned repository", "git", s.Base, s.Base, contextpack.TrustTrusted, e.DeadlineAt)
+		add(contextpack.KindTool, "worker://image", "Worker image", "marina", c.Config.Kubernetes.Image, c.Config.Kubernetes.Image, contextpack.TrustTrusted, e.DeadlineAt)
+	} else {
+		add(contextpack.KindSourceRevision, "fixture://"+s.Analysis.Fixture.ID, "Frozen diagnostic inputs", "operator", s.Base, s.Base, contextpack.TrustTrusted, e.DeadlineAt)
+		add(contextpack.KindTool, "worker://image", "Analysis worker image", "marina", s.Analysis.Image, s.Analysis.Image, contextpack.TrustTrusted, e.DeadlineAt)
+		policy, _ := json.Marshal(map[string]any{"profile_digest": s.ProfileDigest, "tools": s.Analysis.Tools, "authority": task.Budget.Authority})
+		add(contextpack.KindPolicy, "profile://"+s.ProfileDigest, "Installed analysis profile", "marina", s.ProfileDigest, string(policy), contextpack.TrustTrusted, e.DeadlineAt)
+		for _, source := range s.Analysis.Fixture.Sources {
+			add(contextpack.KindExternal, "fixture://"+s.Analysis.Fixture.ID+"/"+source.ID, source.ID, "operator", fmt.Sprint(s.Analysis.Fixture.Revision), source.Content, contextpack.TrustUntrusted, e.DeadlineAt)
+		}
+	}
 	for _, source := range resolved.Sources {
 		uri := fmt.Sprintf("context://%s/%s/%d", e.ProjectID, source.ID, source.Revision)
 		if source.Kind == "git" {
-			uri = c.Config.Git.CloneURL + "@" + source.SourceRevision + "/" + source.Path
+			repository := c.Config.Git.CloneURL
+			if task.Context != nil && task.Context.Repository != nil {
+				repository = task.Context.Repository.CloneURL
+			}
+			uri = repository + "@" + source.SourceRevision + "/" + source.Path
 		}
 		if source.Kind == "decision" {
 			uri = "decision://" + source.Reference + "/" + source.SourceRevision
@@ -153,6 +171,9 @@ func (c *Controller) prepareContext(ctx context.Context, e execution.Execution, 
 		if source.Kind != "git" {
 			continue
 		}
+		if c.Source == nil || !c.Config.RepositoryEnabled() {
+			return "", contextProblem("Selected Git context requires an installed repository binding")
+		}
 		port, err := c.Source(e)
 		if err != nil {
 			return "", err
@@ -163,7 +184,11 @@ func (c *Controller) prepareContext(ctx context.Context, e execution.Execution, 
 		if !ok {
 			return "", contextProblem("Source provider does not support pinned context files")
 		}
-		source.Content, err = reader.ReadContextFile(ctx, c.Config.Git.Repository, source.SourceRevision, source.Path)
+		repository := c.Config.Git.Repository
+		if task.Context.Repository != nil {
+			repository = task.Context.Repository.Repository
+		}
+		source.Content, err = reader.ReadContextFile(ctx, repository, source.SourceRevision, source.Path)
 		if err != nil {
 			return "", err
 		}

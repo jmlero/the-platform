@@ -14,6 +14,7 @@ import (
 )
 
 type Fixtures struct {
+	Workloads  workcontrol.WorkloadCatalog
 	Context    workcontrol.ResolvedContext
 	Repository workcontrol.RepositoryRequest
 	Provider   ProviderFixture
@@ -135,6 +136,7 @@ type fixtureManifestEntry struct {
 }
 
 var requiredFixtureKinds = []string{
+	"workloads",
 	"agent",
 	"budget",
 	"command",
@@ -193,6 +195,8 @@ func LoadFixtures(root string) (Fixtures, error) {
 		}
 
 		switch entry.Kind {
+		case "workloads":
+			err = decodeFile(path, &fixtures.Workloads)
 		case "context":
 			err = decodeFile(path, &fixtures.Context)
 			if err == nil {

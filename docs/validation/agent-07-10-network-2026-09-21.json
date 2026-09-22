@@ -1,0 +1,31 @@
+{
+  "environment": "kind-marina-local on podman-machine-default-root",
+  "date": "2026-09-21",
+  "image": "localhost/the-platform/marina-analysis@sha256:a4b79f3a67d1a15d61f269a43f3c613dceffaea40101e55f64758965e471bc52",
+  "results": [
+    {
+      "job": "agent-mvp-network-1790013263356683000",
+      "namespace": "marina-system",
+      "isolated": false,
+      "observations": {
+        "api_credential_absent": true,
+        "kubernetes.default.svc": true,
+        "1.1.1.1": true
+      }
+    },
+    {
+      "job": "agent-mvp-network-1790013266531303000",
+      "namespace": "marina-workers",
+      "isolated": true,
+      "observations": {
+        "api_credential_absent": true,
+        "gateway_tls": true,
+        "kubernetes.default.svc": false,
+        "1.1.1.1": false
+      }
+    }
+  ],
+  "model_calls": 0,
+  "intake_changed": false,
+  "scope": "Installed analysis image and existing gateway-only network policy; new API/tool implementation tested separately by real-process and harness tests."
+}

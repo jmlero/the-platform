@@ -60,6 +60,9 @@ func TestOperatorAuthenticationProtectsEveryHumanRoute(t *testing.T) {
 		body   string
 	}{
 		{http.MethodGet, "/api/v1/bootstrap", ""},
+		{http.MethodGet, "/api/v1/operator/provider", ""},
+		{http.MethodGet, "/api/v1/operator/projects/prj_default/workloads", ""},
+		{http.MethodPost, "/api/v1/operator/projects/prj_default/workloads/invoke", `{}`},
 		{http.MethodPost, "/api/v1/tasks", `{}`},
 		{http.MethodPatch, "/api/v1/tasks/tsk_missing", `{}`},
 		{http.MethodPost, "/api/v1/tasks/tsk_missing/move", `{}`},

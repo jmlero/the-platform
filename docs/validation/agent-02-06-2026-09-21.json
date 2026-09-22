@@ -1,0 +1,632 @@
+{
+  "schema_version": 1,
+  "date": "2026-09-21",
+  "environment": {
+    "context": "kind-marina-local",
+    "podman_connection": "podman-machine-default-root",
+    "node": "marina-local-control-plane",
+    "operator_url": "https://localhost:8443",
+    "mac_running": true
+  },
+  "images": {
+    "deck": "localhost/the-platform/deck@sha256:a955768bd3ac2f8fea18441c3359bd6e359473acb5827462ead74c841b04a011",
+    "marina": "localhost/the-platform/marina@sha256:5122fff2993d57857174071fd3dafff8bf54f138a91398a88c283e9e1f160853",
+    "marina-analysis": "localhost/the-platform/marina-analysis@sha256:a4b79f3a67d1a15d61f269a43f3c613dceffaea40101e55f64758965e471bc52"
+  },
+  "configuration": {
+    "sha256": "68c978515c000bd7ca4c44abed6e9325a8a9e7a33c7c376e2680219414e6abe4",
+    "coding_image": "localhost/the-platform/marina-worker@sha256:1f7217c2a81066b297a198daee855a3aabeee3469ed8726d8fac4765fc62b12b",
+    "model": {
+      "endpoint": "https://openrouter.ai/api/v1",
+      "name": "z-ai/glm-5.3-flash",
+      "max_output_tokens": 4096,
+      "input_micros_per_million": 450000,
+      "output_micros_per_million": 1500000,
+      "currency": "USD"
+    },
+    "analysis": {
+      "authority": "analysis.run.c967140bd0f93f6f7372a0b00c9aebd0b15a7757f75326361266deeaaa771228",
+      "budget_minutes": 5,
+      "harness": "langchain-create-agent/v1",
+      "input_digest": "28b82a3e2af6aae3271f85b5e0cdf8c935a9ad9842cfbb9cb4b3f9606a2a4278",
+      "max_tokens": 20000,
+      "model": "z-ai/glm-5.3-flash",
+      "model_destination": "https://openrouter.ai/api/v1",
+      "profile_digest": "c967140bd0f93f6f7372a0b00c9aebd0b15a7757f75326361266deeaaa771228",
+      "profile_revision": 1,
+      "worker_image": "localhost/the-platform/marina-analysis@sha256:a4b79f3a67d1a15d61f269a43f3c613dceffaea40101e55f64758965e471bc52",
+      "workload": "diagnostic-analysis/v1"
+    },
+    "intake_enabled": false
+  },
+  "analysis": {
+    "task_id": "tsk_fbcc6eb5b53348f7c7d4",
+    "status": "done",
+    "runs": [
+      {
+        "id": "run_0eec7f1b7797f83d09e8",
+        "task_id": "tsk_fbcc6eb5b53348f7c7d4",
+        "agent_id": "agt_a18f00886390860b0b6137b9",
+        "version": 17,
+        "fence_token": 1,
+        "task_version": 1,
+        "acceptance_criteria_digest": "d25f3731c7fafd38a2be1dc00b7f08c79d5f23f394c7366cab8a4b23d560dcab",
+        "status": "completed",
+        "plan": "Analyze the frozen synthetic diagnostic fixture blocked-runs revision 1 using LangChain create_agent on LangGraph. Profile: c967140bd0f93f6f7372a0b00c9aebd0b15a7757f75326361266deeaaa771228. Inputs: 28b82a3e2af6aae3271f85b5e0cdf8c935a9ad9842cfbb9cb4b3f9606a2a4278. Model destination: https://openrouter.ai/api/v1 (z-ai/glm-5.3-flash). Return a structured report with source quotes; no repository or mutation authority is granted.",
+        "active_plan_revision_id": "pln_2f0a1fc32570c8eda971",
+        "result_summary": "Validated diagnostic analysis: https://marina.marina-system.svc:8090/artifacts/sha256:d245554213d2527d28e59878c959a9ea783dcef824cfe3f73de31e27543452fb",
+        "started_at": 1790010710302,
+        "finished_at": 1790010745498,
+        "updated_at": 1790010757479
+      }
+    ],
+    "evidence": [
+      {
+        "id": "exec_57ff03668ad1cfcbc1ff0f85:analysis-validation",
+        "task_id": "tsk_fbcc6eb5b53348f7c7d4",
+        "run_id": "run_0eec7f1b7797f83d09e8",
+        "plan_revision_id": "pln_2f0a1fc32570c8eda971",
+        "type": "test",
+        "producer": "rtm_4072d6b7161002feb115cb72",
+        "verifier": "marina:diagnostic-validator/v1",
+        "subject_digest": "sha256:ac4bdfe3dc62a06cad461c75787fc7815040ebed4389604e4eb6f7abfac4aad8",
+        "source_revision": "28b82a3e2af6aae3271f85b5e0cdf8c935a9ad9842cfbb9cb4b3f9606a2a4278",
+        "command": "marina diagnostic-validator/v1",
+        "outcome": "passed",
+        "provenance_uri": "https://marina.marina-system.svc:8090/artifacts/sha256:d245554213d2527d28e59878c959a9ea783dcef824cfe3f73de31e27543452fb",
+        "provenance_digest": "sha256:d245554213d2527d28e59878c959a9ea783dcef824cfe3f73de31e27543452fb",
+        "observed_at": 1790010739506,
+        "expires_at": 1790097139506,
+        "artifact_uri": "https://marina.marina-system.svc:8090/artifacts/sha256:d245554213d2527d28e59878c959a9ea783dcef824cfe3f73de31e27543452fb",
+        "artifact_digest": "sha256:d245554213d2527d28e59878c959a9ea783dcef824cfe3f73de31e27543452fb",
+        "policy_version": "repository-fix-v1",
+        "admission_status": "current",
+        "created_at": 1790010742500
+      }
+    ],
+    "downloads": [
+      {
+        "digest": "sha256:d245554213d2527d28e59878c959a9ea783dcef824cfe3f73de31e27543452fb",
+        "bytes": 2168,
+        "value": {
+          "version": 1,
+          "validator": "marina:diagnostic-validator/v1",
+          "profile_digest": "c967140bd0f93f6f7372a0b00c9aebd0b15a7757f75326361266deeaaa771228",
+          "input_digest": "28b82a3e2af6aae3271f85b5e0cdf8c935a9ad9842cfbb9cb4b3f9606a2a4278",
+          "output_digest": "sha256:ac4bdfe3dc62a06cad461c75787fc7815040ebed4389604e4eb6f7abfac4aad8",
+          "report": {
+            "summary": "Two of three supplied records are unhealthy: one provider outage (HTTP 503) blocking a run with a held unknown usage reservation, and one token budget denial (12000 requested vs 4000 remaining). The record 'healthy-worker' is healthy and excluded from findings. No remediation was performed; operator actions are listed per finding.",
+            "findings": [
+              {
+                "code": "provider_unavailable",
+                "source_id": "model-outage",
+                "quote": "upstream HTTP 503",
+                "explanation": "Model gateway request failed with an upstream HTTP 503 outage, so the run is blocked pending provider recovery; the unknown usage reservation remains held. Operator action: wait for provider recovery and release the held reservation."
+              },
+              {
+                "code": "budget_exhausted",
+                "source_id": "token-limit",
+                "quote": "requested 12000 tokens; remaining budget 4000 tokens",
+                "explanation": "Model admission denied because the task requested 12000 tokens against only 4000 tokens remaining; no request was forwarded. Operator action: authorize a new bounded task within the remaining budget to continue."
+              }
+            ]
+          },
+          "sources": [
+            {
+              "id": "model-outage",
+              "content": "Synthetic task alpha. Model gateway request failed: upstream HTTP 503; no response usage was received. The run is blocked pending provider recovery. Its unknown usage reservation remains held."
+            },
+            {
+              "id": "token-limit",
+              "content": "Synthetic task beta. Model admission denied: requested 12000 tokens; remaining budget 4000 tokens. No request was forwarded. The operator must authorize a new bounded task to continue."
+            },
+            {
+              "id": "healthy-worker",
+              "content": "Synthetic task gamma. Worker completed successfully. Independent checks passed. The report was downloaded and its digest matched. No operator action is required."
+            }
+          ],
+          "checks": [
+            "required findings",
+            "no duplicate or invented findings",
+            "source IDs and verbatim causal quotes",
+            "immutable input/profile/output binding"
+          ]
+        }
+      }
+    ],
+    "executions": [
+      {
+        "id": "exec_57ff03668ad1cfcbc1ff0f85",
+        "project_id": "prj_default",
+        "work_provider": "deck",
+        "external_work_id": "tsk_fbcc6eb5b53348f7c7d4",
+        "external_run_id": "run_0eec7f1b7797f83d09e8",
+        "state": "completed",
+        "attempt": 1,
+        "used_tokens": 1051,
+        "used_cost_micros": 1009,
+        "pending_model_calls": 0,
+        "reserved_tokens": 0,
+        "reserved_cost_micros": 0,
+        "version": 29,
+        "updated_at_unix_milli": 1790010745500
+      }
+    ],
+    "attempts": [
+      {
+        "id": "rtm_4072d6b7161002feb115cb72",
+        "execution_id": "exec_57ff03668ad1cfcbc1ff0f85",
+        "attempt_number": 1,
+        "specification_digest": "sha256:045e47e281088c34a972f48fb8d60c571842498ee3d1022e84afb420b0fe53c6",
+        "provider_handle": "sha256:e14344a4e0a584f10427995a90e16738b2bfc2beb17a0cc68a96aadde0fe27a6",
+        "state": "succeeded",
+        "deadline_at_unix_milli": 1790011010300,
+        "cleanup_state": "completed",
+        "outputs_collected": false,
+        "version": 7
+      }
+    ],
+    "jobs": [
+      {
+        "apiVersion": "batch/v1",
+        "kind": "Job",
+        "name": "marina-80cb5b89323bea74ed90f7261d3742b0186a2ee9",
+        "namespace": "marina-workers",
+        "resourceVersion": "369685",
+        "uid": "3717571d-3638-497c-a77d-61f236d7bf11",
+        "attempt_id": "rtm_4072d6b7161002feb115cb72",
+        "attempt_number": 1,
+        "completed_at": "2026-09-21T17:12:15Z",
+        "image": "localhost/the-platform/marina-analysis@sha256:a4b79f3a67d1a15d61f269a43f3c613dceffaea40101e55f64758965e471bc52"
+      }
+    ],
+    "task_budget": {
+      "time_minutes": 5,
+      "max_attempts": 1,
+      "max_tokens": 20000,
+      "max_cost_minor": 5,
+      "currency": "USD",
+      "max_concurrency": 1,
+      "authority": [
+        "analysis.run.c967140bd0f93f6f7372a0b00c9aebd0b15a7757f75326361266deeaaa771228"
+      ]
+    },
+    "approval": {
+      "id": "dec_611a6fee042dcf000dc9",
+      "task_id": "tsk_fbcc6eb5b53348f7c7d4",
+      "run_id": "run_0eec7f1b7797f83d09e8",
+      "plan_revision_id": "pln_2f0a1fc32570c8eda971",
+      "question": "Approve plan revision 1 for \u201cAgent PoC 2026-09-21 analysis\u201d?",
+      "options": [
+        "Approve plan",
+        "Request changes"
+      ],
+      "recommendation": "Approve plan",
+      "risk_class": "low",
+      "evidence_summary": "",
+      "estimated_cost_minor": 0,
+      "currency": "USD",
+      "waiting_consequence": "Execution remains paused until this decision is answered or expires.",
+      "rejecting_consequence": "The run returns to planning and requires a new immutable plan revision.",
+      "status": "answered",
+      "answer": "Approve plan",
+      "expires_at": 1790011010300,
+      "created_at": 1790010721494,
+      "answered_at": 1790010723918,
+      "answered_by": "operator"
+    },
+    "context_packages": []
+  },
+  "coding": {
+    "task_id": "tsk_2ac0ea27ac482de1d146",
+    "status": "done",
+    "runs": [
+      {
+        "id": "run_f52d9a002c40f1ac11a7",
+        "task_id": "tsk_2ac0ea27ac482de1d146",
+        "agent_id": "agt_a18f00886390860b0b6137b9",
+        "version": 23,
+        "fence_token": 1,
+        "task_version": 1,
+        "acceptance_criteria_digest": "873df0b9fc4d054c272a3c705c7097619a96cf6c8789270d53642fa45edefaf9",
+        "status": "completed",
+        "plan": "Implement the bounded task at `10a96c6221f5c8a128ccb2617d8be27213d7b296` in `jmlero/marina-acceptance`.\n\nAllowed paths: src.\n\nRun the configured checks in a separate clean Kubernetes Job at the published commit. Open one PR against `main`; stop for human review. Failed checks or requested review changes block this task.\n\nModel destination: https://openrouter.ai/api/v1 (z-ai/glm-5.3-flash). No merge or deployment is authorized.",
+        "active_plan_revision_id": "pln_0152755c2f242d4af0ef",
+        "result_summary": "Verified PR ready for human review: https://github.com/jmlero/marina-acceptance/pull/11 (commit 114a91a9e09429246f1d78a917b5897ad394e49f)",
+        "started_at": 1790010795835,
+        "finished_at": 1790010889826,
+        "updated_at": 1790010900012
+      }
+    ],
+    "evidence": [
+      {
+        "id": "exec_9a63d6103359b4e8b6182e74:check:0",
+        "task_id": "tsk_2ac0ea27ac482de1d146",
+        "run_id": "run_f52d9a002c40f1ac11a7",
+        "plan_revision_id": "pln_0152755c2f242d4af0ef",
+        "type": "test",
+        "producer": "rtm_8cc8b3849dd130dc592c0eec",
+        "verifier": "rtm_e99e1b7b24bafbf90af00525",
+        "subject_digest": "114a91a9e09429246f1d78a917b5897ad394e49f",
+        "source_revision": "114a91a9e09429246f1d78a917b5897ad394e49f",
+        "command": "node --test tests/clamp.test.cjs",
+        "outcome": "passed",
+        "provenance_uri": "https://marina.marina-system.svc:8090/artifacts/sha256:3546ac736ca0593abf384ba2ed9c91edb68620afa26eca549b037f7e4b54905f",
+        "provenance_digest": "sha256:3546ac736ca0593abf384ba2ed9c91edb68620afa26eca549b037f7e4b54905f",
+        "observed_at": 1790010859312,
+        "expires_at": 1790097259312,
+        "artifact_uri": "https://marina.marina-system.svc:8090/artifacts/sha256:3546ac736ca0593abf384ba2ed9c91edb68620afa26eca549b037f7e4b54905f",
+        "artifact_digest": "sha256:3546ac736ca0593abf384ba2ed9c91edb68620afa26eca549b037f7e4b54905f",
+        "policy_version": "repository-fix-v1",
+        "admission_status": "current",
+        "created_at": 1790010883775
+      }
+    ],
+    "downloads": [
+      {
+        "digest": "sha256:3546ac736ca0593abf384ba2ed9c91edb68620afa26eca549b037f7e4b54905f",
+        "bytes": 1477,
+        "value": {
+          "stage": "verify",
+          "source_revision": "114a91a9e09429246f1d78a917b5897ad394e49f",
+          "summary": "Independent repository checks completed",
+          "checks": [
+            {
+              "id": "regression",
+              "command": [
+                "node",
+                "--test",
+                "tests/clamp.test.cjs"
+              ],
+              "directory": ".",
+              "exit_code": 0,
+              "output": "TAP version 13\n# Subtest: preserves values inside the interval\nok 1 - preserves values inside the interval\n  ---\n  duration_ms: 0.342292\n  type: 'test'\n  ...\n# Subtest: lower bound is inclusive\nok 2 - lower bound is inclusive\n  ---\n  duration_ms: 0.098958\n  type: 'test'\n  ...\n# Subtest: upper bound is inclusive\nok 3 - upper bound is inclusive\n  ---\n  duration_ms: 0.049\n  type: 'test'\n  ...\n# Subtest: preserves a value at the upper bound\nok 4 - preserves a value at the upper bound\n  ---\n  duration_ms: 0.044\n  type: 'test'\n  ...\n# Subtest: supports negative intervals\nok 5 - supports negative intervals\n  ---\n  duration_ms: 0.045542\n  type: 'test'\n  ...\n# Subtest: supports a single-value interval\nok 6 - supports a single-value interval\n  ---\n  duration_ms: 0.04375\n  type: 'test'\n  ...\n# Subtest: rejects an inverted interval\nok 7 - rejects an inverted interval\n  ---\n  duration_ms: 0.164917\n  type: 'test'\n  ...\n1..7\n# tests 7\n# suites 0\n# pass 7\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 30.807728\n",
+              "output_digest": "sha256:7c53c11c7929fc62bd927f694a882f8c9e2382ec8791de684e343dec8eb18863"
+            }
+          ],
+          "tokens": 0,
+          "observed_at": "2026-09-21T17:14:19.312228711Z"
+        }
+      }
+    ],
+    "executions": [
+      {
+        "id": "exec_9a63d6103359b4e8b6182e74",
+        "project_id": "prj_default",
+        "work_provider": "deck",
+        "external_work_id": "tsk_2ac0ea27ac482de1d146",
+        "external_run_id": "run_f52d9a002c40f1ac11a7",
+        "state": "completed",
+        "attempt": 2,
+        "used_tokens": 63714,
+        "used_cost_micros": 29742,
+        "pending_model_calls": 0,
+        "reserved_tokens": 0,
+        "reserved_cost_micros": 0,
+        "version": 52,
+        "updated_at_unix_milli": 1790010889828
+      }
+    ],
+    "attempts": [
+      {
+        "id": "rtm_8cc8b3849dd130dc592c0eec",
+        "execution_id": "exec_9a63d6103359b4e8b6182e74",
+        "attempt_number": 1,
+        "specification_digest": "sha256:9f226e2c1cb27f3c0a386a4eaef279e8d3fff2f1e34d01b2c3dd75cf74d6eb01",
+        "provider_handle": "sha256:80d2f2ce99e8938b10cba86f3982d68b1429ca8008f98f870e4ce04185bdfc63",
+        "state": "succeeded",
+        "deadline_at_unix_milli": 1790011395833,
+        "cleanup_state": "completed",
+        "outputs_collected": false,
+        "version": 16
+      },
+      {
+        "id": "rtm_e99e1b7b24bafbf90af00525",
+        "execution_id": "exec_9a63d6103359b4e8b6182e74",
+        "attempt_number": 2,
+        "specification_digest": "sha256:fcba1777a3773ca1ec0b23a6d982f96c2ecb51736c2a1dec255968fa3101176d",
+        "provider_handle": "sha256:845605783a1df8625945a8eb6a835dca40ec3a05b1d1f9a83040508adf3101a2",
+        "state": "succeeded",
+        "deadline_at_unix_milli": 1790011395833,
+        "cleanup_state": "completed",
+        "outputs_collected": false,
+        "version": 6
+      }
+    ],
+    "jobs": [
+      {
+        "apiVersion": "batch/v1",
+        "kind": "Job",
+        "name": "marina-cfebcb75fdb409488a383f410f8f895825033393",
+        "namespace": "marina-workers",
+        "resourceVersion": "370116",
+        "uid": "3466d631-0252-44ce-9722-64baaca2b811",
+        "attempt_id": "rtm_e99e1b7b24bafbf90af00525",
+        "attempt_number": 2,
+        "completed_at": "2026-09-21T17:14:21Z",
+        "image": "localhost/the-platform/marina-worker@sha256:1f7217c2a81066b297a198daee855a3aabeee3469ed8726d8fac4765fc62b12b",
+        "security": {
+          "automountServiceAccountToken": false,
+          "securityContext": {
+            "fsGroup": 65532,
+            "runAsGroup": 65532,
+            "runAsNonRoot": true,
+            "runAsUser": 65532,
+            "seccompProfile": {
+              "type": "RuntimeDefault"
+            }
+          },
+          "serviceAccountName": "marina-worker",
+          "container": {
+            "allowPrivilegeEscalation": false,
+            "capabilities": {
+              "drop": [
+                "ALL"
+              ]
+            },
+            "readOnlyRootFilesystem": true
+          }
+        }
+      },
+      {
+        "apiVersion": "batch/v1",
+        "kind": "Job",
+        "name": "marina-d0f897abaa1dc9c957c61c3bd9157f32c6cf536e",
+        "namespace": "marina-workers",
+        "resourceVersion": "370057",
+        "uid": "5b5841b0-f9fb-4423-b3fa-7b075cc3fcba",
+        "attempt_id": "rtm_8cc8b3849dd130dc592c0eec",
+        "attempt_number": 1,
+        "completed_at": "2026-09-21T17:14:06Z",
+        "image": "localhost/the-platform/marina-worker@sha256:1f7217c2a81066b297a198daee855a3aabeee3469ed8726d8fac4765fc62b12b",
+        "security": {
+          "automountServiceAccountToken": false,
+          "securityContext": {
+            "fsGroup": 65532,
+            "runAsGroup": 65532,
+            "runAsNonRoot": true,
+            "runAsUser": 65532,
+            "seccompProfile": {
+              "type": "RuntimeDefault"
+            }
+          },
+          "serviceAccountName": "marina-worker",
+          "container": {
+            "allowPrivilegeEscalation": false,
+            "capabilities": {
+              "drop": [
+                "ALL"
+              ]
+            },
+            "readOnlyRootFilesystem": true
+          }
+        }
+      }
+    ],
+    "task_budget": {
+      "time_minutes": 10,
+      "max_attempts": 2,
+      "max_tokens": 200000,
+      "max_cost_minor": 20,
+      "currency": "USD",
+      "max_concurrency": 1,
+      "authority": [
+        "source.read",
+        "source.write",
+        "pull_request.create"
+      ]
+    },
+    "approval": {
+      "id": "dec_21493b86e30d9db28f58",
+      "task_id": "tsk_2ac0ea27ac482de1d146",
+      "run_id": "run_f52d9a002c40f1ac11a7",
+      "plan_revision_id": "pln_0152755c2f242d4af0ef",
+      "question": "Approve plan revision 1 for \u201cAgent PoC 2026-09-21 coding\u201d?",
+      "options": [
+        "Approve plan",
+        "Request changes"
+      ],
+      "recommendation": "Approve plan",
+      "risk_class": "medium",
+      "evidence_summary": "",
+      "estimated_cost_minor": 0,
+      "currency": "USD",
+      "waiting_consequence": "Execution remains paused until this decision is answered or expires.",
+      "rejecting_consequence": "The run returns to planning and requires a new immutable plan revision.",
+      "status": "answered",
+      "answer": "Approve plan",
+      "expires_at": 1790011395833,
+      "created_at": 1790010807030,
+      "answered_at": 1790010809228,
+      "answered_by": "operator"
+    },
+    "context_packages": []
+  },
+  "github": {
+    "pull_request": {
+      "additions": 1,
+      "base": "10a96c6221f5c8a128ccb2617d8be27213d7b296",
+      "changed_files": 1,
+      "deletions": 1,
+      "head": "114a91a9e09429246f1d78a917b5897ad394e49f",
+      "merged": false,
+      "state": "open",
+      "url": "https://github.com/jmlero/marina-acceptance/pull/11"
+    },
+    "checks": [
+      {
+        "conclusion": "success",
+        "head_sha": "114a91a9e09429246f1d78a917b5897ad394e49f",
+        "html_url": "https://github.com/jmlero/marina-acceptance/actions/runs/35630738452/job/106436035012",
+        "id": 106436035012,
+        "name": "acceptance-regression",
+        "status": "completed"
+      }
+    ],
+    "files": [
+      {
+        "filename": "src/clamp.cjs",
+        "patch": "@@ -3,7 +3,7 @@\n // Return value constrained to the inclusive [minimum, maximum] interval.\n function clamp(value, minimum, maximum) {\n   if (minimum > maximum) throw new RangeError(\"minimum exceeds maximum\");\n-  return Math.min(Math.max(value, minimum), maximum - 1);\n+  return Math.min(Math.max(value, minimum), maximum);\n }\n \n module.exports = { clamp };",
+        "status": "modified"
+      }
+    ],
+    "commit": {
+      "author": {
+        "date": "2026-09-21T17:13:15Z",
+        "email": "jmlero@hotmail.com",
+        "name": "Marina"
+      },
+      "committer": {
+        "date": "2026-09-21T17:13:15Z",
+        "email": "jmlero@hotmail.com",
+        "name": "Marina"
+      },
+      "sha": "114a91a9e09429246f1d78a917b5897ad394e49f"
+    }
+  },
+  "network_probes": [
+    {
+      "namespace": "marina-system",
+      "job": {
+        "name": "agent-network-1790010768839258000",
+        "namespace": "marina-system"
+      },
+      "image": "localhost/the-platform/marina-analysis@sha256:a4b79f3a67d1a15d61f269a43f3c613dceffaea40101e55f64758965e471bc52",
+      "status": {
+        "completionTime": "2026-09-21T17:12:51Z",
+        "conditions": [
+          {
+            "lastProbeTime": "2026-09-21T17:12:51Z",
+            "lastTransitionTime": "2026-09-21T17:12:51Z",
+            "message": "Reached expected number of succeeded pods",
+            "reason": "CompletionsReached",
+            "status": "True",
+            "type": "SuccessCriteriaMet"
+          },
+          {
+            "lastProbeTime": "2026-09-21T17:12:51Z",
+            "lastTransitionTime": "2026-09-21T17:12:51Z",
+            "message": "Reached expected number of succeeded pods",
+            "reason": "CompletionsReached",
+            "status": "True",
+            "type": "Complete"
+          }
+        ],
+        "ready": 0,
+        "startTime": "2026-09-21T17:12:48Z",
+        "succeeded": 1,
+        "terminating": 0,
+        "uncountedTerminatedPods": {}
+      },
+      "output": "PASS kubernetes.default.svc baseline reachable\nPASS 1.1.1.1 baseline reachable\nPASS no Kubernetes credential\n"
+    },
+    {
+      "namespace": "marina-workers",
+      "job": {
+        "name": "agent-network-1790010772077173000",
+        "namespace": "marina-workers"
+      },
+      "image": "localhost/the-platform/marina-analysis@sha256:a4b79f3a67d1a15d61f269a43f3c613dceffaea40101e55f64758965e471bc52",
+      "status": {
+        "completionTime": "2026-09-21T17:13:01Z",
+        "conditions": [
+          {
+            "lastProbeTime": "2026-09-21T17:13:01Z",
+            "lastTransitionTime": "2026-09-21T17:13:01Z",
+            "message": "Reached expected number of succeeded pods",
+            "reason": "CompletionsReached",
+            "status": "True",
+            "type": "SuccessCriteriaMet"
+          },
+          {
+            "lastProbeTime": "2026-09-21T17:13:01Z",
+            "lastTransitionTime": "2026-09-21T17:13:01Z",
+            "message": "Reached expected number of succeeded pods",
+            "reason": "CompletionsReached",
+            "status": "True",
+            "type": "Complete"
+          }
+        ],
+        "ready": 0,
+        "startTime": "2026-09-21T17:12:52Z",
+        "succeeded": 1,
+        "terminating": 0,
+        "uncountedTerminatedPods": {}
+      },
+      "output": "PASS trusted TLS connection to Marina\nPASS kubernetes.default.svc blocked\nPASS 1.1.1.1 blocked\nPASS no Kubernetes credential\n"
+    }
+  ],
+  "final_installation": {
+    "tasks": [
+      {
+        "id": "tsk_8da208ea623c02d198b8",
+        "title": "test",
+        "status": "ready"
+      }
+    ],
+    "deployments": [
+      {
+        "name": "deck",
+        "image": "localhost/the-platform/deck@sha256:a955768bd3ac2f8fea18441c3359bd6e359473acb5827462ead74c841b04a011",
+        "args": []
+      },
+      {
+        "name": "marina",
+        "image": "localhost/the-platform/marina@sha256:757803206cbc382f64a4d74c67d82c3b56a3c52711182565b1caf671a784aa92",
+        "args": [
+          "serve",
+          "--intake-enabled=false"
+        ]
+      }
+    ]
+  },
+  "usage": {
+    "tokens": 64765,
+    "cost_micros_usd": 30751,
+    "new_task_allocation_minor_usd": 25,
+    "prior_task_allocation_minor_usd": 272,
+    "combined_task_allocation_minor_usd": 297
+  },
+  "validation_commands": [
+    "make check",
+    "make conformance",
+    "/private/tmp/platform-agent-langchain/bin/python -m unittest discover -s marina/harnesses/langchain -p test_*.py",
+    "python3 scripts/validate-agent-poc.py network",
+    "make check-installation",
+    "git diff --check",
+    "go test ./internal/flow ./cmd/marina (after final progress/help polish)"
+  ],
+  "implementation_sources": {
+    "marina/internal/analysis/profile.go": "sha256:4df741ce9fdf8b9c611094455ba24207fec959e960427d193341bc430b05bb81",
+    "marina/internal/flow/analysis.go": "sha256:7f9d1cdcc64f42d51996770ccfb76786bbc5b15a4d5c3b0b85d34b7bd6a01ec8",
+    "marina/internal/flow/config.go": "sha256:017fe6808ff11ea84026b1611dccf8a1b7dba131ccb95fd890b0702d7656ea0a",
+    "marina/internal/flow/controller.go": "sha256:690b6af0f1983515a7bdd289268bc93dab7c86427727197ec1fa72d4d3cd77c4",
+    "marina/internal/flow/runtime.go": "sha256:f5fc8d53756f2f5e3e9cd3f05f11cd06279075cc1a5a9b34e80911a13b7357b9",
+    "marina/internal/worker/analysis.go": "sha256:b8ad5dd19b843ddd0f6e5bff0706b0a3e9a6a6f392963c6c84295f192772bfbd",
+    "marina/internal/workerapi/model.go": "sha256:6aa4bca2ae600b1b8800be8696358b26a3430f383facab84e4ff94d3c936b5e0",
+    "marina/internal/workerapi/server.go": "sha256:c2521053c44d855d32ab8db654c321673aca9eb574cf9b5a9a676b2ce2833805",
+    "marina/harnesses/langchain/run.py": "sha256:adf414e7a4b403a94db5ce3a71818e4afcb84194aba6c653f65c287ea6bb38cb",
+    "marina/harnesses/langchain/requirements.txt": "sha256:bc1206f9876a122ad6539f8320e26bd45adb8f5ce33c98e94447024760e671b5",
+    "marina/Dockerfile.analysis-worker": "sha256:652707d1c59380f74e56402b87486ef1a63af4cf5d81b64a74d62417e9c15f0a"
+  },
+  "post_acceptance": {
+    "changes": "Readable analysis progress messages and workload-profile command help only; no lifecycle or evidence semantic changes.",
+    "restart_checks": [
+      {
+        "task_id": "tsk_fbcc6eb5b53348f7c7d4",
+        "state": "done",
+        "execution_and_attempts_unchanged": true,
+        "artifact_digest_reverified": "sha256:d245554213d2527d28e59878c959a9ea783dcef824cfe3f73de31e27543452fb"
+      },
+      {
+        "task_id": "tsk_2ac0ea27ac482de1d146",
+        "state": "done",
+        "execution_and_attempts_unchanged": true,
+        "artifact_digest_reverified": "sha256:3546ac736ca0593abf384ba2ed9c91edb68620afa26eca549b037f7e4b54905f"
+      }
+    ],
+    "worker_jobs_remaining": 0,
+    "worker_pods_remaining": 0,
+    "additional_model_usage": 0
+  }
+}

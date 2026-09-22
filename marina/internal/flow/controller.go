@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jmlero/the-platform/marina/internal/analysis"
 	"github.com/jmlero/the-platform/marina/internal/artifacts"
 	"github.com/jmlero/the-platform/marina/internal/execution"
 	"github.com/jmlero/the-platform/marina/internal/journal/sqlite"
@@ -39,6 +40,9 @@ type Controller struct {
 // Every value used in an external write is derived from this durable state,
 // the frozen task, or the versioned installation configuration.
 type state struct {
+	Analysis             *analysis.Profile `json:",omitempty"`
+	ProfileDigest        string            `json:",omitempty"`
+	ValidationObservedAt time.Time         `json:",omitempty"`
 	Step                 string
 	ConfigDigest         string
 	ContextDigest        string
@@ -79,7 +83,7 @@ func (c *Controller) save(ctx context.Context, e execution.Execution, s state) e
 	if err != nil {
 		return err
 	}
-	updated, checkpoint, _, err := c.Journal.SaveCheckpoint(ctx, e.ID, e.Version, execution.CheckpointInput{Key: fmt.Sprintf("flow:%d", e.Version), Phase: "repository_flow", SourceRevision: s.Head, Payload: map[string]any{"state": string(b)}})
+	_, checkpoint, _, err := c.Journal.SaveCheckpoint(ctx, e.ID, e.Version, execution.CheckpointInput{Key: fmt.Sprintf("flow:%d", e.Version), Phase: "repository_flow", SourceRevision: s.Head, Payload: map[string]any{"state": string(b)}})
 	if err != nil {
 		return err
 	}
@@ -90,7 +94,27 @@ func (c *Controller) save(ctx context.Context, e execution.Execution, s state) e
 	if s.Reason != "" {
 		message = s.Reason
 	}
-	_, _, err = c.Journal.EnqueueOutbox(ctx, e.ID, execution.OutboxInput{Kind: "event", IdempotencyKey: fmt.Sprintf("workflow:%s:%d", e.ID, checkpoint.ID), Payload: map[string]any{"type": "execution.progress", "message": message, "source_revision": s.Head, "reported_tokens": updated.UsedTokens, "reported_cost_micros": updated.UsedCostMicros, "currency": c.Config.Model.Currency, "occurred_at": checkpoint.CreatedAt.UnixMilli()}})
+	if s.Analysis != nil && s.Reason == "" {
+		message = map[string]string{
+			"plan":              "Diagnostic inputs frozen; preparing approval",
+			"approval":          "Diagnostic analysis plan submitted",
+			"analyze":           "Analyzing the frozen diagnostic records",
+			"analysis_verify":   "Independently checking diagnostic findings and source quotes",
+			"analysis_evidence": "Recording diagnostic validation evidence",
+			"complete":          "Diagnostic evidence ready",
+		}[s.Step]
+	}
+	totals, err := c.Journal.ExecutionModelTotals(ctx, e.ID)
+	if err != nil {
+		return err
+	}
+	workload, harness, profile := "repository/v1", "codex/v1", s.ConfigDigest
+	if s.Analysis != nil {
+		workload = analysis.Kind
+		harness = s.Analysis.HarnessVersion
+		profile = s.ProfileDigest
+	}
+	_, _, err = c.Journal.EnqueueOutbox(ctx, e.ID, execution.OutboxInput{Kind: "event", IdempotencyKey: fmt.Sprintf("workflow:%s:%d", e.ID, checkpoint.ID), Payload: map[string]any{"type": "execution.progress", "message": message, "source_revision": s.Head, "execution_id": e.ID, "workload": workload, "harness": harness, "profile_digest": profile, "reported_tokens": totals.Tokens, "reported_cost_micros": totals.CostMicros, "pending_model_calls": totals.PendingCalls, "reserved_tokens": totals.ReservedTokens, "reserved_cost_micros": totals.ReservedCostMicros, "currency": c.Config.Model.Currency, "occurred_at": checkpoint.CreatedAt.UnixMilli()}})
 	return err
 }
 
@@ -145,6 +169,21 @@ func (c *Controller) CheckContext(ctx context.Context, e execution.Execution) er
 	if err = json.Unmarshal([]byte(snapshot), &task); err != nil {
 		return err
 	}
+	profileConfig := c.Config
+	if c.BindingConfig != nil && !analysisRequested(task) {
+		profileConfig, err = c.BindingConfig(ctx, e)
+		if err != nil {
+			return err
+		}
+	}
+	if !profileConfig.MatchesWorkload(task) {
+		return contextProblem("The selected workload profile is unavailable or changed")
+	}
+	if analysisRequested(task) {
+		if c.Config.Analysis == nil || len(task.Budget.Authority) != 1 || task.Budget.Authority[0] != c.Config.AnalysisAuthority() {
+			return contextProblem("The authorized analysis profile is unavailable or changed")
+		}
+	}
 	if task.Context != nil {
 		reader, ok := c.Provider.(workcontrol.ContextInspection)
 		if !ok {
@@ -196,7 +235,15 @@ func (c *Controller) Cycle(ctx context.Context) []error {
 }
 
 func (c *Controller) advance(ctx context.Context, e execution.Execution) error {
-	if c.BindingConfig != nil {
+	snapshot, err := c.Journal.AcquiredTaskSnapshot(ctx, e.ProjectID, e.ExternalWorkID, e.TaskVersion)
+	if err != nil {
+		return err
+	}
+	var task workcontrol.WorkItem
+	if err = json.Unmarshal([]byte(snapshot), &task); err != nil {
+		return err
+	}
+	if c.BindingConfig != nil && !analysisRequested(task) {
 		config, err := c.BindingConfig(ctx, e)
 		if err != nil {
 			r, readErr := c.run(ctx, e)
@@ -219,6 +266,9 @@ func (c *Controller) advance(ctx context.Context, e execution.Execution) error {
 		return err
 	}
 	if r.Status == workcontrol.RunCompleted && s.Step == "complete" {
+		if s.Analysis != nil {
+			return c.transition(ctx, e, execution.StateCompleted, "Validated diagnostic analysis available")
+		}
 		return c.transition(ctx, e, execution.StateCompleted, "Verified pull request ready for human review")
 	}
 	if err = c.Authorize(ctx, e, e.FenceToken); err != nil {
@@ -239,15 +289,10 @@ func (c *Controller) advance(ctx context.Context, e execution.Execution) error {
 	if s.Step == "paused" {
 		return nil
 	}
-	snapshot, err := c.Journal.AcquiredTaskSnapshot(ctx, e.ProjectID, e.ExternalWorkID, e.TaskVersion)
-	if err != nil {
-		return err
-	}
-	var task workcontrol.WorkItem
-	if err = json.Unmarshal([]byte(snapshot), &task); err != nil {
-		return err
-	}
 	if s.Step == "prepare" {
+		if analysisRequested(task) {
+			return c.prepareAnalysis(ctx, e, r, task, s)
+		}
 		if strings.TrimSpace(task.AcceptanceCriteria) == "" {
 			return c.block(ctx, e, r, "Observable acceptance criteria are required for a repository change")
 		}
@@ -312,9 +357,18 @@ func (c *Controller) advance(ctx context.Context, e execution.Execution) error {
 			return c.block(ctx, e, r, "Active plan differs from the persisted repository workflow")
 		}
 		g := guard(e, r, "plan")
-		p, err := c.Provider.SubmitPlanRevision(ctx, r.ID, workcontrol.PlanRevisionSubmission{IdempotencyKey: g.IdempotencyKey, AgentID: g.AgentID, ExpectedVersion: g.ExpectedVersion, FenceToken: g.FenceToken,
+		submission := workcontrol.PlanRevisionSubmission{IdempotencyKey: g.IdempotencyKey, AgentID: g.AgentID, ExpectedVersion: g.ExpectedVersion, FenceToken: g.FenceToken,
 			Plan:          fmt.Sprintf("Implement the bounded task at `%s` in `%s`.\n\nAllowed paths: %s.\n\nRun the configured checks in a separate clean Kubernetes Job at the published commit. Open one PR against `%s`; stop for human review. Failed checks or requested review changes block this task.\n\nModel destination: %s (%s). No merge or deployment is authorized.", s.Base, c.Config.Git.Repository, strings.Join(c.Config.AllowedPaths, ", "), c.Config.Git.BaseBranch, c.Config.Model.Endpoint, c.Config.Model.Name),
-			ContextDigest: c.contextDigest(task, s), RiskClass: "medium", VerificationStrategy: "Independent clean checkout; all configured local and required CI checks must pass for the PR head", ExpectedSideEffects: []string{"create scoped Git branch", "publish commit", "open pull request"}, RollbackApproach: "Close the PR and delete its branch; the base branch is not changed", PolicyVersion: c.Config.PolicyVersion, RequireApproval: c.Config.RequireApproval, DecisionExpiresAt: &e.DeadlineAt})
+			ContextDigest: c.contextDigest(task, s), RiskClass: "medium", VerificationStrategy: "Independent clean checkout; all configured local and required CI checks must pass for the PR head", ExpectedSideEffects: []string{"create scoped Git branch", "publish commit", "open pull request"}, RollbackApproach: "Close the PR and delete its branch; the base branch is not changed", PolicyVersion: c.Config.PolicyVersion, RequireApproval: c.Config.RequireApproval, DecisionExpiresAt: &e.DeadlineAt}
+		if s.Analysis != nil {
+			submission.Plan = fmt.Sprintf("Analyze the frozen synthetic diagnostic fixture %s revision %d using LangChain create_agent on LangGraph. Profile: %s. Inputs: %s. Model destination: %s (%s). Return a structured report with source quotes; no repository or mutation authority is granted.", s.Analysis.Fixture.ID, s.Analysis.Fixture.Revision, s.ProfileDigest, s.Base, c.Config.Model.Endpoint, c.Config.Model.Name)
+			submission.RiskClass = "low"
+			submission.SourceRevision = s.Base
+			submission.VerificationStrategy = "Independent deterministic validation of required findings and source quotes, bound to input/profile/output digests"
+			submission.ExpectedSideEffects = []string{"bounded model inference", "store diagnostic report and validation evidence"}
+			submission.RollbackApproach = "Cancel the worker; no source or infrastructure mutations are performed"
+		}
+		p, err := c.Provider.SubmitPlanRevision(ctx, r.ID, submission)
 		if err != nil {
 			return err
 		}
@@ -344,17 +398,23 @@ func (c *Controller) advance(ctx context.Context, e execution.Execution) error {
 			}
 		}
 		if e.State != execution.StateRunning {
-			if err = c.transition(ctx, e, execution.StateRunning, "Approved repository implementation started"); err != nil {
+			if err = c.transition(ctx, e, execution.StateRunning, "Approved workload started"); err != nil {
 				return err
 			}
 		}
 		s.Step = "implement"
+		if s.Analysis != nil {
+			s.Step = "analyze"
+		}
 		return c.save(ctx, e, s)
 	}
-	if s.Step == "implement" || s.Step == "verify" {
+	if s.Step == "implement" || s.Step == "verify" || s.Step == "analyze" {
 		stage := s.Step
 		attempt, done, result, digest, err := c.worker(ctx, e, task, s, stage)
 		if err != nil {
+			if errors.Is(err, errInvalidWorkerResult) {
+				return c.block(ctx, e, r, err.Error())
+			}
 			return err
 		}
 		if !done {
@@ -363,7 +423,11 @@ func (c *Controller) advance(ctx context.Context, e execution.Execution) error {
 		if attempt.State != runtimeapi.StateSucceeded {
 			return c.block(ctx, e, r, stage+" worker failed; inspect the Kubernetes Job and create a revised task")
 		}
-		if stage == "implement" {
+		if stage == "analyze" {
+			s.Implementer = attempt.ID
+			s.ImplementationDigest = digest
+			s.Step = "analysis_verify"
+		} else if stage == "implement" {
 			s.Implementer = attempt.ID
 			s.ImplementationDigest = digest
 			s.Step = "branch"
@@ -379,6 +443,9 @@ func (c *Controller) advance(ctx context.Context, e execution.Execution) error {
 			s.Step = "pull_request"
 		}
 		return c.save(ctx, e, s)
+	}
+	if s.Analysis != nil {
+		return c.advanceAnalysisResult(ctx, e, r, s)
 	}
 	if s.Step == "branch" {
 		source, err := c.Source(e)

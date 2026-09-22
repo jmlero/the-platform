@@ -3,7 +3,9 @@ package sqlite_test
 import (
 	"context"
 	"errors"
+	"github.com/jmlero/the-platform/marina/internal/analysis"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -109,45 +111,65 @@ func validRuntimeSpecification(now time.Time) runtimeapi.Specification {
 }
 
 func TestRuntimeAttemptLimitSurvivesRestartAndAllowsIdempotentReplay(t *testing.T) {
-	ctx := context.Background()
-	now := time.Date(2026, time.September, 21, 12, 0, 0, 0, time.UTC)
-	path := filepath.Join(t.TempDir(), "attempt-limit.db")
-	store := openStore(t, ctx, path, &now)
-	input := validExecution(now, "run-attempt-limit")
-	input.Budget.MaxAttempts = 2
-	record, _, err := store.EnsureExecution(ctx, input)
-	if err != nil {
-		t.Fatal(err)
-	}
-	specification := validRuntimeSpecification(now)
-	var last runtimeapi.Attempt
-	for _, key := range []string{"implementation", "verification"} {
-		specification.IdempotencyKey = key
-		var created bool
-		record, last, created, err = store.EnsureRuntimeAttempt(ctx, record.ID, record.Version, specification)
-		if err != nil || !created {
-			t.Fatalf("admit %s: created=%t err=%v", key, created, err)
-		}
-	}
-	if err := store.Close(); err != nil {
-		t.Fatal(err)
-	}
-	store = openStore(t, ctx, path, &now)
-	t.Cleanup(func() { _ = store.Close() })
-	replayed, attempt, created, err := store.EnsureRuntimeAttempt(ctx, record.ID, 1, specification)
-	if err != nil || created || attempt.ID != last.ID || replayed.Version != record.Version {
-		t.Fatalf("replay at cap: execution=%#v attempt=%#v created=%t err=%v", replayed, attempt, created, err)
-	}
-	specification.IdempotencyKey = "third-attempt"
-	if _, _, _, err := store.EnsureRuntimeAttempt(ctx, record.ID, record.Version, specification); !errors.Is(err, execution.ErrBudgetExhausted) {
-		t.Fatalf("third attempt error=%v, want budget exhausted", err)
-	}
-	attempts, err := store.ListRuntimeAttempts(ctx, record.ID)
-	if err != nil || len(attempts) != 2 {
-		t.Fatalf("attempts after denial=%#v err=%v", attempts, err)
-	}
-	unchanged, err := store.GetExecution(ctx, record.ID)
-	if err != nil || unchanged.Attempt != 2 || unchanged.Version != record.Version {
-		t.Fatalf("denial changed execution: %#v err=%v", unchanged, err)
+	for _, workload := range []string{"repository", "analysis"} {
+		t.Run(workload, func(t *testing.T) {
+			ctx := context.Background()
+			now := time.Date(2026, time.September, 21, 12, 0, 0, 0, time.UTC)
+			path := filepath.Join(t.TempDir(), "attempt-limit.db")
+			store := openStore(t, ctx, path, &now)
+			input := validExecution(now, "run-attempt-limit")
+			keys := []string{"implementation", "verification"}
+			if workload == "analysis" {
+				keys = []string{"analyze"}
+			}
+			input.Budget.MaxAttempts = len(keys)
+			record, _, err := store.EnsureExecution(ctx, input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			specification := validRuntimeSpecification(now)
+			if workload == "analysis" {
+				specification.RepositoryURI, specification.SourceRevision = "", ""
+				specification.Workload, specification.HarnessVersion = analysis.Kind, analysis.HarnessWithContext
+				specification.WorkerImage = "analysis@sha256:" + strings.Repeat("a", 64)
+				specification.InputDigest, specification.ProfileDigest = analysis.DiagnosticFixture().InputDigest(), strings.Repeat("b", 64)
+				specification.CredentialReferences = nil
+			}
+			var last runtimeapi.Attempt
+			for _, key := range keys {
+				specification.IdempotencyKey = key
+				var created bool
+				record, last, created, err = store.EnsureRuntimeAttempt(ctx, record.ID, record.Version, specification)
+				if err != nil || !created {
+					t.Fatalf("admit %s: created=%t err=%v", key, created, err)
+				}
+			}
+			if err := store.Close(); err != nil {
+				t.Fatal(err)
+			}
+			store = openStore(t, ctx, path, &now)
+			t.Cleanup(func() { _ = store.Close() })
+			replayed, attempt, created, err := store.EnsureRuntimeAttempt(ctx, record.ID, 1, specification)
+			if err != nil || created || attempt.ID != last.ID || replayed.Version != record.Version {
+				t.Fatalf("replay at cap: execution=%#v attempt=%#v created=%t err=%v", replayed, attempt, created, err)
+			}
+			specification.IdempotencyKey = "third-attempt"
+			if _, _, _, err := store.EnsureRuntimeAttempt(ctx, record.ID, record.Version, specification); !errors.Is(err, execution.ErrBudgetExhausted) {
+				t.Fatalf("third attempt error=%v, want budget exhausted", err)
+			}
+			attempts, err := store.ListRuntimeAttempts(ctx, record.ID)
+			if err != nil || len(attempts) != len(keys) {
+				t.Fatalf("attempts after denial=%#v err=%v", attempts, err)
+			}
+			unchanged, err := store.GetExecution(ctx, record.ID)
+			if err != nil || unchanged.Attempt != len(keys) || unchanged.Version != record.Version {
+				t.Fatalf("denial changed execution: %#v err=%v", unchanged, err)
+			}
+			// Deadline denial must persist independently of the profile and attempt count.
+			now = record.DeadlineAt
+			if _, err := store.RenewLease(ctx, record.ID, record.Version, now.Add(time.Minute)); !errors.Is(err, execution.ErrBudgetExhausted) {
+				t.Fatalf("expired time budget: %v", err)
+			}
+		})
 	}
 }

@@ -15,14 +15,14 @@ const taskColumns = `
 	id, project_id, title, description, acceptance_criteria, status, priority,
 	budget_minutes, deadline_at, max_attempts, max_tokens, max_cost_minor,
 	currency, max_concurrency, authority_json,
-	assigned_agent_id, version, created_at, updated_at, context_json
+	assigned_agent_id, version, created_at, updated_at, context_json, workload_json
 `
 
 func scanTask(scanner interface{ Scan(...any) error }) (domain.Task, error) {
 	var task domain.Task
 	var assignedAgentID sql.NullString
 	var deadlineAt sql.NullInt64
-	var authority, contextJSON string
+	var authority, contextJSON, workloadJSON string
 	if err := scanner.Scan(
 		&task.ID,
 		&task.ProjectID,
@@ -44,10 +44,14 @@ func scanTask(scanner interface{ Scan(...any) error }) (domain.Task, error) {
 		&task.CreatedAt,
 		&task.UpdatedAt,
 		&contextJSON,
+		&workloadJSON,
 	); err != nil {
 		return domain.Task{}, err
 	}
 	if err := json.Unmarshal([]byte(contextJSON), &task.Context); err != nil {
+		return domain.Task{}, err
+	}
+	if err := json.Unmarshal([]byte(workloadJSON), &task.Workload); err != nil {
 		return domain.Task{}, err
 	}
 	task.Budget.TimeMinutes = task.BudgetMinutes
@@ -174,6 +178,10 @@ func validTaskStatus(value string) bool {
 }
 
 func (s *Store) CreateTask(ctx context.Context, input domain.CreateTaskInput) (domain.Task, error) {
+	return s.createTask(ctx, input, nil, Mutation{})
+}
+
+func (s *Store) createTask(ctx context.Context, input domain.CreateTaskInput, invocation *domain.WorkloadInvocation, mutation Mutation) (domain.Task, error) {
 	validated, err := validateTaskInput(input)
 	if err != nil {
 		return domain.Task{}, err
@@ -200,6 +208,23 @@ func (s *Store) CreateTask(ctx context.Context, input domain.CreateTaskInput) (d
 		return domain.Task{}, fmt.Errorf("begin create task: %w", err)
 	}
 	defer tx.Rollback()
+	var receipt idempotencyAttempt
+	if invocation != nil {
+		var replay json.RawMessage
+		var exists bool
+		receipt, replay, exists, err = beginIdempotentMutation(ctx, tx, mutation, task.ProjectID, "workload.invoke", task.ProjectID, invocation)
+		if err != nil {
+			return domain.Task{}, err
+		}
+		if exists {
+			err = decodeIdempotencyResult(replay, &task)
+			return task, err
+		}
+		task.Workload, err = admittedProfile(ctx, tx, task.ProjectID, *invocation, task.Budget)
+		if err != nil {
+			return domain.Task{}, err
+		}
+	}
 	task.Context, err = selectTaskContext(ctx, tx, task.ProjectID, validated.ContextMessageIDs, task.Status == domain.TaskReady)
 	if err != nil {
 		return domain.Task{}, err
@@ -209,8 +234,8 @@ func (s *Store) CreateTask(ctx context.Context, input domain.CreateTaskInput) (d
 			id, project_id, title, description, acceptance_criteria, status,
 			priority, budget_minutes, deadline_at, max_attempts, max_tokens,
 			max_cost_minor, currency, max_concurrency, authority_json,
-			version, created_at, updated_at, context_json
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			version, created_at, updated_at, context_json, workload_json
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		task.ID,
 		task.ProjectID,
@@ -231,6 +256,7 @@ func (s *Store) CreateTask(ctx context.Context, input domain.CreateTaskInput) (d
 		task.CreatedAt,
 		task.UpdatedAt,
 		marshalJSON(task.Context),
+		marshalJSON(task.Workload),
 	)
 	if err != nil {
 		return domain.Task{}, fmt.Errorf("insert task: %w", err)
@@ -247,6 +273,11 @@ func (s *Store) CreateTask(ctx context.Context, input domain.CreateTaskInput) (d
 	)
 	if err != nil {
 		return domain.Task{}, fmt.Errorf("create task event: %w", err)
+	}
+	if invocation != nil {
+		if err = finishIdempotentMutation(ctx, tx, receipt, task); err != nil {
+			return domain.Task{}, err
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return domain.Task{}, fmt.Errorf("commit task: %w", err)
@@ -377,6 +408,9 @@ func (s *Store) UpdateTask(ctx context.Context, id string, input domain.UpdateTa
 	}
 	if task.Title == "" || task.BudgetMinutes <= 0 || !validPriority(task.Priority) {
 		return domain.Task{}, fmt.Errorf("invalid task fields: %w", domain.ErrInvalidInput)
+	}
+	if task.Workload != nil && (task.Budget.MaxTokens < 1 || task.Budget.MaxTokens > task.Workload.MaxTokens || task.Budget.TimeMinutes > task.Workload.BudgetMinutes || task.Budget.MaxAttempts < task.Workload.MinAttempts || task.Budget.MaxConcurrency != 1 || !sameGrants(task.Budget.Authority, task.Workload.Authority)) {
+		return domain.Task{}, fmt.Errorf("task exceeds its pinned workload profile: %w", domain.ErrInvalidInput)
 	}
 	if task.Status == domain.TaskReady {
 		if err := validateRepositoryReadiness(task.AcceptanceCriteria, task.Budget); err != nil {

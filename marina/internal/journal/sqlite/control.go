@@ -45,8 +45,10 @@ func validateBinding(input execution.ProjectBinding) (execution.ProjectBinding, 
 	input.ContextConfig = strings.TrimSpace(input.ContextConfig)
 	input.ArtifactConfig = strings.TrimSpace(input.ArtifactConfig)
 	input.DeliveryConfig = strings.TrimSpace(input.DeliveryConfig)
-	if input.ProjectID == "" || input.Provider == "" || input.Repository == "" || input.Runtime == "" ||
-		input.PolicyVersion == "" || input.ContextConfig == "" || input.ArtifactConfig == "" || input.DeliveryConfig == "" ||
+	// Repository and delivery are optional workload-specific bindings. A
+	// read-only analysis project owns neither; its runtime and policy remain bounded.
+	if input.ProjectID == "" || input.Provider == "" || input.Runtime == "" ||
+		input.PolicyVersion == "" || input.ContextConfig == "" || input.ArtifactConfig == "" ||
 		input.BudgetMinutes < 1 || input.MaxConcurrency < 1 {
 		return execution.ProjectBinding{}, fmt.Errorf("complete bounded project binding is required: %w", execution.ErrInvalidInput)
 	}
@@ -312,13 +314,13 @@ func (store *Store) EnqueueOutbox(ctx context.Context, executionID string, input
 		return execution.OutboxItem{}, false, err
 	}
 	defer tx.Rollback()
-	var sequence int64
-	if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX(sequence), 0) + 1 FROM provider_outbox WHERE execution_id = ?", executionID).Scan(&sequence); err != nil {
-		return execution.OutboxItem{}, false, err
-	}
+	// Allocate the sequence inside the first write. Reading it beforehand opens
+	// a deferred read transaction that cannot upgrade after a concurrent tool
+	// decision commits, producing SQLITE_BUSY instead of a durable audit event.
 	result, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO provider_outbox
 		(id, execution_id, sequence, kind, idempotency_key, payload_json, status, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)`, id, executionID, sequence, input.Kind, input.IdempotencyKey, encoded, now.UnixMilli())
+		SELECT ?, ?, COALESCE(MAX(sequence), 0) + 1, ?, ?, ?, 'pending', ?
+		FROM provider_outbox WHERE execution_id = ?`, id, executionID, input.Kind, input.IdempotencyKey, encoded, now.UnixMilli(), executionID)
 	if err != nil {
 		return execution.OutboxItem{}, false, err
 	}

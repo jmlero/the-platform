@@ -1,4 +1,5 @@
 <script lang="ts">
+  import WorkloadDetails from './WorkloadDetails.svelte';
   import TaskContextPanel from './TaskContextPanel.svelte';
   import { modal } from '$lib/dialog';
   import {
@@ -67,7 +68,8 @@
   $: task = detail.task;
   $: run = detail.runs[0];
   $: resultURL = run?.result_summary.match(/https:\/\/[^\s)]+/)?.[0];
-  $: usageEvent = detail.events.find((event) => typeof event.payload?.reported_tokens === 'number');
+  $: analysisWorkload = task.workload?.id === 'diagnostic-analysis/v1' || task.budget.authority.some((grant) => grant.startsWith('analysis.run.'));
+  $: analysisEvidence = detail.evidence.find((evidence) => evidence.run_id === run?.id && evidence.outcome === 'passed' && evidence.command === 'marina diagnostic-validator/v1');
   $: agent = agents.find((candidate) => candidate.id === (run?.agent_id ?? task.assigned_agent_id));
   $: pendingDecision = detail.decisions.find((decision) => decision.status === 'pending');
   $: progressEvent = detail.events.find(
@@ -282,9 +284,7 @@
       {#each detail.commands as command (command.id)}
         <p class="command-status">{command.type}: {command.status}{command.result ? ` · ${command.result}` : ''}</p>
       {/each}
-      {#if usageEvent?.payload}
-        <p class="command-status">Reported model usage: {Number(usageEvent.payload.reported_tokens).toLocaleString()} tokens · {(Number(usageEvent.payload.reported_cost_micros) / 1000000).toFixed(4)} {String(usageEvent.payload.currency ?? '')}</p>
-      {/if}
+      <WorkloadDetails {task} events={detail.events} runID={run?.id} />
 
       <nav class="tabs" aria-label="Task detail sections">
         <button class:active={tab === 'overview'} type="button" on:click={() => (tab = 'overview')}>
@@ -385,7 +385,9 @@
                     <CheckCircle2 size={15} />
                     {run.result_summary}
                   </div>
-                  {#if resultURL}<a href={resultURL} target="_blank" rel="noopener noreferrer">Review pull request</a>{/if}
+                  {#if analysisWorkload && analysisEvidence}
+                    <a href={`/api/v1/operator/tasks/${encodeURIComponent(task.id)}/artifacts/${encodeURIComponent(analysisEvidence.artifact_digest)}`}>Download validated analysis</a>
+                  {:else if resultURL && !analysisWorkload}<a href={resultURL} target="_blank" rel="noopener noreferrer">Review pull request</a>{/if}
                 {/if}
               </div>
             </section>

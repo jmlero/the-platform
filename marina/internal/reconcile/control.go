@@ -69,6 +69,7 @@ type ControlController struct {
 	executionTokens   int64
 	executionAttempts int
 	intakeDisabled    bool
+	intakeWorkID      string
 	commandHandler    func(context.Context, execution.Execution, workcontrol.Command) (string, string, error)
 }
 
@@ -77,6 +78,14 @@ type ControlController struct {
 // Configure this before starting controller cycles.
 func (controller *ControlController) WithIntakeEnabled(enabled bool) *ControlController {
 	controller.intakeDisabled = !enabled
+	return controller
+}
+
+// WithIntakeWorkID limits new discovery to one work item. Empty allows all ready
+// work. Recovery and command reconciliation remain independent of this filter.
+// Configure this before starting controller cycles.
+func (controller *ControlController) WithIntakeWorkID(id string) *ControlController {
+	controller.intakeWorkID = id
 	return controller
 }
 
@@ -153,6 +162,9 @@ func (controller *ControlController) intake(ctx context.Context, cycle *ControlC
 		return
 	}
 	for _, item := range items {
+		if controller.intakeWorkID != "" && item.ID != controller.intakeWorkID {
+			continue
+		}
 		if item.ProjectID != controller.binding.ProjectID || active >= controller.binding.MaxConcurrency {
 			continue
 		}

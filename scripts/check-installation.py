@@ -23,6 +23,20 @@ def check_configuration(installation, rendered):
     images.append(config.get("kubernetes", {}).get("image", ""))
     if len(images) < 3 or any(not re.fullmatch(r"[^\s]+@sha256:[0-9a-f]{64}", image) for image in images):
         failures.append("RUN-05: every control and worker image must be pinned by digest")
+    analysis = config.get("analysis")
+    if analysis:
+        if not re.fullmatch(r"[^\s]+@sha256:[0-9a-f]{64}", analysis.get("image", "")):
+            failures.append("AGENT-12: analysis image must be pinned by digest")
+        if analysis.get("tools") and analysis.get("harness_version") != "langchain-create-agent/v2":
+            failures.append("AGENT-12: context tools require the v2 analysis harness image")
+        try:
+            identities = json.loads((installation / "service-auth.json").read_text())["identities"]
+            publishers = [identity for identity in identities if config.get("project_id") in identity["projects"]
+                          and "workload.publish" in identity["capabilities"]]
+            if not publishers:
+                failures.append("AGENT-12: the project service identity needs workload.publish")
+        except (OSError, ValueError, KeyError, TypeError):
+            failures.append("AGENT-12: a readable service publisher policy is required")
     for name, item in (("git-token", "RUN-03"), ("model-token", "RUN-09")):
         path = installation / name
         if not path.is_file() or not path.read_text().strip():

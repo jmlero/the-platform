@@ -137,6 +137,19 @@ second-device testing were removed from the local acceptance scope by the operat
 
 Prefer one working vertical slice over broad scaffolding for later maturity stages.
 
+The next approved extension, AGENT-02 through AGENT-06, is implemented as a
+bounded diagnostic PoC using LangChain OSS. Follow the
+[workload profiles](docs/workloads/profiles-v1.md) and
+[local validation boundary](../docs/validation/agent-02-06-2026-09-21.md): share
+durable controls, keep repository steps out of analysis, and independently check
+source-bound reports. AGENT-07 through AGENT-10 add pinned API invocation,
+selected context, an attempt-scoped context-read tool and result/usage inspection;
+follow [decision 0016](../docs/decisions/0016-workload-invocation-and-context-tool.md).
+AGENT-11 through AGENT-13 complete the shared failure matrix and local MVP proof;
+follow the [installation guide](../deploy/kubernetes/agent-platform/README.md)
+and [evidence and limits](../docs/validation/agent-11-13-2026-09-22.md). Interrupted
+worker I/O may block; harness-step checkpoint/replay is not supported.
+
 ## Engineering workflow
 
 ### Before implementation

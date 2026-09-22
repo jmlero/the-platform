@@ -64,6 +64,28 @@ artifacts survive worker cleanup on Marina-owned storage. This workflow uses
 fixed bounded repository rules and explicit immutable context; broader policy/plugin foundations
 remain available for later workflows.
 
+An optional version-1 `analysis` profile enables the bounded diagnostic PoC:
+one pinned LangChain `create_agent` worker consumes frozen synthetic records
+without a repository checkout and produces a structured report. The existing
+controller, journal, budgets, gateway and Kubernetes isolation are shared;
+an independent Go validator checks findings and source quotes and binds evidence
+to the input/profile/output digests. See the
+[profile contract](docs/workloads/profiles-v1.md) and
+[live proof for both harnesses](../docs/validation/agent-02-06-2026-09-21.md).
+`marina workload-profile --config workflow.json` prints the installed analysis
+identity and exact task authority grant without reading credentials. The
+[operator API guide](docs/workloads/api-v1.md) covers installed-profile discovery,
+pinned invocation and result retrieval. Harness v2 adds selected immutable
+context and one governed `read_context_source` HTTP tool. Shared progress includes
+confirmed usage and unresolved reservations; redacted diagnostics correlate
+attempts, model/tool calls and artifacts. See the
+[validation boundary](../docs/validation/agent-07-10-2026-09-21.md).
+The [two-workload installation guide](../deploy/kubernetes/agent-platform/README.md)
+and [combined MVP proof](../docs/validation/agent-11-13-2026-09-22.md) cover the
+deployed v2 harness, shared failure checks, preserved stores and live results.
+Interrupted worker I/O may still block; the harness does not checkpoint agent steps.
+Analysis-only configurations need no Git repository or delivery binding.
+
 Without a workflow configuration, the existing Milestone 1 control-only mode
 remains available. Use the [paired installation guide](../deploy/kubernetes/first-release/README.md)
 for an executable configuration, image build, private credential preparation and
@@ -72,7 +94,9 @@ provider doubles; a real model/cluster acceptance run remains installation-speci
 
 For installation before a repository/model is selected, run `serve --intake-enabled=false`.
 This skips new work discovery while continuing recovery, commands and projection
-for already journaled work. It does not pause active executions. Server TLS can
+for already journaled work. `--intake-task-id <id>` limits enabled discovery to
+one task while preserving the same recovery behavior. Neither option pauses
+active executions. Server TLS can
 be configured independently of the workflow using `--tls-cert-file` and
 `--tls-key-file` (or `MARINA_TLS_CERT_FILE` / `MARINA_TLS_KEY_FILE`). Conflicting
 workflow and flag certificate paths, or an unreadable key pair, fail startup
@@ -155,7 +179,7 @@ make manifests
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `MARINA_ADDR` | `:8090` | Marina HTTP listen address. |
-| `MARINA_CONFIG_FILE` | unset | Explicit repository workflow configuration; enables worker execution. |
+| `MARINA_CONFIG_FILE` | unset | Explicit workload configuration; enables repository and/or diagnostic worker execution. |
 | `MARINA_DECK_URL` | `http://localhost:8080` | Deck server root URL. |
 | `MARINA_DECK_TOKEN_FILE` | unset | File reference containing the Deck service Bearer token. |
 | `MARINA_DECK_PROJECT_ID` | `prj_default` | Deck project bound to this initial controller. |

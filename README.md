@@ -23,6 +23,21 @@ not implemented. A completed PR is ready for human review, not automatically
 approved for merge. See the [paired installation and
 acceptance guide](deploy/kubernetes/first-release/README.md).
 
+The agent-platform PoC also runs one read-only diagnostic fixture with a pinned
+LangChain worker, sharing Marina's lifecycle, budgets and isolation. It produces
+an independently validated report without a repository or PR. Both harnesses
+passed [local Kubernetes acceptance](docs/validation/agent-02-06-2026-09-21.md).
+The [profile contract](marina/docs/workloads/profiles-v1.md) and
+[API client guide](marina/docs/workloads/api-v1.md) now cover installed-profile
+discovery and invocation, selected immutable context, a governed context-read
+tool, and shared progress/usage/evidence inspection. Their
+[validation report](docs/validation/agent-07-10-2026-09-21.md) distinguishes
+deterministic checks and observed isolation from deployed live-model acceptance.
+The [two-workload installation guide](deploy/kubernetes/agent-platform/README.md)
+and [MVP acceptance](docs/validation/agent-11-13-2026-09-22.md) complete AGENT-11
+through AGENT-13 with live API-invoked Jobs, shared failure checks and preserved
+stores. Interrupted worker I/O can still block; the report states that boundary.
+
 For a Mac development installation, use the [local Podman profile](deploy/kubernetes/local-podman/README.md).
 It runs both services with TLS and persistent storage before repository/model
 configuration, with new task intake explicitly disabled.

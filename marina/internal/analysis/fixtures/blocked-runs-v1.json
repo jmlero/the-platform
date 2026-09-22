@@ -1,0 +1,32 @@
+{
+  "id": "blocked-runs",
+  "revision": 1,
+  "sources": [
+    {
+      "id": "model-outage",
+      "content": "Synthetic task alpha. Model gateway request failed: upstream HTTP 503; no response usage was received. The run is blocked pending provider recovery. Its unknown usage reservation remains held."
+    },
+    {
+      "id": "token-limit",
+      "content": "Synthetic task beta. Model admission denied: requested 12000 tokens; remaining budget 4000 tokens. No request was forwarded. The operator must authorize a new bounded task to continue."
+    },
+    {
+      "id": "healthy-worker",
+      "content": "Synthetic task gamma. Worker completed successfully. Independent checks passed. The report was downloaded and its digest matched. No operator action is required."
+    }
+  ],
+  "expected": [
+    {
+      "code": "provider_unavailable",
+      "source_id": "model-outage",
+      "quote": "upstream HTTP 503",
+      "explanation": "Provider recovery is required; retain the unknown usage reservation."
+    },
+    {
+      "code": "budget_exhausted",
+      "source_id": "token-limit",
+      "quote": "requested 12000 tokens; remaining budget 4000 tokens",
+      "explanation": "The task lacks token budget and requires new bounded authorization."
+    }
+  ]
+}

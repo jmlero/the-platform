@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 )
@@ -49,5 +50,37 @@ func TestAuthorityWatchdogNeverOutlivesLastConfirmedLease(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expired authority was retained")
+	}
+}
+
+func TestInitialGatewayReadRetriesOnlyTransientFailures(t *testing.T) {
+	for _, code := range []int{503, 403} {
+		t.Run(fmt.Sprint(code), func(t *testing.T) {
+			calls := 0
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			value, err := retryGatewayRead(ctx, time.Millisecond, func(context.Context) ([]byte, error) {
+				calls++
+				if calls == 1 {
+					return nil, gatewayStatusError{code}
+				}
+				return []byte("frozen input"), nil
+			})
+			if code == 503 && (err != nil || calls != 2 || string(value) != "frozen input") {
+				t.Fatalf("transient startup: calls=%d err=%v", calls, err)
+			}
+			if code == 403 && (err == nil || calls != 1) {
+				t.Fatalf("revocation retried: calls=%d err=%v", calls, err)
+			}
+		})
+	}
+}
+
+func TestInitialGatewayReadStopsAtDeadline(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	_, err := retryGatewayRead(ctx, time.Millisecond, func(context.Context) ([]byte, error) { return nil, gatewayStatusError{503} })
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("unbounded startup: %v", err)
 	}
 }

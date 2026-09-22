@@ -1,6 +1,6 @@
 # Decision 0015: Extend Marina into a bounded Kubernetes agent platform
 
-- Status: accepted direction; PoC and MVP implementation pending
+- Status: accepted; AGENT-01 through AGENT-06 PoC and AGENT-07 through AGENT-10 implementation complete; AGENT-11 through AGENT-13 pending
 - Date: 2026-09-21
 - Scope: Marina execution, Deck governance, and AGENT-01 through AGENT-13
 
@@ -21,14 +21,16 @@ The first extension is one bounded, read-only analysis workload using immutable
 documents or diagnostic data and a genuinely different harness. The existing
 repository workflow continues to produce a PR ready for human review. The
 analysis workload produces a validated report without requiring a repository,
-source commit or PR. The harness ecosystem is selected below; define its exact
-fixture and bounded configuration under AGENT-02.
+source commit or PR. The harness ecosystem is selected below; its exact fixture
+and bounded configuration are defined in the
+[version-1 profiles](../../marina/docs/workloads/profiles-v1.md).
 
 ## Harness ecosystem choice
 
 On 2026-09-21, the operator selected the **LangChain open-source ecosystem** for
-the second harness. This is an accepted implementation direction, not a claim
-that the harness or its gateway integration is implemented or validated.
+the second harness. The subsequent AGENT-02 through AGENT-06 implementation and
+[local Kubernetes proof](../validation/agent-02-06-2026-09-21.md) validate the
+bounded diagnostic integration; broader ecosystem capabilities remain future.
 
 Start with LangChain's `create_agent`, using its underlying LangGraph runtime,
 inside a Marina-managed Kubernetes worker. Use custom LangGraph workflows when
@@ -61,8 +63,10 @@ The operator confirmed on 2026-09-21 that AGENT-01 is the completed harness
 decision. AGENT-01 is **Done**; specifying the read-only fixture, expected
 findings, output checks, model/tool destinations and bounded budgets belongs
 to the versioned workload and harness profiles in AGENT-02.
-Gateway compatibility, usage accounting, cancellation and live Kubernetes
-execution still require evidence under the implementation and acceptance tasks.
+Gateway compatibility, usage accounting and live Kubernetes completion now have
+evidence in that proof. The later [MVP acceptance](../validation/agent-11-13-2026-09-22.md)
+adds shared failure checks, live analysis cancellation, separate service restarts
+and deployed v2 tool/context use, with safe-blocker recovery limits explicit.
 
 ## Ownership and contracts
 
@@ -96,13 +100,18 @@ Start with one operator, one active task, Kubernetes Jobs and the supported Deck
 pair. Interactive sessions, pause/resume, headless packaging, multi-tenancy, HA,
 general memory/evaluation/browser services, a marketplace and autonomous
 merge/deploy remain outside this PoC/MVP. Full AgentCore parity is not an exit
-criterion. Existing isolation must be tested and described accurately; running
+criterion. [Decision 0016](0016-workload-invocation-and-context-tool.md) records
+the implemented API, context/tool and inspection boundary for AGENT-07 through
+AGENT-10; [AGENT-11 through AGENT-13](../validation/agent-11-13-2026-09-22.md)
+now supply the remaining bounded MVP evidence and repeatable installation.
+Existing isolation must be tested and described accurately; running
 in a Pod does not establish VM isolation.
 
 This is follow-on work after the local repository acceptance recorded on
 2026-09-21. [Decision 0007](0007-sovereign-first-usable-release.md) continues to
 define that release's supported behavior. This decision activates the second
-harness proof previously deferred under LATER-02; it does not claim the new
-capabilities are implemented. VALUE-01 remains closed by the operator and is not
+harness proof previously deferred under LATER-02, now completed by the bounded
+diagnostic workload. The PoC proof alone does not establish later MVP capabilities.
+VALUE-01 remains closed by the operator and is not
 a prerequisite. Environment, credential, spending and external-action boundaries
 remain unchanged.

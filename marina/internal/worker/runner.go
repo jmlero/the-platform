@@ -20,6 +20,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jmlero/the-platform/marina/internal/analysis"
 	"github.com/jmlero/the-platform/marina/internal/contextpack"
 )
 
@@ -32,6 +33,7 @@ type Check struct {
 }
 
 type Input struct {
+	Analysis           *analysis.Input      `json:"analysis,omitempty"`
 	Context            *contextpack.Package `json:"context,omitempty"`
 	Stage              string               `json:"stage"`
 	SourceURL          string               `json:"source_url"`
@@ -64,13 +66,16 @@ type CheckResult struct {
 }
 
 type Result struct {
-	Stage          string        `json:"stage"`
-	SourceRevision string        `json:"source_revision"`
-	Summary        string        `json:"summary"`
-	Changes        []Change      `json:"changes,omitempty"`
-	Checks         []CheckResult `json:"checks,omitempty"`
-	Tokens         int64         `json:"tokens"`
-	ObservedAt     time.Time     `json:"observed_at"`
+	Analysis       *analysis.Report `json:"analysis,omitempty"`
+	InputDigest    string           `json:"input_digest,omitempty"`
+	ProfileDigest  string           `json:"profile_digest,omitempty"`
+	Stage          string           `json:"stage"`
+	SourceRevision string           `json:"source_revision"`
+	Summary        string           `json:"summary"`
+	Changes        []Change         `json:"changes,omitempty"`
+	Checks         []CheckResult    `json:"checks,omitempty"`
+	Tokens         int64            `json:"tokens"`
+	ObservedAt     time.Time        `json:"observed_at"`
 }
 
 func AllowedPath(scopes []string, name string) bool {
@@ -94,6 +99,9 @@ func AllowedPath(scopes []string, name string) bool {
 }
 
 func Run(ctx context.Context, input Input, root string) (Result, error) {
+	if input.Stage == "analyze" {
+		return runAnalysis(ctx, input, root)
+	}
 	result := Result{Stage: input.Stage, SourceRevision: input.SourceRevision}
 	if input.Context != nil {
 		if err := input.Context.ValidateAt(time.Now()); err != nil {

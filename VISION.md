@@ -78,8 +78,16 @@ and governance platform on 2026-09-21, with software engineering as its first
 workflow. Reuse the existing Marina component and prove shared execution controls
 with one non-coding workload and a different harness. Deck retains human intent,
 authorization, decisions and results. [Decision 0015](docs/decisions/0015-marina-agent-platform.md)
-and AGENT-01 through AGENT-13 in [TODO.md](TODO.md) define the bounded PoC/MVP;
-implementation remains pending. AgentCore is a capability reference, with full
+and AGENT-01 through AGENT-13 in [TODO.md](TODO.md) define the bounded PoC/MVP.
+The fixed LangChain diagnostic PoC and existing Codex workflow passed
+[local acceptance](docs/validation/agent-02-06-2026-09-21.md). AGENT-07 through
+AGENT-10 implement API invocation, governed context/tool access and inspection;
+[their validation](docs/validation/agent-07-10-2026-09-21.md) separates deterministic
+checks from observed network isolation. AGENT-11 through AGENT-13 complete the
+[bounded local MVP acceptance](docs/validation/agent-11-13-2026-09-22.md), including
+repeatable installation and shared failure checks. Worker I/O interrupted by an
+outage can still block; transparent harness-step recovery remains future work.
+AgentCore is a capability reference, with full
 parity outside these gates. The supported repository release described above
 remains unchanged.
 

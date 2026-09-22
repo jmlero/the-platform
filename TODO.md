@@ -24,13 +24,13 @@ pending work.
 | P0 — prerequisites | RUN-03, RUN-05 | Done: configured repository and credential boundary verified in the local profile. |
 | P0 — PoC | RUN-09 | Done: complete Deck → Marina → worker → verified GitHub PR → Deck evidence path. |
 | P1 — MVP acceptance | RUN-11 through RUN-16, RUN-18 | Done within the supported workflow: recovery, cancellation, verification gates, changed heads, provider outages and budgets; evidence and limitations recorded. |
-| P2 — agent-platform PoC | AGENT-01 through AGENT-06 | Planned: coding and one non-coding workload use Marina's shared execution controls with different harnesses. |
-| P3 — agent-platform MVP | AGENT-07 through AGENT-13 | Planned after the PoC: supported API invocation, bounded tool/context access, inspectable results, recovery and repeatable installation. |
+| P2 — agent-platform PoC | AGENT-01 through AGENT-06 | Done: Codex repository work and LangChain diagnostic analysis completed through the same local Deck/Marina controls; [evidence](docs/validation/agent-02-06-2026-09-21.md). |
+| P3 — agent-platform MVP | AGENT-07 through AGENT-13 | Done within the two-workload scope: API invocation, bounded tool/context access, inspection, shared failure checks, repeatable installation and combined local live acceptance; [evidence and limits](docs/validation/agent-11-13-2026-09-22.md). |
 
 The operator approved extending Marina toward an **AgentCore-like platform on
 Kubernetes** on 2026-09-21. Extend the existing Marina component, with software
-engineering as its first workflow; the general agent capabilities below remain
-unimplemented. [Decision 0015](docs/decisions/0015-marina-agent-platform.md) records
+engineering as its first workflow. The two-workload PoC/MVP below is complete;
+broader general agent hosting remains future work. [Decision 0015](docs/decisions/0015-marina-agent-platform.md) records
 the scope. VALUE-01 stays Closed and is not a prerequisite for this work.
 
 Use the existing local `kind-marina-local` installation first. GCP remains an
@@ -85,29 +85,31 @@ gates. Additional infrastructure must follow a demonstrated workload need.
 
 ### PoC: two workloads share one execution foundation
 
-AGENT-01 is complete; define the profiles and fixture in AGENT-02 before the
-changes they govern. AGENT-03 through AGENT-05 feed AGENT-06. Use one bounded read-only analysis workload with immutable inputs
-and a genuinely different harness, alongside the existing repository workflow.
-The new workload must not require a dummy repository, commit or PR. LATER-02 is
-carried forward here; live production-feedback integration remains LATER-03.
+AGENT-01 through AGENT-06 are complete. The versioned diagnostic fixture runs
+through a LangChain worker alongside the existing Codex repository workflow,
+sharing durable controls without a dummy repository, commit or PR. The
+[local proof](docs/validation/agent-02-06-2026-09-21.md) records actual model use,
+Jobs, outputs, validation, usage and limits. This closes the second-harness proof
+under LATER-02; live production-feedback integration remains LATER-03.
 
 **2026-09-21 harness choice:** the operator selected the **LangChain open-source
 ecosystem**, starting with `create_agent` on LangGraph inside a Marina-managed
 Kubernetes worker. Use self-hostable OSS libraries only; LangSmith, Managed Deep
 Agents, proprietary services and AWS dependencies are outside this choice.
 Custom graphs and Deep Agents are workload-driven follow-ups. This completes
-AGENT-01. The non-coding fixture and bounded configuration are remaining profile
-work under AGENT-02; implementation and gateway compatibility remain unproven.
+AGENT-01. The [version-1 profiles](marina/docs/workloads/profiles-v1.md) define
+the implemented fixture and bounded configuration; the local proof validates
+gateway compatibility and both workloads' completion gates.
 See [decision 0015](docs/decisions/0015-marina-agent-platform.md#harness-ecosystem-choice).
 
 | ID | State | Owner | Small task | Done when |
 | --- | --- | --- | --- | --- |
 | AGENT-01 | Done | Joint | Select the second harness ecosystem for the read-only analysis workload. | The operator selected self-hostable LangChain OSS, starting with `create_agent` on LangGraph in a Marina-managed Kubernetes worker. [Accepted decision](docs/decisions/0015-marina-agent-platform.md#harness-ecosystem-choice). Fixture and profile details are tracked under AGENT-02. |
-| AGENT-02 | Open | Marina | Define versioned workload and harness profiles, including the analysis fixture. | A documented contract identifies the pinned image/harness, input and output schemas, evidence rules, tool/network permissions, model/credential references and limits. One read-only document or diagnostic-analysis fixture has explicit inputs, expected findings, output checks, model/tool destinations and bounded budgets; its harness configuration uses the selected LangChain ecosystem, with existing components evaluated before new dependencies. Repository fields belong to the coding workload; unsupported capabilities fail closed, and profile edits cannot silently alter active runs. |
-| AGENT-03 | Open | Marina | Separate reusable execution controls from repository steps. | Both workload profiles use the existing durable lifecycle, authority, budgets, cancellation, artifacts and recovery through narrow internal interfaces. Git/PR/CI steps stay in the repository workflow; existing records remain readable and the current workflow checks pass. |
-| AGENT-04 | Open | Marina | Run the second harness in an isolated Kubernetes Job. | The selected harness consumes its frozen inputs and returns a structured report, usage and artifacts through shared execution controls; it receives no source-write or cluster-mutation authority, and requires no hard-coded Codex invocation or repository checkout. |
-| AGENT-05 | Open | Joint | Apply workload-specific completion evidence. | The analysis report is checked against the fixture's expected findings and bound to input/profile/output digests with independently produced validation evidence. Missing, invalid or mismatched evidence blocks completion; repository completion still requires separate verification and CI at the current PR head. Any contract change preserves v1 semantics or uses a new major. |
-| AGENT-06 | Open | Joint | Demonstrate the agent-platform PoC on local Kubernetes. | The coding workflow and the non-coding workload each complete through real Deck and Marina using different harnesses and the same execution controls. A redacted report records pinned inputs/images, actual model use, Jobs, outputs, evidence, usage and limitations; mocks alone do not satisfy this gate. |
+| AGENT-02 | Done | Marina | Define versioned workload and harness profiles, including the analysis fixture. | A documented contract identifies the pinned image/harness, input and output schemas, evidence rules, tool/network permissions, model/credential references and limits. One read-only document or diagnostic-analysis fixture has explicit inputs, expected findings, output checks, model/tool destinations and bounded budgets; its harness configuration uses the selected LangChain ecosystem, with existing components evaluated before new dependencies. Repository fields belong to the coding workload; unsupported capabilities fail closed, and profile edits cannot silently alter active runs. [Profile contract](marina/docs/workloads/profiles-v1.md) and [validation](docs/validation/agent-02-06-2026-09-21.md). |
+| AGENT-03 | Done | Marina | Separate reusable execution controls from repository steps. | Both workload profiles use the existing durable lifecycle, authority, budgets, cancellation, artifacts and recovery through narrow internal interfaces. Git/PR/CI steps stay in the repository workflow; existing records remain readable and the current workflow checks pass. [Validation](docs/validation/agent-02-06-2026-09-21.md). |
+| AGENT-04 | Done | Marina | Run the second harness in an isolated Kubernetes Job. | The selected harness consumes its frozen inputs and returns a structured report, usage and artifacts through shared execution controls; it receives no source-write or cluster-mutation authority, and requires no hard-coded Codex invocation or repository checkout. [Validation](docs/validation/agent-02-06-2026-09-21.md). |
+| AGENT-05 | Done | Joint | Apply workload-specific completion evidence. | The analysis report is checked against the fixture's expected findings and bound to input/profile/output digests with independently produced validation evidence. Missing, invalid or mismatched evidence blocks completion; repository completion still requires separate verification and CI at the current PR head. Any contract change preserves v1 semantics or uses a new major. [Validation](docs/validation/agent-02-06-2026-09-21.md). |
+| AGENT-06 | Done | Joint | Demonstrate the agent-platform PoC on local Kubernetes. | The coding workflow and the non-coding workload each complete through real Deck and Marina using different harnesses and the same execution controls. A redacted report records pinned inputs/images, actual model use, Jobs, outputs, evidence, usage and limitations; mocks alone do not satisfy this gate. [Validation](docs/validation/agent-02-06-2026-09-21.md). |
 
 **PoC exit:** both workflows pass AGENT-06 without weakening the existing
 repository authority or evidence gates. A second model behind the same harness
@@ -123,13 +125,13 @@ entire knowledge, conversation or inbox roadmap a prerequisite.
 
 | ID | State | Owner | Small task | Done when |
 | --- | --- | --- | --- | --- |
-| AGENT-07 | Open | Joint | Expose approved profile selection and invocation through the public API. | A documented API client can discover supported profiles/capabilities, submit authorized work selecting a pinned profile, inspect progress, cancel and retrieve results. Deck remains the authoritative task ledger, Marina owns execution configuration, duplicate invocation is idempotent, and OpenAPI, fixtures, authorization and consumer conformance stay synchronized. |
-| AGENT-08 | Open | Marina | Govern one reusable read-only tool through the gateway. | The second harness can invoke one selected MCP or HTTP tool with validated arguments, per-run allowlists, scoped credential references and audited decisions. Disallowed, expired or revoked calls are denied outside the harness, and observed network controls prevent direct bypass. A general tool marketplace is unnecessary. |
-| AGENT-09 | Open | Marina | Deliver reproducible context to both workload types. | Existing context-package foundations supply selected immutable inputs with provenance, trust, digests and explicit revocation handling. Recovery uses recorded revisions; untrusted content cannot expand authority. Coordinate with CTX-03/05/06 and decision 0014 without duplicating Deck or Git knowledge ownership. |
-| AGENT-10 | Open | Joint | Make execution and results inspectable across harnesses. | Deck shows workload/profile identity, meaningful state, usage, blockers and downloadable evidence for either workload. Redacted diagnostics correlate task, execution, attempt, model/tool calls and artifacts, including uncertain usage; no new observability backend is required. |
-| AGENT-11 | Open | Joint | Prove shared failure and authority semantics. | Both profiles pass duplicate/lost-response handling, separate Deck/Marina restarts, cancellation with observed worker termination, lease expiry, budget exhaustion, provider outage and invalid-evidence cases without duplicate work or false completion. Tool denial/revocation and input/profile changes are covered; deterministic and live local evidence are distinguished. |
-| AGENT-12 | Open | Ops | Package and document the two-workload installation. | Repeatable manifests/configuration select pinned profiles and prepackage execution dependencies; an upgrade preserves existing repository work and separate stores. Setup, supported capabilities, isolation limits, credential references, diagnostics and recovery are documented for the authorized local profile, with new intake disabled until explicitly configured. |
-| AGENT-13 | Open | Joint | Record the agent-platform MVP acceptance. | AGENT-07 through AGENT-12 pass, along with `make check`, `make conformance` and `make check-installation`. A redacted report under `docs/validation/` links API invocations, real Jobs, outputs and failure/recovery evidence for both workloads on the named installation; remaining limitations are explicit. |
+| AGENT-07 | Done | Joint | Expose approved profile selection and invocation through the public API. | A documented API client can discover supported profiles/capabilities, submit authorized work selecting a pinned profile, inspect progress, cancel and retrieve results. Deck remains the authoritative task ledger, Marina owns execution configuration, duplicate invocation is idempotent, and OpenAPI, fixtures, authorization and consumer conformance stay synchronized. [Validation](docs/validation/agent-07-10-2026-09-21.md). |
+| AGENT-08 | Done | Marina | Govern one reusable read-only tool through the gateway. | The second harness can invoke one selected MCP or HTTP tool with validated arguments, per-run allowlists, scoped credential references and audited decisions. Disallowed, expired or revoked calls are denied outside the harness, and observed network controls prevent direct bypass. A general tool marketplace is unnecessary. [Validation](docs/validation/agent-07-10-2026-09-21.md). |
+| AGENT-09 | Done | Marina | Deliver reproducible context to both workload types. | Existing context-package foundations supply selected immutable inputs with provenance, trust, digests and explicit revocation handling. Recovery uses recorded revisions; untrusted content cannot expand authority. Coordinate with CTX-03/05/06 and decision 0014 without duplicating Deck or Git knowledge ownership. [Validation](docs/validation/agent-07-10-2026-09-21.md). |
+| AGENT-10 | Done | Joint | Make execution and results inspectable across harnesses. | Deck shows workload/profile identity, meaningful state, usage, blockers and downloadable evidence for either workload. Redacted diagnostics correlate task, execution, attempt, model/tool calls and artifacts, including uncertain usage; no new observability backend is required. [Validation](docs/validation/agent-07-10-2026-09-21.md). |
+| AGENT-11 | Done | Joint | Prove shared failure and authority semantics. | Both profiles pass duplicate/lost-response handling, separate Deck/Marina restarts, cancellation with observed worker termination, lease expiry, budget exhaustion, provider outage and invalid-evidence cases without duplicate work or false completion. Tool denial/revocation and input/profile changes are covered; deterministic and live local evidence are distinguished. [Validation and safe-blocker limits](docs/validation/agent-11-13-2026-09-22.md). |
+| AGENT-12 | Done | Ops | Package and document the two-workload installation. | Repeatable manifests/configuration select pinned profiles and prepackage execution dependencies; an upgrade preserves existing repository work and separate stores. Setup, supported capabilities, isolation limits, credential references, diagnostics and recovery are documented for the authorized local profile, with new intake disabled until explicitly configured. [Installation](deploy/kubernetes/agent-platform/README.md), [preservation proof](docs/validation/agent-11-13-2026-09-22.md). |
+| AGENT-13 | Done | Joint | Record the agent-platform MVP acceptance. | AGENT-07 through AGENT-12 pass, along with `make check`, `make conformance` and `make check-installation`. A redacted report under `docs/validation/` links API invocations, real Jobs, outputs and failure/recovery evidence for both workloads on the named installation; remaining limitations are explicit. [Acceptance](docs/validation/agent-11-13-2026-09-22.md), [redacted observations](docs/validation/agent-11-13-2026-09-22.json). |
 
 **MVP exit:** an API client can submit either supported workload to the same
 installation, retain human governance through Deck, and obtain a verified result
@@ -291,13 +293,13 @@ on 2026-09-21. VALUE-02 remains a separate comparison after CHAT-10.
 
 These retain relevant long-term questions without carrying a speculative implementation backlog. Split approved work into small implementation rows only when its trigger is met.
 
-LATER-02 retains its ID and is now active under AGENT-01/04/06; the other rows
+LATER-02 retains its ID and is complete through AGENT-01/04/06; the other rows
 remain deferred.
 
 | ID | State | Owner | Small task | Done when |
 | --- | --- | --- | --- | --- |
 | LATER-01 | Later | Joint | Select a second project workflow after the pilot. | Evidence identifies whether multi-project configuration or concurrent work is actually needed; one concrete workflow is chosen before scheduling changes. |
-| LATER-02 | Open | Marina | Prove the second harness through the agent-platform PoC. | Activated under AGENT-01/04/06: one genuinely different harness demonstrates shared execution semantics and records usage. Additional runtime/provider alternatives remain deferred; no plugin marketplace is assumed. |
+| LATER-02 | Done | Marina | Prove the second harness through the agent-platform PoC. | LangChain diagnostic analysis and Codex repository work completed with shared execution controls and recorded usage under AGENT-01/04/06; [local proof](docs/validation/agent-02-06-2026-09-21.md). Additional runtime/provider alternatives remain deferred; no plugin marketplace is assumed. |
 | LATER-03 | Later | Joint | Choose the first production-feedback use case. | After repository work is reliable, one signal source and a diagnosis-only acceptance case are selected; existing signal records alone do not count as integration. |
 | LATER-04 | Later | Joint | Define one non-production delivery proof. | A specific preview/canary environment, existing delivery integration, observation window, and rollback criterion are chosen before implementing deployment automation. |
 | LATER-05 | Later | Joint | Decide whether any autonomy should extend beyond PR review. | Pilot evidence identifies one eligible change class and explicit human-only boundaries; no automatic merge or production authority follows from this backlog. |

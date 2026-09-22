@@ -26,3 +26,14 @@ edits and confirmations conflict. Canonical `context.json` and `repository.json`
 fixtures cover these additive v1 shapes. Real-process conformance demonstrates
 approved decision reuse, revision isolation, revocation, and repository changes
 while original authorized work retains its binding.
+
+The workload extension adds `workload.discover`, `workload.invoke` and
+`workload.publish`. Operator sessions discover API capabilities and installed
+profiles, then create one task with immutable profile metadata through an
+idempotent invocation. Marina publishes the expiring catalog using a
+project/capability-scoped service identity; credential references are omitted.
+The canonical `workloads.json` fixture describes this additive v1 shape.
+[Decision 0016](../docs/decisions/0016-workload-invocation-and-context-tool.md)
+and the [API guide](../marina/docs/workloads/api-v1.md) define ownership,
+pinning, authorization, withdrawal and replay behavior. Real-process conformance
+exercises both profiles, context revision/revocation, cancellation and evidence.

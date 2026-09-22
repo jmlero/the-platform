@@ -110,6 +110,12 @@ func TestProtocolFixturesCoverCanonicalContract(t *testing.T) {
 
 		path := filepath.Join(fixtureRoot, filepath.FromSlash(entry.Path))
 		switch entry.Kind {
+		case "workloads":
+			var fixture domain.WorkloadCatalog
+			decodeFixture(t, path, &fixture)
+			if len(fixture.Profiles) != 1 || fixture.Profiles[0].ID != "diagnostic-analysis/v1" {
+				t.Fatal("invalid workloads fixture")
+			}
 		case "context":
 			var fixture domain.ResolvedContext
 			decodeFixture(t, path, &fixture)

@@ -31,7 +31,10 @@
     "work.claim.atomic",
     "work.claim.lookup",
     "work.inspect",
-    "work.ready.list"
+    "work.ready.list",
+    "workload.discover",
+    "workload.invoke",
+    "workload.publish"
   ],
   "server_time": 1784376000000,
   "ready": true,

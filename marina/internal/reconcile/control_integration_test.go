@@ -19,6 +19,7 @@ import (
 type controlProviderStub struct {
 	listReadyCalls    int
 	work              workcontrol.WorkItem
+	unrelated         []workcontrol.WorkItem
 	run               workcontrol.Run
 	claimCalls        int
 	lostClaimResponse bool
@@ -39,7 +40,7 @@ func (provider *controlProviderStub) ListReadyWork(context.Context) ([]workcontr
 		<-provider.listReadyRelease
 	}
 	if provider.work.Status == workcontrol.WorkReady {
-		return []workcontrol.WorkItem{provider.work}, nil
+		return append(provider.unrelated, provider.work), nil
 	}
 	return []workcontrol.WorkItem{}, nil
 }
@@ -79,8 +80,16 @@ func TestDisabledIntakeLeavesReadyWorkUnclaimed(t *testing.T) {
 		t.Fatalf("disabled intake discovered %d times and claimed %d times", provider.listReadyCalls, provider.claimCalls)
 	}
 	controller.WithIntakeEnabled(true)
+	controller.WithIntakeWorkID("another-task")
+	if cycle := controller.Cycle(ctx); len(cycle.Errors) != 0 || cycle.Acquisitions != 0 || provider.claimCalls != 0 {
+		t.Fatalf("unselected ready work was claimed: %#v", cycle)
+	}
+	unrelated := provider.work
+	unrelated.ID = "leave-ready"
+	provider.unrelated = []workcontrol.WorkItem{unrelated}
+	controller.WithIntakeWorkID("task-1")
 	cycle := controller.Cycle(ctx)
-	if len(cycle.Errors) != 0 || cycle.Acquisitions != 1 || provider.claimCalls != 1 {
+	if len(cycle.Errors) != 0 || cycle.Acquisitions != 1 || provider.claimCalls != 1 || provider.run.WorkItemID != "task-1" {
 		t.Fatalf("enabled cycle = %#v, claims = %d", cycle, provider.claimCalls)
 	}
 }
@@ -216,6 +225,7 @@ func TestControlCycleRecoversLostClaimPublishesOutboxAndConvergesCancellation(t 
 		t.Fatal(err)
 	}
 	controller.WithIntakeEnabled(false)
+	controller.WithIntakeWorkID("another-task")
 	second := controller.Cycle(ctx)
 	if provider.claimCalls != 1 || second.Acquisitions != 1 || len(second.Errors) == 0 {
 		t.Fatalf("recovery cycle = %#v, claims=%d", second, provider.claimCalls)

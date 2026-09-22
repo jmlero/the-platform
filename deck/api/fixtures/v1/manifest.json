@@ -128,6 +128,12 @@
       "schema": "RepositoryRequest",
       "path": "repository.json",
       "implementation_status": "implemented"
+    },
+    {
+      "kind": "workloads",
+      "schema": "WorkloadCatalog",
+      "path": "workloads.json",
+      "implementation_status": "implemented"
     }
   ]
 }

@@ -252,3 +252,22 @@ See [OpenAPI](api/openapi.yaml) and [validation](../docs/validation/ctx-02-08-20
 Project exports include source revision history and frozen task/run selections.
 Marina connection settings and pending repository requests are installation-local;
 import does not silently establish a repository connection in another installation.
+
+## Installed workload profiles
+
+`GET /api/v1/operator/provider` exposes safe protocol capabilities to an operator
+session. Discover Marina's current project profiles under
+`GET /api/v1/operator/projects/{project}/workloads`; invoke one with `POST` to
+the same path plus `/invoke`, an exact profile digest, explicit task authority
+and budgets, and a stable `Idempotency-Key`. Identical retries return the original
+task, including after the profile is withdrawn. Deck stores the pinned selection
+on that same task; Marina owns configuration and enforces the execution boundary.
+
+The task drawer shows workload/harness identity, progress, confirmed model usage
+and unresolved reservations for the current run. Analysis results link to their
+validated evidence download; repository results retain the PR review link.
+The Sources tab shows the immutable context for both workloads. Profile catalogs
+are installation-local, expire without a Marina refresh, and are not exported;
+task profile selections survive export/import. See the
+[API client guide](../marina/docs/workloads/api-v1.md) and
+[validation report](../docs/validation/agent-07-10-2026-09-21.md).

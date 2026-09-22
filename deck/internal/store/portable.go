@@ -147,18 +147,21 @@ func (s *Store) exportTasks(ctx context.Context, projectID string) ([]portableTa
 		var item portableTask
 		var deadlineAt sql.NullInt64
 		var assignedAgentID sql.NullString
-		var authority, contextJSON string
+		var authority, contextJSON, workloadJSON string
 		if err := rows.Scan(
 			&item.Task.ID, &item.Task.ProjectID, &item.Task.Title, &item.Task.Description,
 			&item.Task.AcceptanceCriteria, &item.Task.Status, &item.Task.Priority,
 			&item.Task.BudgetMinutes, &deadlineAt, &item.Task.Budget.MaxAttempts,
 			&item.Task.Budget.MaxTokens, &item.Task.Budget.MaxCostMinor, &item.Task.Budget.Currency,
 			&item.Task.Budget.MaxConcurrency, &authority, &assignedAgentID, &item.Task.Version,
-			&item.Task.CreatedAt, &item.Task.UpdatedAt, &contextJSON, &item.NextFenceToken,
+			&item.Task.CreatedAt, &item.Task.UpdatedAt, &contextJSON, &workloadJSON, &item.NextFenceToken,
 		); err != nil {
 			return nil, fmt.Errorf("scan export task: %w", err)
 		}
 		if err := json.Unmarshal([]byte(contextJSON), &item.Task.Context); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(workloadJSON), &item.Task.Workload); err != nil {
 			return nil, err
 		}
 		item.Task.Budget.TimeMinutes = item.Task.BudgetMinutes
@@ -352,14 +355,14 @@ func (s *Store) ImportProject(ctx context.Context, encoded []byte) error {
 				id, project_id, title, description, acceptance_criteria, status, priority,
 				budget_minutes, deadline_at, max_attempts, max_tokens, max_cost_minor,
 				currency, max_concurrency, authority_json, assigned_agent_id, version,
-				next_fence_token, created_at, updated_at, context_json
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				next_fence_token, created_at, updated_at, context_json, workload_json
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`, task.ID, task.ProjectID, task.Title, task.Description, task.AcceptanceCriteria,
 			task.Status, task.Priority, task.BudgetMinutes, nullableInt64(task.Budget.DeadlineAt),
 			task.Budget.MaxAttempts, task.Budget.MaxTokens, task.Budget.MaxCostMinor,
 			task.Budget.Currency, task.Budget.MaxConcurrency, marshalJSON(task.Budget.Authority),
 			nullableString(task.AssignedAgentID), task.Version, portable.NextFenceToken,
-			task.CreatedAt, task.UpdatedAt, marshalJSON(task.Context)); err != nil {
+			task.CreatedAt, task.UpdatedAt, marshalJSON(task.Context), marshalJSON(task.Workload)); err != nil {
 			return fmt.Errorf("import task %s: %w", task.ID, err)
 		}
 	}

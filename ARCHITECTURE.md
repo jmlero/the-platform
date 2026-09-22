@@ -57,17 +57,35 @@ HTTP with separate persistence, restarting Marina's journal between boundaries.
 Git/runtime doubles make this a deterministic protocol and recovery proof; it is
 not evidence of a completed external model, Git or Kubernetes acceptance run.
 
-## Accepted agent-platform extension
+## Agent-platform PoC
 
-[Decision 0015](docs/decisions/0015-marina-agent-platform.md) adds a bounded,
-unimplemented PoC/MVP after the repository release: the existing Marina service
-will share execution controls between the coding workflow and one read-only
-analysis workload using another harness. Repository materialization, Git/PR/CI
+[Decision 0015](docs/decisions/0015-marina-agent-platform.md) adds a bounded
+extension after the repository release. AGENT-02 through AGENT-06 now share the
+existing Marina execution controls between Codex repository work and one
+read-only diagnostic fixture using LangChain `create_agent` on LangGraph.
+Both completed through real models and Jobs on the same local installation;
+see [the validation report](docs/validation/agent-02-06-2026-09-21.md).
+Repository materialization, Git/PR/CI
 steps and source-revision checks remain workflow-specific; both workloads retain
 explicit authority and admissible evidence. Deck keeps the authoritative task
-ledger, and profile selection/invocation uses the supported public contract.
-AGENT-01 through AGENT-13 in [TODO.md](TODO.md) track delivery without requiring
-a third component or changing the current single-operator deployment topology.
+ledger. The PoC uses existing v1 task authority and evidence semantics; the exact
+installed analysis profile grant is derived by a local inspection command.
+The [profile contract](marina/docs/workloads/profiles-v1.md) binds frozen inputs,
+images, model settings, limits and independent validation. Unsupported profiles
+or changed bindings fail closed. Analysis requires no repository or PR.
+AGENT-07 through AGENT-10 add a short-lived safe profile projection in Deck,
+idempotent operator invocation, shared immutable context, the attempt-scoped
+`read_context_source` HTTP tool, and correlated usage/result inspection.
+[Decision 0016](docs/decisions/0016-workload-invocation-and-context-tool.md)
+defines profile pinning, publisher ownership, v1/v2 harness compatibility and
+the authority boundary. [Validation](docs/validation/agent-07-10-2026-09-21.md)
+separates deterministic execution from observed local network controls.
+AGENT-11 through AGENT-13 complete the shared failure matrix,
+[repeatable installation](deploy/kubernetes/agent-platform/README.md) and
+[local live MVP acceptance](docs/validation/agent-11-13-2026-09-22.md). Interrupted
+worker operations may safely block; transparent harness-step recovery is not
+supported. No service or database is added; the single-operator,
+one-active-task topology remains.
 
 ## Earlier foundation snapshot
 
@@ -647,7 +665,7 @@ Before the relevant implementation becomes irreversible, record decisions for:
 
 - the first always-on cluster, storage class, backup mechanism, and namespace topology;
 - broader task-history expiry or online collection beyond the [conservative offline artifact retention policy](docs/decisions/0013-conservative-artifact-retention.md);
-- additional harnesses and credential models (Codex Jobs and the scoped Git/model gateway are implemented);
+- harnesses and credential models beyond the implemented Codex and bounded LangChain Jobs and scoped gateway;
 - future policy/context integration beyond the current fixed repository rules;
 - the first alternate runtime used to prove portability;
 - the first production-feedback source and observation window;

@@ -27,10 +27,12 @@ info:
       unpaginated unless their operation advertises a paginated capability.
     - Capability identifiers are additive. Clients must require only capabilities
       needed for the behavior they are about to enable.
-    - Operations with `x-capability` use an opaque Bearer credential when Deck
+    - Service operations with `x-capability` use an opaque Bearer credential when Deck
       service authentication is configured. The credential resolves to one stable
       service identity with explicit project and capability grants. Bearer tokens
       must travel only over a protected transport and are never accepted in URLs.
+      Operator operations instead require an operator session, plus CSRF protection
+      for mutations; their security scheme is declared on each operation.
 servers:
   - url: http://localhost:8080/api/v1
     description: Local Deck
@@ -45,8 +47,100 @@ tags:
   - name: Channels
   - name: Operations
   - name: Context
+  - name: Workloads
 
 paths:
+  /operator/provider:
+    get:
+      tags: [Provider]
+      operationId: getOperatorProviderInfo
+      summary: Discover protocol capabilities and readiness using an operator session
+      security: [{operatorSession: []}]
+      responses:
+        "200":
+          description: Same safe provider information as the service discovery endpoint
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ProviderInfo"}
+        "401": {$ref: "#/components/responses/AuthenticationRequired"}
+        "503": {$ref: "#/components/responses/ServiceUnavailable"}
+  /operator/projects/{project}/workloads:
+    get:
+      tags: [Workloads]
+      operationId: discoverWorkloads
+      x-capability: workload.discover
+      description: "Discover safe installed profiles. Expired catalogs return an empty list; metadata grants no authority."
+      security: [{operatorSession: []}]
+      parameters:
+        - {name: project, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: Successful workload operation
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/WorkloadCatalog"}
+        "401":
+          description: Authentication required
+        "403":
+          description: Not authorized
+        "409":
+          description: Profile expired, unavailable, owned by another service or idempotency conflict
+        "422":
+          description: Invalid input or missing authority
+  /operator/projects/{project}/workloads/invoke:
+    post:
+      tags: [Workloads]
+      operationId: invokeWorkload
+      x-capability: workload.invoke
+      description: "Create one Ready task with explicit authority, budgets and a pinned profile. Idempotency-Key is required: exact retries replay the original task even after profile withdrawal, changed payloads conflict. Inspect task/runs, cancel and download results using existing operator APIs."
+      security: [{operatorSession: []}]
+      parameters:
+        - {name: project, in: path, required: true, schema: {type: string}}
+        - {name: Idempotency-Key, in: header, required: true, schema: {type: string, minLength: 1, maxLength: 128}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/WorkloadInvocation"}
+      responses:
+        "201":
+          description: Successful workload operation
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Task"}
+        "401":
+          description: Authentication required
+        "403":
+          description: Not authorized
+        "409":
+          description: Profile expired, unavailable, owned by another service or idempotency conflict
+        "422":
+          description: Invalid input or missing authority
+  /projects/{project}/workloads:
+    put:
+      tags: [Workloads]
+      operationId: publishWorkloads
+      x-capability: workload.publish
+      description: "Marina publishes its complete installed catalog with a validity of at most five minutes. Project-scoped service identity owns this projection; an empty list withdraws all profiles. Repeated publication replaces the same projection."
+      security: [{serviceBearer: []}]
+      parameters:
+        - {name: project, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/WorkloadCatalog"}
+      responses:
+        "200":
+          description: Successful workload operation
+        "401":
+          description: Authentication required
+        "403":
+          description: Not authorized
+        "409":
+          description: Profile expired, unavailable, owned by another service or idempotency conflict
+        "422":
+          description: Invalid input or missing authority
   /operator/projects/{project}/repository:
     get:
       tags: ["Context"]
@@ -1493,6 +1587,118 @@ components:
             $ref: "#/components/schemas/Error"
 
   schemas:
+    WorkloadProfile:
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "digest",
+          "harness",
+          "authority",
+          "max_tokens",
+          "budget_minutes",
+          "min_attempts",
+          "tools",
+          "context_kinds"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": [
+              "repository/v1",
+              "diagnostic-analysis/v1"
+            ]
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "harness": {
+            "type": "string"
+          },
+          "authority": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "max_tokens": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "budget_minutes": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "min_attempts": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "tools": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "read_context_source"
+              ]
+            }
+          },
+          "context_kinds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    WorkloadCatalog:
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "profiles",
+          "expires_at"
+        ],
+        "properties": {
+          "profiles": {
+            "type": "array",
+            "maxItems": 2,
+            "items": {
+              "$ref": "#/components/schemas/WorkloadProfile"
+            }
+          },
+          "expires_at": {
+            "type": "integer"
+          }
+        },
+        "examples": [
+          {
+            "$ref": "./fixtures/v1/workloads.json"
+          }
+        ]
+      }
+    WorkloadInvocation:
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "profile_id",
+          "profile_digest",
+          "task"
+        ],
+        "properties": {
+          "profile_id": {
+            "type": "string"
+          },
+          "profile_digest": {
+            "type": "string"
+          },
+          "task": {
+            "$ref": "#/components/schemas/CreateTask"
+          }
+        }
+      }
     ContextReference:
       type: "object"
       required: ["id", "revision", "digest"]
@@ -1822,6 +2028,8 @@ components:
         - created_at
         - updated_at
       properties:
+        workload:
+          $ref: "#/components/schemas/WorkloadProfile"
         context: {"$ref": "#/components/schemas/TaskContext"}
         id:
           type: string

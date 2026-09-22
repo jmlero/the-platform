@@ -15,17 +15,20 @@ import (
 const diagnosticSchemaVersion = "marina-diagnostics/v1"
 
 type diagnosticExport struct {
-	SchemaVersion   string                     `json:"schema_version"`
-	GeneratedAt     time.Time                  `json:"generated_at"`
-	Counts          map[string]int64           `json:"counts"`
-	Executions      []diagnosticExecution      `json:"executions"`
-	Checkpoints     []diagnosticCheckpoint     `json:"checkpoints"`
-	Evidence        []diagnosticEvidence       `json:"evidence"`
-	Events          []diagnosticEvent          `json:"events"`
-	RuntimeAttempts []diagnosticRuntimeAttempt `json:"runtime_attempts"`
-	ContextPackages []diagnosticContextPackage `json:"context_packages"`
-	PolicySnapshots []diagnosticPolicySnapshot `json:"policy_snapshots"`
-	Signals         []diagnosticSignal         `json:"signals"`
+	ModelCalls       []diagnosticModelCall      `json:"model_calls"`
+	ToolDecisions    []diagnosticToolDecision   `json:"tool_decisions"`
+	RuntimeArtifacts []diagnosticArtifact       `json:"runtime_artifacts"`
+	SchemaVersion    string                     `json:"schema_version"`
+	GeneratedAt      time.Time                  `json:"generated_at"`
+	Counts           map[string]int64           `json:"counts"`
+	Executions       []diagnosticExecution      `json:"executions"`
+	Checkpoints      []diagnosticCheckpoint     `json:"checkpoints"`
+	Evidence         []diagnosticEvidence       `json:"evidence"`
+	Events           []diagnosticEvent          `json:"events"`
+	RuntimeAttempts  []diagnosticRuntimeAttempt `json:"runtime_attempts"`
+	ContextPackages  []diagnosticContextPackage `json:"context_packages"`
+	PolicySnapshots  []diagnosticPolicySnapshot `json:"policy_snapshots"`
+	Signals          []diagnosticSignal         `json:"signals"`
 }
 
 type diagnosticExecution struct {
@@ -82,6 +85,9 @@ type diagnosticEvent struct {
 }
 
 type diagnosticRuntimeAttempt struct {
+	Workload            string `json:"workload"`
+	ProfileDigest       string `json:"profile_digest,omitempty"`
+	ContextDigest       string `json:"context_digest"`
 	ID                  string `json:"id"`
 	ExecutionID         string `json:"execution_id"`
 	AttemptNumber       int    `json:"attempt_number"`
@@ -147,7 +153,7 @@ func (store *Store) ExportDiagnostics(ctx context.Context) ([]byte, error) {
 	loaders := []func(context.Context, *diagnosticExport) error{
 		store.exportDiagnosticExecutions, store.exportDiagnosticCheckpoints, store.exportDiagnosticEvidence,
 		store.exportDiagnosticEvents, store.exportDiagnosticRuntimeAttempts, store.exportDiagnosticContextPackages,
-		store.exportDiagnosticPolicies, store.exportDiagnosticSignals,
+		store.exportDiagnosticPolicies, store.exportDiagnosticSignals, store.exportDiagnosticModelCalls, store.exportDiagnosticToolDecisions, store.exportDiagnosticArtifacts,
 	}
 	for _, load := range loaders {
 		if err := load(ctx, &export); err != nil {
@@ -246,7 +252,7 @@ func (store *Store) exportDiagnosticEvents(ctx context.Context, export *diagnost
 func (store *Store) exportDiagnosticRuntimeAttempts(ctx context.Context, export *diagnosticExport) error {
 	rows, err := store.db.QueryContext(ctx, `
 		SELECT id, execution_id, attempt_number, specification_digest, provider_handle, state,
-			deadline_at, cleanup_state, outputs_collected, failure_class, failure_message, version
+			deadline_at, cleanup_state, outputs_collected, failure_class, failure_message, version, specification_json
 		FROM runtime_attempts ORDER BY execution_id, attempt_number
 	`)
 	if err != nil {
@@ -256,11 +262,26 @@ func (store *Store) exportDiagnosticRuntimeAttempts(ctx context.Context, export 
 	for rows.Next() {
 		var item diagnosticRuntimeAttempt
 		var outputsCollected int
+		var specification string
 		if err := rows.Scan(&item.ID, &item.ExecutionID, &item.AttemptNumber, &item.SpecificationDigest,
 			&item.ProviderHandle, &item.State, &item.DeadlineAt, &item.CleanupState, &outputsCollected,
-			&item.FailureClass, &item.FailureMessage, &item.Version); err != nil {
+			&item.FailureClass, &item.FailureMessage, &item.Version, &specification); err != nil {
 			return err
 		}
+		var spec struct {
+			Workload      string `json:"workload"`
+			ProfileDigest string `json:"profile_digest"`
+			ContextDigest string `json:"context_digest"`
+		}
+		if err = json.Unmarshal([]byte(specification), &spec); err != nil {
+			return err
+		}
+		item.Workload = spec.Workload
+		if item.Workload == "" {
+			item.Workload = "repository/v1"
+		}
+		item.ProfileDigest = spec.ProfileDigest
+		item.ContextDigest = spec.ContextDigest
 		item.OutputsCollected = outputsCollected == 1
 		item.ProviderHandle, item.FailureMessage = diagnosticFingerprint(item.ProviderHandle), omitFreeText(item.FailureMessage)
 		export.RuntimeAttempts = append(export.RuntimeAttempts, item)

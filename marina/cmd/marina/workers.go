@@ -52,6 +52,12 @@ func configureWorkers(config flow.Config, journal *sqlite.Store, provider flow.P
 	kube := config.Kubernetes
 	kube.WorkerURL = config.PublicURL
 	kube.SigningKey = key
+	if config.Analysis != nil {
+		kube.AdditionalImages = []string{config.Analysis.Image}
+		if !config.RepositoryEnabled() {
+			kube.Image = config.Analysis.Image
+		}
+	}
 	runtime, err := kubernetes.New(kube, nil)
 	if err != nil {
 		return nil, nil, err
@@ -69,8 +75,10 @@ func configureWorkers(config flow.Config, journal *sqlite.Store, provider flow.P
 		git.Authorize = func(ctx context.Context, fence int64) error { return controller.Authorize(ctx, e, fence) }
 		return github.New(git, nil)
 	}
-	if _, err := github.New(config.Git, nil); err != nil {
-		return nil, nil, err
+	if config.RepositoryEnabled() {
+		if _, err := github.New(config.Git, nil); err != nil {
+			return nil, nil, err
+		}
 	}
 	gateway := workerapi.New(workerapi.Config{SourceBinding: func(ctx context.Context, e execution.Execution) (string, string, error) {
 		effective, err := controller.ConfigurationForExecution(ctx, e)

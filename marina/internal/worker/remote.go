@@ -88,14 +88,29 @@ func RunRemote(ctx context.Context) error {
 		}
 		return authority.ExpiresAt, nil
 	}
-	expires, err := checkAuthority(ctx)
+	startup, startupCancel := context.WithTimeout(ctx, 30*time.Second)
+	authorityBytes, err := retryGatewayRead(startup, time.Second, func(ctx context.Context) ([]byte, error) {
+		return request(ctx, "GET", "/authority", nil)
+	})
+	startupCancel()
 	if err != nil {
 		return err
 	}
+	var authority struct {
+		ExpiresAt time.Time `json:"expires_at"`
+	}
+	if err = json.Unmarshal(authorityBytes, &authority); err != nil {
+		return err
+	}
+	expires := authority.ExpiresAt
 	if !time.Now().Add(8 * time.Second).Before(expires) {
 		return errors.New("worker authority expired")
 	}
-	b, err := request(ctx, "GET", "/input", nil)
+	inputCtx, inputCancel := context.WithDeadline(ctx, minTime(time.Now().Add(30*time.Second), expires.Add(-8*time.Second)))
+	b, err := retryGatewayRead(inputCtx, time.Second, func(ctx context.Context) ([]byte, error) {
+		return request(ctx, "GET", "/input", nil)
+	})
+	inputCancel()
 	if err != nil {
 		return err
 	}
@@ -103,8 +118,10 @@ func RunRemote(ctx context.Context) error {
 	if err = json.Unmarshal(b, &input); err != nil {
 		return err
 	}
-	input.GitAuthorization = token
-	if input.Stage == "implement" {
+	if input.Stage == "implement" || input.Stage == "verify" {
+		input.GitAuthorization = token
+	}
+	if input.Stage == "implement" || input.Stage == "analyze" {
 		input.Environment = append(input.Environment, "MARINA_WORKER_TOKEN="+token)
 	}
 	if ca != "" {
@@ -129,6 +146,9 @@ func RunRemote(ctx context.Context) error {
 	if len(b) > MaxResultBytes {
 		return errors.New("worker result exceeds transfer limit")
 	}
+	if input.Stage == "analyze" {
+		b = []byte(strings.ReplaceAll(string(b), token, "[redacted]"))
+	}
 	for retry := 0; retry < 3; retry++ {
 		if _, err = request(ctx, "POST", "/result", b); err == nil {
 			return nil
@@ -140,4 +160,11 @@ func RunRemote(ctx context.Context) error {
 		}
 	}
 	return err
+}
+
+func minTime(a, b time.Time) time.Time {
+	if a.Before(b) {
+		return a
+	}
+	return b
 }

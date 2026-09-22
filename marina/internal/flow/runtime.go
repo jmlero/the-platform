@@ -7,11 +7,14 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/jmlero/the-platform/marina/internal/analysis"
 	"github.com/jmlero/the-platform/marina/internal/execution"
 	runtimeapi "github.com/jmlero/the-platform/marina/internal/runtime"
 	"github.com/jmlero/the-platform/marina/internal/workcontrol"
 	"github.com/jmlero/the-platform/marina/internal/worker"
 )
+
+var errInvalidWorkerResult = errors.New("worker completion evidence is missing or invalid")
 
 func (c *Controller) worker(ctx context.Context, e execution.Execution, task workcontrol.WorkItem, s state, stage string) (runtimeapi.Attempt, bool, worker.Result, string, error) {
 	fail := func(err error) (runtimeapi.Attempt, bool, worker.Result, string, error) {
@@ -36,7 +39,17 @@ func (c *Controller) worker(ctx context.Context, e execution.Execution, task wor
 		if len(items) >= e.MaxAttempts {
 			return fail(execution.ErrBudgetExhausted)
 		}
-		_, attempt, _, err = c.Journal.EnsureRuntimeAttempt(ctx, e.ID, e.Version, runtimeapi.Specification{IdempotencyKey: key, RepositoryURI: c.Config.Git.CloneURL, SourceRevision: s.Head, ContextURI: "journal://" + e.ID, ContextDigest: c.contextDigest(task, s), HarnessVersion: c.Config.Kubernetes.Image, Limits: runtimeapi.Limits{CPUMillis: 2000, MemoryBytes: 4 << 30, EphemeralStorageBytes: 4 << 30, WallTimeSeconds: int64(c.Config.BudgetMinutes) * 60, MaxProcesses: 256}, NetworkPolicy: "gateway-only", FilesystemPolicy: "ephemeral-read-only-root", AuthorityFence: e.FenceToken, DeadlineAt: e.DeadlineAt, PolicyVersion: c.Config.PolicyVersion})
+		spec := runtimeapi.Specification{IdempotencyKey: key, RepositoryURI: c.Config.Git.CloneURL, SourceRevision: s.Head, ContextURI: "journal://" + e.ID, ContextDigest: c.contextDigest(task, s), HarnessVersion: c.Config.Kubernetes.Image, Limits: runtimeapi.Limits{CPUMillis: 2000, MemoryBytes: 4 << 30, EphemeralStorageBytes: 4 << 30, WallTimeSeconds: int64(c.Config.BudgetMinutes) * 60, MaxProcesses: 256}, NetworkPolicy: "gateway-only", FilesystemPolicy: "ephemeral-read-only-root", AuthorityFence: e.FenceToken, DeadlineAt: e.DeadlineAt, PolicyVersion: c.Config.PolicyVersion}
+		if s.Analysis != nil {
+			spec.Workload = analysis.Kind
+			spec.Tools = s.Analysis.Tools
+			spec.RepositoryURI, spec.SourceRevision = "", ""
+			spec.InputDigest, spec.ProfileDigest = s.Base, s.ProfileDigest
+			spec.WorkerImage, spec.HarnessVersion = s.Analysis.Image, s.Analysis.HarnessVersion
+			spec.Limits.WallTimeSeconds = int64(s.Analysis.BudgetMinutes) * 60
+			spec.Limits.MemoryBytes, spec.Limits.EphemeralStorageBytes = 512<<20, 128<<20
+		}
+		_, attempt, _, err = c.Journal.EnsureRuntimeAttempt(ctx, e.ID, e.Version, spec)
 		if err != nil {
 			return fail(err)
 		}
@@ -52,6 +65,12 @@ func (c *Controller) worker(ctx context.Context, e execution.Execution, task wor
 		}
 		if stage == "implement" {
 			input.Harness = []string{"codex", "exec", "--json", "--dangerously-bypass-approvals-and-sandbox", "-c", `web_search="disabled"`, "-c", `tools.view_image=false`, "-c", `model_provider="marina"`, "-c", `model="` + c.Config.Model.Name + `"`, "-c", `model_providers.marina.name="Marina controlled endpoint"`, "-c", `model_providers.marina.base_url="` + strings.TrimRight(c.Config.PublicURL, "/") + "/workers/" + attempt.ID + `/model/v1"`, "-c", `model_providers.marina.env_key="MARINA_WORKER_TOKEN"`, "-c", `model_providers.marina.wire_api="responses"`, "-"}
+		}
+		if stage == "analyze" {
+			input.SourceURL, input.SourceRevision = "", ""
+			input.AllowedPaths, input.Checks = nil, nil
+			input.Harness = []string{"python3", "/opt/marina-harness/run.py"}
+			input.Analysis = &analysis.Input{Context: input.Context, Tools: s.Analysis.Tools, ToolURL: strings.TrimRight(c.Config.PublicURL, "/") + "/workers/" + attempt.ID + "/tools/read-context-source", Version: 1, ProfileDigest: s.ProfileDigest, InputDigest: s.Base, Sources: s.Analysis.Fixture.Sources, Model: c.Config.Model.Name, ModelURL: strings.TrimRight(c.Config.PublicURL, "/") + "/workers/" + attempt.ID + "/model/v1"}
 		}
 		encoded, _ := json.Marshal(input)
 		e, err = c.Journal.GetExecution(ctx, e.ID)
@@ -105,19 +124,22 @@ func (c *Controller) worker(ctx context.Context, e execution.Execution, task wor
 		if artifact.RuntimeAttemptID == attempt.ID && artifact.Kind == "worker_result" {
 			b, err := c.Artifacts.Get(artifact.Digest)
 			if err != nil {
-				return fail(err)
+				return fail(fmt.Errorf("result artifact unavailable or failed integrity verification: %w", errInvalidWorkerResult))
 			}
 			var result worker.Result
 			if err = json.Unmarshal(b, &result); err != nil {
-				return fail(err)
+				return fail(fmt.Errorf("malformed result: %w", errInvalidWorkerResult))
 			}
 			if result.SourceRevision != attempt.Specification.SourceRevision || result.Stage != stage || (stage == "verify" && len(result.Checks) != len(c.Config.Checks)) {
-				return fail(errors.New("worker artifact does not match immutable input"))
+				return fail(fmt.Errorf("worker artifact does not match immutable input: %w", errInvalidWorkerResult))
+			}
+			if stage == "analyze" && (result.Analysis == nil || result.ProfileDigest != attempt.Specification.ProfileDigest || result.InputDigest != attempt.Specification.InputDigest || len(result.Changes) != 0 || len(result.Checks) != 0) {
+				return fail(fmt.Errorf("analysis artifact does not match immutable input: %w", errInvalidWorkerResult))
 			}
 			return attempt, true, result, artifact.Digest, nil
 		}
 	}
-	return fail(errors.New("successful worker has no durable result"))
+	return fail(fmt.Errorf("successful worker has no durable result: %w", errInvalidWorkerResult))
 }
 
 func (c *Controller) stop(ctx context.Context, e execution.Execution) error {

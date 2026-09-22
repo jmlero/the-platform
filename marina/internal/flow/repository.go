@@ -31,6 +31,11 @@ func withRepository(config Config, b workcontrol.RepositoryBinding) Config {
 // InitializeRepository preserves a UI-selected repository across restart only
 // while the installation's private execution profile remains unchanged.
 func InitializeRepository(ctx context.Context, journal *sqlite.Store, config Config, input execution.ProjectBinding) (execution.ProjectBinding, error) {
+	if !config.RepositoryEnabled() {
+		input.Repository, input.DeliveryConfig = "", ""
+		input.ContextConfig = config.Digest()
+		return journal.EnsureProjectBinding(ctx, input)
+	}
 	effective := config
 	current, err := journal.CurrentProjectBinding(ctx, config.ProjectID)
 	if err == nil {
@@ -100,6 +105,9 @@ func requestedRepository(config Config, request workcontrol.RepositoryRequest) (
 }
 
 func (c *Controller) ReconcileRepository(ctx context.Context) error {
+	if !c.Config.RepositoryEnabled() {
+		return nil
+	}
 	provider, ok := c.Provider.(RepositoryProvider)
 	if !ok {
 		return errors.New("provider lacks repository association support")

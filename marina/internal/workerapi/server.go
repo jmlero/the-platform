@@ -13,9 +13,11 @@ import (
 	"net/http"
 	"os"
 	"reflect"
+	"slices"
 	"strings"
 	"time"
 
+	"github.com/jmlero/the-platform/marina/internal/analysis"
 	"github.com/jmlero/the-platform/marina/internal/artifacts"
 	"github.com/jmlero/the-platform/marina/internal/execution"
 	"github.com/jmlero/the-platform/marina/internal/journal/sqlite"
@@ -71,6 +73,7 @@ func New(config Config, journal *sqlite.Store, store *artifacts.Store, provider 
 	server.mux.HandleFunc("POST /workers/{id}/git/git-upload-pack", server.source)
 	server.mux.HandleFunc("POST /workers/{id}/model/v1/responses", server.model)
 	server.mux.HandleFunc("GET /artifacts/{digest}", server.artifact)
+	server.mux.HandleFunc("POST /workers/{id}/tools/read-context-source", server.contextTool)
 	return server
 }
 
@@ -144,6 +147,16 @@ func (server *Server) Input(ctx context.Context, attempt runtimeapi.Attempt) (wo
 	}
 	var input worker.Input
 	err = json.Unmarshal([]byte(encoded), &input)
+	if err == nil && input.Context != nil && (input.Context.Digest != attempt.Specification.ContextDigest || input.Context.ExecutionID != attempt.ExecutionID || input.Context.Validate() != nil) {
+		return worker.Input{}, errors.New("worker context differs from immutable specification")
+	}
+	if err == nil && input.Stage == "analyze" {
+		if input.Analysis == nil || input.Analysis.Version != 1 || attempt.Specification.Workload != analysis.Kind ||
+			input.Analysis.InputDigest != attempt.Specification.InputDigest || input.Analysis.ProfileDigest != attempt.Specification.ProfileDigest ||
+			input.Analysis.InputDigest != analysis.Digest(input.Analysis.Sources) || !slices.Equal(input.Analysis.Tools, attempt.Specification.Tools) || !reflect.DeepEqual(input.Analysis.Context, input.Context) {
+			return worker.Input{}, errors.New("analysis input differs from its immutable specification")
+		}
+	}
 	return input, err
 }
 
@@ -204,7 +217,16 @@ func (server *Server) result(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "result does not match the immutable worker input", 409)
 		return
 	}
-	if input.Stage == "implement" {
+	if input.Stage == "analyze" {
+		if result.Analysis == nil || result.InputDigest != input.Analysis.InputDigest || result.ProfileDigest != input.Analysis.ProfileDigest ||
+			result.SourceRevision != "" || len(result.Changes) != 0 || len(result.Checks) != 0 {
+			http.Error(w, "analysis result does not match the immutable workload", 409)
+			return
+		}
+	} else if result.Analysis != nil || result.InputDigest != "" || result.ProfileDigest != "" {
+		http.Error(w, "repository result contains unsupported analysis fields", 400)
+		return
+	} else if input.Stage == "implement" {
 		if len(result.Changes) == 0 || len(result.Changes) > 30 || len(result.Checks) != 0 {
 			http.Error(w, "invalid implementation result", 400)
 			return
@@ -219,7 +241,7 @@ func (server *Server) result(w http.ResponseWriter, r *http.Request) {
 			}
 			seen[change.Path] = true
 		}
-	} else {
+	} else if input.Stage == "verify" {
 		if len(result.Changes) != 0 || len(result.Checks) != len(input.Checks) {
 			http.Error(w, "incomplete verification result", 400)
 			return
@@ -231,6 +253,9 @@ func (server *Server) result(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
+	} else {
+		http.Error(w, "unsupported worker stage", 403)
+		return
 	}
 	encoded, _ := json.Marshal(result)
 	digest, err := server.artifacts.Put(encoded)
@@ -302,6 +327,10 @@ func (server *Server) liveContext(r *http.Request) (context.Context, context.Can
 func (server *Server) source(w http.ResponseWriter, r *http.Request) {
 	attempt, executionRecord, ok := server.admit(w, r)
 	if !ok {
+		return
+	}
+	if attempt.Specification.Workload == analysis.Kind || attempt.Specification.RepositoryURI == "" {
+		http.Error(w, "this workload has no source authority", 403)
 		return
 	}
 	sourceURL, tokenFile := server.config.SourceURL, server.config.SourceTokenFile

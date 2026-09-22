@@ -73,6 +73,7 @@ func TestModelReservationSurvivesUnknownResponseAndPreventsOverspend(t *testing.
 		t.Fatal(err)
 	}
 	var report struct {
+		ModelCalls []diagnosticModelCall `json:"model_calls"`
 		Executions []struct {
 			UsedTokens         int64 `json:"used_tokens"`
 			PendingModelCalls  int64 `json:"pending_model_calls"`
@@ -82,6 +83,15 @@ func TestModelReservationSurvivesUnknownResponseAndPreventsOverspend(t *testing.
 	}
 	if err := json.Unmarshal(data, &report); err != nil {
 		t.Fatal(err)
+	}
+	if len(report.ModelCalls) != 2 {
+		t.Fatalf("model calls lack correlated known/unknown usage: %+v", report.ModelCalls)
+	}
+	for _, call := range report.ModelCalls {
+		if call.AttemptID != attempt.ID || call.ExecutionID != record.ID || call.UsageKnown != (call.ID == id) ||
+			(call.ID != id && call.UsedTokens != nil) {
+			t.Fatalf("model call lacks correlated known/unknown usage: %+v", call)
+		}
 	}
 	if len(report.Executions) != 1 || report.Executions[0].UsedTokens != 20 ||
 		report.Executions[0].PendingModelCalls != 1 || report.Executions[0].ReservedTokens != 50 ||
