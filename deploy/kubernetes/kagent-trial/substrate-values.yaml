@@ -11,7 +11,9 @@ postgres:
 rustfs:
   storageSize: 1Gi
 credentialProvider:
-  namespacePolicies: []
+  namespacePolicies:
+    - atespace: kint-engine
+      allowedNamespaces: [kint-engine]
 ateApi:
   extraArgs:
     - --template-resync-interval=250ms

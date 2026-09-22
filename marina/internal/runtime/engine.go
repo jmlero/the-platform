@@ -34,6 +34,20 @@ func (e EngineSelection) Validate() error {
 	return nil
 }
 
+// EngineGatewayReference binds the only credential installed for governed
+// execution. The Secret is named after the attempt-exclusive AgentTemplate;
+// neither a shared credential nor an upstream credential belongs in an agent.
+func (s Specification) EngineGatewayReference() (CredentialReference, error) {
+	if s.Engine == nil || len(s.CredentialReferences) != 1 {
+		return CredentialReference{}, ErrInvalidInput
+	}
+	r := s.CredentialReferences[0]
+	if r.Kind != "engine-gateway" || r.Reference != "secret://"+s.Engine.Namespace+"/"+s.Engine.Template+"/gateway" || r.ExpiresAt.IsZero() || r.ExpiresAt.After(s.DeadlineAt) {
+		return CredentialReference{}, ErrInvalidInput
+	}
+	return r, nil
+}
+
 // EngineAttempt stores correlation and side-effect intent, not engine history.
 // The runtime attempt retains the selected backend/version and input digests.
 type EngineAttempt struct {
@@ -52,6 +66,12 @@ type EngineAttempt struct {
 	Collected         bool   `json:"collected"`
 	State             State  `json:"state"`
 	Version           int64  `json:"version"`
+}
+
+// AllowsCalls fails closed before message delivery and as soon as durable
+// cancellation or cleanup intent exists, independently of engine termination.
+func (r EngineAttempt) AllowsCalls() bool {
+	return !r.CancelRequested && !r.DeleteRequested && !r.Deleted && !r.State.Terminal() && (r.Phase == "sending" || r.Phase == "active")
 }
 
 func (r EngineAttempt) CanUpdate(n EngineAttempt) bool {

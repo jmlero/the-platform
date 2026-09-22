@@ -74,6 +74,12 @@ func New(config Config, journal *sqlite.Store, store *artifacts.Store, provider 
 	server.mux.HandleFunc("POST /workers/{id}/model/v1/responses", server.model)
 	server.mux.HandleFunc("GET /artifacts/{digest}", server.artifact)
 	server.mux.HandleFunc("POST /workers/{id}/tools/read-context-source", server.contextTool)
+	server.mux.HandleFunc("POST /engine/model/v1/responses", server.engineRoute(server.model))
+	server.mux.HandleFunc("GET /engine/input", server.engineRoute(server.input))
+	server.mux.HandleFunc("GET /engine/authority", server.engineRoute(server.authority))
+	server.mux.HandleFunc("GET /engine/git/info/refs", server.engineRoute(server.source))
+	server.mux.HandleFunc("POST /engine/git/git-upload-pack", server.engineRoute(server.source))
+	server.mux.HandleFunc("POST /engine/tools/read-context-source", server.engineRoute(server.contextTool))
 	return server
 }
 
@@ -88,11 +94,27 @@ func (server *Server) authorize(ctx context.Context, id, token string) (runtimea
 	if len(server.config.SigningKey) < 32 || subtle.ConstantTimeCompare([]byte(token), []byte(want)) != 1 {
 		return attempt, execution.Execution{}, errors.New("invalid worker credential")
 	}
+	if attempt.Specification.Engine != nil {
+		engine, err := server.journal.GetEngineAttempt(ctx, id)
+		if err != nil || !engine.AllowsCalls() {
+			return attempt, execution.Execution{}, errors.New("engine authority unavailable or revoked")
+		}
+	}
+	return server.authorizeState(ctx, attempt)
+}
+
+func (server *Server) authorizeState(ctx context.Context, attempt runtimeapi.Attempt) (runtimeapi.Attempt, execution.Execution, error) {
 	record, err := server.journal.GetExecution(ctx, attempt.ExecutionID)
 	if err != nil {
 		return attempt, record, err
 	}
 	now := time.Now().UTC()
+	if attempt.Specification.Engine != nil {
+		ref, err := attempt.Specification.EngineGatewayReference()
+		if err != nil || !now.Before(ref.ExpiresAt) {
+			return attempt, record, errors.New("engine credential expired or not attempt-scoped")
+		}
+	}
 	if record.State.Terminal() || attempt.State.Terminal() || record.FenceToken != attempt.Specification.AuthorityFence ||
 		!now.Before(record.DeadlineAt) || !now.Before(attempt.DeadlineAt) || !now.Before(record.LeaseExpiresAt) {
 		return attempt, record, errors.New("worker authority expired")
@@ -107,6 +129,9 @@ func (server *Server) authorize(ctx context.Context, id, token string) (runtimea
 		if run.ID == record.ExternalRunID && run.WorkItemID == record.ExternalWorkID && run.AgentID == record.AgentID && run.TaskVersion == record.TaskVersion &&
 			run.FenceToken == attempt.Specification.AuthorityFence && run.Status.Active() && run.LeaseExpiresAt != nil && now.Before(*run.LeaseExpiresAt) {
 			record.LeaseExpiresAt = *run.LeaseExpiresAt
+			if attempt.Specification.Engine != nil && server.config.ContextCheck == nil {
+				return attempt, record, errors.New("engine requires current context validation")
+			}
 			if server.config.ContextCheck != nil {
 				if err := server.config.ContextCheck(checkCtx, record); err != nil {
 					return attempt, record, err
@@ -185,6 +210,12 @@ func (server *Server) authority(w http.ResponseWriter, r *http.Request) {
 	}
 	if attempt.DeadlineAt.Before(expires) {
 		expires = attempt.DeadlineAt
+	}
+	if attempt.Specification.Engine != nil {
+		ref, err := attempt.Specification.EngineGatewayReference()
+		if err == nil && ref.ExpiresAt.Before(expires) {
+			expires = ref.ExpiresAt
+		}
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{"expires_at": expires, "fence": record.FenceToken})

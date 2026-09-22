@@ -41,7 +41,8 @@ The decisions most useful for understanding the current release are:
 
 The next engine direction is [0017](decisions/0017-kagent-core-engine.md): kagent
 integration and removal of redundant Marina execution code. KINT-01/02 local
-feasibility passed; governed integration and rollout remain pending.
+feasibility and KINT-03 lifecycle correlation passed; governed workload
+integration and rollout remain pending.
 
 [0018](decisions/0018-deck-work-preparation.md) assigns backlog refinement and
 focused work preparation to Deck, with planning execution and immutable context
@@ -54,6 +55,8 @@ build and environment; they are not current operating instructions.
 
 | Scope | Evidence |
 | --- | --- |
+| Governed engine gateway; real local native Codex/Substrate HTTPS injection, rotation, revocation, bypass denial and safe teardown | [KINT-04](validation/kint-04-2026-09-22.md) |
+| Pinned engine adapter, durable revision/A2A correlation and isolated local recovery | [KINT-03](validation/kint-03-2026-09-22.md) |
 | Pinned kagent/Substrate, ARM64 native lifecycle, persistence, isolation and safe teardown | [KINT-01/02](validation/kint-01-02-2026-09-22.md), [lifecycle](validation/kint-01-02-lifecycle-2026-09-22.json), [resources](validation/kint-01-02-resources-2026-09-22.json), and [teardown](validation/kint-01-02-teardown-2026-09-22.json) |
 | Repository workflow, recovery, cancellation, failures, budgets, and final local state | [2026-09-21 acceptance](validation/poc-mvp-2026-09-21.md) and [machine-readable record](validation/poc-mvp-2026-09-21.json) |
 | Certificate rotation and artifact retention | [2026-09-17 operations](validation/first-release-operations-2026-09-17.md) |

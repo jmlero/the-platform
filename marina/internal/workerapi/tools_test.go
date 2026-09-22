@@ -2,6 +2,7 @@ package workerapi
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"github.com/jmlero/the-platform/marina/internal/analysis"
@@ -19,6 +20,15 @@ import (
 )
 
 func TestContextToolEnforcesFrozenAllowlistAndLiveRevocation(t *testing.T) {
+	for _, engine := range []bool{false, true} {
+		name := "worker"
+		if engine {
+			name = "engine"
+		}
+		t.Run(name, func(t *testing.T) { testContextToolEnforcesFrozenAllowlistAndLiveRevocation(t, engine) })
+	}
+}
+func testContextToolEnforcesFrozenAllowlistAndLiveRevocation(t *testing.T, engine bool) {
 	ctx := context.Background()
 	j, err := sqlite.Open(ctx, ":memory:")
 	if err != nil {
@@ -43,6 +53,10 @@ func TestContextToolEnforcesFrozenAllowlistAndLiveRevocation(t *testing.T) {
 		t.Fatal(err)
 	}
 	spec := runtimeapi.Specification{IdempotencyKey: "tool-attempt", Workload: analysis.Kind, InputDigest: strings.Repeat("b", 64), ProfileDigest: strings.Repeat("c", 64), WorkerImage: "analysis@sha256:" + strings.Repeat("d", 64), ContextURI: "journal://input", ContextDigest: manifest.Digest, HarnessVersion: analysis.HarnessWithContext, Tools: []string{"read_context_source"}, Limits: runtimeapi.Limits{CPUMillis: 1000, MemoryBytes: 1024, EphemeralStorageBytes: 1024, WallTimeSeconds: 60, MaxProcesses: 64}, NetworkPolicy: "gateway-only", FilesystemPolicy: "ephemeral", AuthorityFence: 1, DeadlineAt: lease, PolicyVersion: "test"}
+	if engine {
+		spec.CredentialReferences = []runtimeapi.CredentialReference{{Kind: "engine-gateway", Reference: "secret://trial/attempt/gateway", ExpiresAt: lease}}
+		spec.Engine = &runtimeapi.EngineSelection{Backend: "kagent", Version: "pinned", Endpoint: "engine", Namespace: "trial", Harness: "byo", Template: "attempt", Revision: strings.Repeat("d", 64)}
+	}
 	e, a, _, err := j.EnsureRuntimeAttempt(ctx, e.ID, e.Version, spec)
 	if err != nil {
 		t.Fatal(err)
@@ -57,9 +71,22 @@ func TestContextToolEnforcesFrozenAllowlistAndLiveRevocation(t *testing.T) {
 		}
 		return nil
 	}}, j, store, p, nil)
+	route := "/workers/" + a.ID + "/tools/read-context-source"
+	credential := kubernetes.Token(key, a.Specification)
+	if engine {
+		bindEngineForCalls(t, j, a.Specification)
+		credential, err = server.EngineCredential(ctx, a.Specification)
+		if err != nil {
+			t.Fatal(err)
+		}
+		route = "/engine/tools/read-context-source"
+	}
 	request := func(body string) *httptest.ResponseRecorder {
-		r := httptest.NewRequest("POST", "/workers/"+a.ID+"/tools/read-context-source", strings.NewReader(body))
-		r.Header.Set("Authorization", "Bearer "+kubernetes.Token(key, a.Specification))
+		r := httptest.NewRequest("POST", route, strings.NewReader(body))
+		if engine {
+			r.TLS = &tls.ConnectionState{}
+		}
+		r.Header.Set("Authorization", "Bearer "+credential)
 		w := httptest.NewRecorder()
 		server.ServeHTTP(w, r)
 		return w

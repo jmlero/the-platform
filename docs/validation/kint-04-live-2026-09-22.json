@@ -1,0 +1,129 @@
+{
+  "date": "2026-09-22",
+  "environment": "kind-marina-local on podman-machine-default-root",
+  "engine_version": "1.0.0-alpha1",
+  "codex_version": "0.148.0",
+  "final_attempt": {
+    "attempt": "rtm_31eb3e5a4f8663d29eb000b4",
+    "expires_at": "2026-09-22T14:59:23.912822483Z",
+    "revision": "fee40ffa169df40bcfe87fbff91f18cd2e5b84b05fb2a32c368b30120a08d86a"
+  },
+  "final_instance": {
+    "id": "01a0c997-cd4f-7ac3-8483-9525c91b6508",
+    "creator": "kint04@local.invalid",
+    "harness": {
+      "namespace": "kint-engine",
+      "name": "kint-codex"
+    },
+    "agentTemplate": {
+      "namespace": "kint-engine",
+      "name": "kint04-final"
+    },
+    "preparedRevision": "fee40ffa169df40bcfe87fbff91f18cd2e5b84b05fb2a32c368b30120a08d86a",
+    "a2aAuthority": "ai-01a0c997-cd4f-7ac3-8483-9525c91b6508.kint-engine.actors.resources.substrate.ate.dev",
+    "state": "AGENT_INSTANCE_STATE_READY",
+    "createdAt": "2026-09-22T14:49:24.048248Z",
+    "updatedAt": "2026-09-22T14:49:24.052305491Z",
+    "contextId": "40898a39-39f9-4b78-87be-bd9d0f3a141f"
+  },
+  "final_http_statuses": [
+    200,
+    200,
+    404,
+    404,
+    404,
+    404,
+    200,
+    401,
+    401,
+    401,
+    401,
+    401,
+    401,
+    200,
+    200,
+    403,
+    403,
+    403,
+    403,
+    403,
+    403
+  ],
+  "final_model_totals": {
+    "reported_tokens": 12,
+    "reported_cost_micros": 0,
+    "pending_model_calls": 0,
+    "reserved_tokens": 0,
+    "reserved_cost_micros": 0
+  },
+  "final_model_calls": 4,
+  "expiry_attempt": {
+    "attempt": "rtm_68f84365186ab3f777f19048",
+    "expires_at": "2026-09-22T14:48:01.783636263Z",
+    "revision": "59a098487234efe0bb1147eacb5eab23c9bdc7d2f2e00273c34e1219b3df58a0"
+  },
+  "expiry_instance": {
+    "id": "01a0c994-b7cd-78d1-a92e-70d3485f850a",
+    "creator": "kint04@local.invalid",
+    "harness": {
+      "namespace": "kint-engine",
+      "name": "kint-codex"
+    },
+    "agentTemplate": {
+      "namespace": "kint-engine",
+      "name": "kint04-expiry"
+    },
+    "preparedRevision": "59a098487234efe0bb1147eacb5eab23c9bdc7d2f2e00273c34e1219b3df58a0",
+    "a2aAuthority": "ai-01a0c994-b7cd-78d1-a92e-70d3485f850a.kint-engine.actors.resources.substrate.ate.dev",
+    "state": "AGENT_INSTANCE_STATE_READY",
+    "createdAt": "2026-09-22T14:46:01.934963Z",
+    "updatedAt": "2026-09-22T14:46:01.945347243Z",
+    "contextId": "df8ca4eb-acac-4495-ad30-56af52b9d3e3"
+  },
+  "expiry_http_statuses": [
+    200,
+    200,
+    403,
+    403,
+    403,
+    403,
+    403,
+    403
+  ],
+  "expiry_model_totals": {
+    "reported_tokens": 6,
+    "reported_cost_micros": 0,
+    "pending_model_calls": 0,
+    "reserved_tokens": 0,
+    "reserved_cost_micros": 0
+  },
+  "rotation": {
+    "invalid_injected_secret_denied": true,
+    "same_instance_recovered": true,
+    "calls_before": 2,
+    "calls_after": 3
+  },
+  "native_probe_exit_code": 0,
+  "native_probe_complete": true,
+  "native_probe_checks": [
+    "no Kubernetes token",
+    "model credential absent or inert SDK placeholder",
+    "no upstream or Git credential variables",
+    "injected authority route allowed",
+    "gateway memory/delegation/Git-write/exec routes denied",
+    "direct OpenAI/GitHub/Kubernetes/kagent destinations denied"
+  ],
+  "synthetic_boundaries": [
+    "Deck authority",
+    "context validator",
+    "Responses model upstream"
+  ],
+  "real_components": [
+    "native Codex",
+    "kagent",
+    "Substrate credential provider and egress router",
+    "Marina workerapi gateway",
+    "SQLite reservations"
+  ],
+  "paid_model_calls": 0
+}

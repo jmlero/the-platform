@@ -130,6 +130,21 @@ func (store *Store) EnsureRuntimeAttempt(
 	if err := specification.Validate(store.now()); err != nil {
 		return execution.Execution{}, runtimeapi.Attempt{}, false, fmt.Errorf("validate runtime specification: %w", err)
 	}
+	if engine := specification.Engine; engine != nil {
+		// A native runtime's injected credential belongs to its prepared template.
+		// Reusing that template could give an old instance a new attempt's Secret
+		// after the egress cache refreshes. Never recycle it, even after cleanup.
+		var bound int
+		if err := transaction.QueryRowContext(ctx, `SELECT COUNT(*) FROM runtime_attempts
+			WHERE json_extract(specification_json,'$.engine.endpoint')=?
+			AND json_extract(specification_json,'$.engine.namespace')=?
+			AND json_extract(specification_json,'$.engine.template')=?`, engine.Endpoint, engine.Namespace, engine.Template).Scan(&bound); err != nil {
+			return execution.Execution{}, runtimeapi.Attempt{}, false, err
+		}
+		if bound != 0 {
+			return execution.Execution{}, runtimeapi.Attempt{}, false, execution.ErrConflict
+		}
+	}
 	digest, err := specification.Digest()
 	if err != nil {
 		return execution.Execution{}, runtimeapi.Attempt{}, false, err

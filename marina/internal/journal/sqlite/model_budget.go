@@ -3,10 +3,12 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 
 	"github.com/jmlero/the-platform/marina/internal/execution"
+	rt "github.com/jmlero/the-platform/marina/internal/runtime"
 )
 
 // ReserveModelCall charges a conservative reservation before issuing a model
@@ -33,6 +35,20 @@ func (store *Store) ReserveModelCall(ctx context.Context, executionID, attemptID
 	}
 	if attempt.ExecutionID != record.ID || attempt.State.Terminal() || attempt.Specification.AuthorityFence != fence || !store.now().Before(attempt.DeadlineAt) {
 		return "", execution.ErrConflict
+	}
+	if attempt.Specification.Engine != nil {
+		ref, err := attempt.Specification.EngineGatewayReference()
+		if err != nil || !store.now().Before(ref.ExpiresAt) {
+			return "", execution.ErrConflict
+		}
+		var data string
+		var engine rt.EngineAttempt
+		if err := tx.QueryRowContext(ctx, `SELECT record_json FROM engine_attempts WHERE attempt_id=?`, attemptID).Scan(&data); err != nil {
+			return "", execution.ErrConflict
+		}
+		if json.Unmarshal([]byte(data), &engine) != nil || !engine.AllowsCalls() {
+			return "", execution.ErrConflict
+		}
 	}
 	var pendingTokens, pendingCost int64
 	if err = tx.QueryRowContext(ctx, `SELECT COALESCE(SUM(reserved_tokens),0),COALESCE(SUM(reserved_cost_micros),0) FROM model_calls WHERE execution_id=? AND finished_at IS NULL`, executionID).Scan(&pendingTokens, &pendingCost); err != nil {

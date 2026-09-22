@@ -1,0 +1,10 @@
+{
+  "environment": "kind-marina-local on podman-machine-default-root",
+  "deployments_preserved": true,
+  "pvc_identities_preserved": true,
+  "intake_disabled": true,
+  "trial_namespaces_absent": true,
+  "trial_cluster_resources_absent": true,
+  "api_manifest_restored": true,
+  "deck_https_status": 200
+}

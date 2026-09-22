@@ -1,7 +1,7 @@
 # Integrate kagent and remove Marina's redundant agent engine
 
 - Date: 2026-09-22
-- Status: KINT-01/02 local feasibility passed; governed integration and rollout pending
+- Status: KINT-01–03 feasibility and lifecycle adapter passed; governed workload integration and rollout pending
 - Decision: [0017](decisions/0017-kagent-core-engine.md)
 - Tracking: [KINT-01–15 in TODO.md](../TODO.md#kagent-integration-and-marina-simplification)
 - Research: [adoption analysis](kagent-adoption.md)
@@ -23,8 +23,9 @@ images, Substrate and APIs before code depends on them. The analysis distinguish
 this source from the moving `0.x` docs; do not mix examples or infer compatibility.
 The [KINT-01/02 trial](validation/kint-01-02-2026-09-22.md) locked the candidate
 and proved isolated native runtime, persistence, resource feasibility and teardown
-on local Kind. The trial was removed afterward. Marina integration and legacy
-code deletion have not started. See the [exact lock and installation guide](../deploy/kubernetes/kagent-trial/README.md)
+on local Kind. The trial was removed afterward. [KINT-03](validation/kint-03-2026-09-22.md)
+adds the lifecycle adapter and durable correlation with isolated local recovery
+proof; governed workload dispatch and legacy deletion remain pending. See the [exact lock and installation guide](../deploy/kubernetes/kagent-trial/README.md)
 and [symbol/caller removal inventory](kagent-removal-inventory.md).
 
 ## Responsibility boundary
@@ -84,6 +85,11 @@ test → smallest passing change → relevant checks.
 **KINT-03 — Add the engine adapter and durable correlation. Owner: Marina.
 Depends: 01; live proof also depends on 02.**
 
+Completed within the [documented lifecycle boundary](validation/kint-03-2026-09-22.md).
+The adapter is not yet selected by installed workflows. Live proof exercised
+lost creation/deletion responses and an interrupted-before-admission message;
+accepted-message recovery and artifact collection have deterministic gRPC proof.
+
 - Implement start, lookup by recorded key, inspect, cancellation observation,
   artifact collection and cleanup at the existing runtime boundary. Add only
   the minimum types needed for a real kagent integration.
@@ -96,6 +102,17 @@ Depends: 01; live proof also depends on 02.**
 
 **KINT-04 — Connect governed model, context and source access. Owner: Marina.
 Depends: 03.**
+
+Completed: deterministic checks and real isolated local Substrate injection,
+credential rotation, cached-credential revocation/expiry, bypass denial and safe
+teardown passed. Deck authority and model responses were synthetic; installed
+workload dispatch and end-to-end failure acceptance remain later gates.
+See [KINT-04 evidence](validation/kint-04-2026-09-22.md) and the
+[gateway contract and installation recipe](../marina/internal/workerapi/README.md).
+Gateway credentials and templates are attempt-exclusive; template names cannot
+be reused after cleanup. Native web-search declarations are removed before
+forwarding without granting provider-hosted tools. Existing profiles remain on
+the supported runtime.
 
 - Reuse external admission, current-fence checks, token/time/cost reservations,
   unknown-usage accounting, context revocation and allowed-path/source controls.

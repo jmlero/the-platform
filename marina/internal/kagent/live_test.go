@@ -76,10 +76,18 @@ func TestLiveIsolatedLifecycle(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		f.adapter = kagent.New(f.conn, endpoint, f.store, f.blobs)
+		f.adapter = kagent.New(f.conn, endpoint, f.store, f.blobs, &admission{})
 	}
 	reconnect()
 	t.Cleanup(func() { f.conn.Close() })
+	t.Cleanup(func() {
+		if originalID != "" {
+			_, err := api.NewAgentInstanceServiceClient(f.conn).DeleteAgentInstance(ctx, &api.DeleteAgentInstanceRequest{AgentInstanceId: originalID})
+			if err != nil && status.Code(err) != codes.NotFound {
+				t.Errorf("trial instance cleanup: %v", err)
+			}
+		}
+	})
 	if _, err := f.adapter.Start(ctx, f.spec); err == nil {
 		t.Fatal("missing injected create loss")
 	}

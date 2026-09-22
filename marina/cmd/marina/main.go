@@ -385,6 +385,7 @@ func runServe(arguments []string, stderr io.Writer) int {
 	mux.Handle("/", healthHandler)
 	if workerHandler != nil {
 		mux.Handle("/workers/", workerHandler)
+		mux.Handle("/engine/", workerHandler)
 		mux.Handle("/artifacts/", workerHandler)
 	}
 	server := &http.Server{

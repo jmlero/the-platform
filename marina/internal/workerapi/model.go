@@ -90,8 +90,19 @@ func (server *Server) model(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var requestBody map[string]any
-	if json.Unmarshal(body, &requestBody) != nil || requestBody == nil || forbiddenModelInput(requestBody) || !localTools(requestBody["tools"]) {
+	if json.Unmarshal(body, &requestBody) != nil || requestBody == nil {
+		http.Error(w, "invalid model input", 400)
+		return
+	}
+	if attempt.Specification.Engine != nil && input.Stage == "implement" {
+		normalizeNativeModel(requestBody)
+	}
+	if forbiddenModelInput(requestBody) || !localTools(requestBody["tools"]) {
 		http.Error(w, "only self-contained text and local tools are supported", 400)
+		return
+	}
+	if attempt.Specification.Engine != nil && !engineModelFields(requestBody) {
+		http.Error(w, "unsupported engine Responses field", 400)
 		return
 	}
 	if input.Stage == "analyze" && !analysisTools(requestBody["tools"], attempt.Specification.Tools) {
@@ -237,6 +248,52 @@ func (server *Server) model(w http.ResponseWriter, r *http.Request) {
 		observe(payload)
 		_, _ = w.Write(payload)
 	}
+}
+
+// The pinned native Codex advertises web search even with no template tools.
+// Remove only its known declaration before forwarding: the model cannot select
+// an undeclared remote tool. Explicit search choices, other search shapes and
+// provider tools still fail validation. Transport-only client metadata is not
+// model context and is never forwarded to the upstream provider.
+func normalizeNativeModel(body map[string]any) {
+	delete(body, "client_metadata")
+	if tools, ok := body["tools"].([]any); ok {
+		local := make([]any, 0, len(tools))
+		for _, value := range tools {
+			tool, ok := value.(map[string]any)
+			if _, flag := tool["external_web_access"].(bool); ok && flag && len(tool) == 2 && tool["type"] == "web_search" {
+				continue
+			}
+			local = append(local, value)
+		}
+		body["tools"] = local
+	}
+}
+
+// Native runtimes use the existing self-contained Responses contract. Do not
+// pass new provider options through by default: background jobs, stored prompts,
+// server conversations and remote tools would escape the governed call/context.
+func engineModelFields(body map[string]any) bool {
+	for key, value := range body {
+		switch key {
+		case "model", "input", "instructions", "tools", "parallel_tool_calls", "reasoning", "stream", "store", "include", "prompt_cache_key", "text", "temperature", "top_p", "max_output_tokens", "metadata", "service_tier", "truncation":
+		case "tool_choice":
+			if choice, ok := value.(string); ok && choice != "auto" && choice != "none" && choice != "required" {
+				return false
+			}
+		case "previous_response_id", "conversation":
+			if value != nil {
+				return false
+			}
+		case "background":
+			if value != nil && value != false {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // DiagnosticReport is an output schema, not a tool with external side effects.

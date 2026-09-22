@@ -34,6 +34,37 @@ type engine struct {
 	revision                                               string
 }
 
+type admission struct {
+	err   error
+	calls int
+}
+
+func (g *admission) AdmitEngine(context.Context, rt.Specification) error { g.calls++; return g.err }
+
+func TestDispatchRequiresCurrentAdmissionIncludingRecovery(t *testing.T) {
+	e := &engine{loseCreate: true}
+	f := setup(t, e)
+	g := &admission{err: errors.New("revoked")}
+	f.adapter = kagent.New(f.conn, "test-engine", f.store, f.blobs, g)
+	if _, err := f.adapter.Start(context.Background(), f.spec); err == nil || e.creates != 0 {
+		t.Fatal("denied creation reached engine")
+	}
+	g.err = nil
+	f.adapter.Start(context.Background(), f.spec)
+	g.err = errors.New("new fence")
+	if _, err := f.adapter.InspectByKey(context.Background(), f.spec.IdempotencyKey); err == nil || e.creates != 1 || e.sends != 0 {
+		t.Fatal("recovery bypassed current admission")
+	}
+	// Missing admission also fails closed; cancellation must still be available.
+	f.adapter = kagent.New(f.conn, "test-engine", f.store, f.blobs, nil)
+	if _, err := f.adapter.InspectByKey(context.Background(), f.spec.IdempotencyKey); err == nil {
+		t.Fatal("missing admission accepted")
+	}
+	if _, err := f.adapter.Cancel(context.Background(), "kagent:"+f.spec.AttemptID, false); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func (e *engine) CreateAgentInstance(_ context.Context, r *api.CreateAgentInstanceRequest) (*api.CreateAgentInstanceResponse, error) {
 	e.creates++
 	if e.instance == nil {
@@ -145,7 +176,7 @@ func setup(t *testing.T, e *engine, selection ...rt.EngineSelection) *fixture {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { f.conn.Close() })
-	f.adapter = kagent.New(f.conn, "test-engine", f.store, f.blobs)
+	f.adapter = kagent.New(f.conn, "test-engine", f.store, f.blobs, &admission{})
 	return f
 }
 func (f *fixture) restart(t *testing.T) {
@@ -156,7 +187,7 @@ func (f *fixture) restart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.adapter = kagent.New(f.conn, "test-engine", f.store, f.blobs)
+	f.adapter = kagent.New(f.conn, "test-engine", f.store, f.blobs, &admission{})
 }
 
 func TestLostCreationAndMessageResponsesRecoverOriginalAttemptAfterRestart(t *testing.T) {
@@ -328,5 +359,77 @@ func TestCorrelationRejectsIdentityMutationAndStaleWrites(t *testing.T) {
 	s.Engine = &copy
 	if _, err = f.adapter.Start(ctx, s); !errors.Is(err, execution.ErrConflict) {
 		t.Fatalf("spec mutation: %v", err)
+	}
+}
+
+func TestCancellationOfUncertainCreationNeverSendsWork(t *testing.T) {
+	e := &engine{loseCreate: true}
+	f := setup(t, e)
+	ctx := context.Background()
+	f.adapter.Start(ctx, f.spec)
+	f.restart(t)
+	obs, err := f.adapter.Cancel(ctx, "kagent:"+f.spec.AttemptID, false)
+	if err != nil || obs.State != rt.StateCancelled || e.sends != 0 || e.instance != nil {
+		t.Fatalf("uncertain creation cancellation: %+v %v sends=%d", obs, err, e.sends)
+	}
+}
+
+func TestMissingBoundInstanceIsABlockerWithoutRecreation(t *testing.T) {
+	e := &engine{}
+	f := setup(t, e)
+	ctx := context.Background()
+	obs, err := f.adapter.Start(ctx, f.spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.instance = nil
+	f.restart(t)
+	if _, err = f.adapter.Inspect(ctx, obs.ProviderHandle); !errors.Is(err, kagent.ErrIdentity) {
+		t.Fatalf("missing instance: %v", err)
+	}
+	if e.creates != 1 || e.sends != 1 {
+		t.Fatal("recreated missing work")
+	}
+}
+
+func TestEngineCancelledStatusAloneDoesNotProveTermination(t *testing.T) {
+	e := &engine{failDelete: true}
+	f := setup(t, e)
+	ctx := context.Background()
+	obs, err := f.adapter.Start(ctx, f.spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.task.Status.State = a2a.TaskState_TASK_STATE_CANCELED
+	obs, err = f.adapter.Inspect(ctx, obs.ProviderHandle)
+	if err == nil || obs.State == rt.StateCancelled || e.deletes != 1 {
+		t.Fatalf("must attempt observed termination: %+v %v deletes=%d", obs, err, e.deletes)
+	}
+	e.failDelete = false
+	obs, err = f.adapter.InspectByKey(ctx, f.spec.IdempotencyKey)
+	if err != nil || obs.State != rt.StateCancelled {
+		t.Fatalf("termination recovery: %+v %v", obs, err)
+	}
+}
+
+func TestPendingInteractionRetainsExactTaskIdentityWithoutResume(t *testing.T) {
+	e := &engine{loseSend: true}
+	f := setup(t, e)
+	ctx := context.Background()
+	f.adapter.Start(ctx, f.spec)
+	e.task.Status.State = a2a.TaskState_TASK_STATE_INPUT_REQUIRED
+	f.restart(t)
+	if _, err := f.adapter.InspectByKey(ctx, f.spec.IdempotencyKey); err == nil {
+		t.Fatal("unsupported interaction did not block")
+	}
+	r, err := f.store.GetEngineAttempt(ctx, f.spec.AttemptID)
+	if err != nil || r.TaskID != "task-1" {
+		t.Fatalf("lost pending task identity: %+v %v", r, err)
+	}
+	if _, err = f.adapter.Resume(ctx, "kagent:"+f.spec.AttemptID); !errors.Is(err, rt.ErrUnsupportedResume) {
+		t.Fatal("resume was advertised")
+	}
+	if f.adapter.Capabilities().Resume || e.sends != 1 {
+		t.Fatal("interaction expanded runtime capabilities")
 	}
 }

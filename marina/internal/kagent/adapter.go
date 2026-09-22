@@ -24,9 +24,10 @@ import (
 const Version = "1.0.0-alpha1@850c464726881317997c32515f8b621b949d6ce1"
 
 var (
-	ErrDeliveryUnknown  = errors.New("kagent message delivery is uncertain; inspect the recorded instance, do not resend")
-	ErrRevisionMismatch = errors.New("kagent prepared revision differs from authorized revision")
-	ErrIdentity         = errors.New("kagent identity missing or changed; replacement work is forbidden")
+	ErrDeliveryUnknown     = errors.New("kagent message delivery is uncertain; inspect the recorded instance, do not resend")
+	ErrRevisionMismatch    = errors.New("kagent prepared revision differs from authorized revision")
+	ErrIdentity            = errors.New("kagent identity missing or changed; replacement work is forbidden")
+	ErrInteractionRequired = errors.New("kagent task needs unsupported interaction; KINT-08 required")
 )
 
 type Journal interface {
@@ -38,20 +39,34 @@ type Journal interface {
 	RecordRuntimeArtifact(context.Context, rt.Artifact) (rt.Artifact, bool, error)
 	ListRuntimeArtifacts(context.Context, string) ([]rt.Artifact, error)
 }
+
+// Admission is Marina's current authority check, including Deck and selected
+// context revocation. It is required before creating or sending work, also on
+// recovery. Observation and cancellation must not depend on fresh authority.
+type Admission interface {
+	AdmitEngine(context.Context, rt.Specification) error
+}
 type Adapter struct {
 	instances api.AgentInstanceServiceClient
 	tasks     a2a.A2AServiceClient
 	endpoint  string
 	journal   Journal
 	blobs     *artifacts.Store
+	admission Admission
 }
 
 var _ rt.Adapter = (*Adapter)(nil)
 
 // The caller owns the connection and its authenticated transport. Endpoint is
 // the installed endpoint identity bound in each immutable specification.
-func New(conn grpc.ClientConnInterface, endpoint string, journal Journal, blobs *artifacts.Store) *Adapter {
-	return &Adapter{instances: api.NewAgentInstanceServiceClient(conn), tasks: a2a.NewA2AServiceClient(conn), endpoint: endpoint, journal: journal, blobs: blobs}
+func New(conn grpc.ClientConnInterface, endpoint string, journal Journal, blobs *artifacts.Store, admission Admission) *Adapter {
+	return &Adapter{instances: api.NewAgentInstanceServiceClient(conn), tasks: a2a.NewA2AServiceClient(conn), endpoint: endpoint, journal: journal, blobs: blobs, admission: admission}
+}
+func (a *Adapter) admit(ctx context.Context, s rt.Specification) error {
+	if a.admission == nil {
+		return errors.New("kagent dispatch requires governed admission")
+	}
+	return a.admission.AdmitEngine(ctx, s)
 }
 func (*Adapter) Capabilities() rt.Capabilities { return rt.Capabilities{} }
 func (*Adapter) Resume(context.Context, string) (rt.Observation, error) {
@@ -137,6 +152,9 @@ func (a *Adapter) advance(ctx context.Context, s rt.Specification, r rt.EngineAt
 		return observation(r), ErrRevisionMismatch
 	}
 	if r.InstanceID == "" {
+		if err := a.admit(ctx, s); err != nil {
+			return observation(r), err
+		}
 		if !s.DeadlineAt.After(time.Now()) {
 			return observation(r), fmt.Errorf("engine start authority expired: %w", rt.ErrConflict)
 		}
@@ -185,6 +203,9 @@ func (a *Adapter) advance(ctx context.Context, s rt.Specification, r rt.EngineAt
 		}
 		body, err := a.blobs.Get(s.ContextDigest)
 		if err != nil {
+			return observation(r), err
+		}
+		if err := a.admit(ctx, s); err != nil {
 			return observation(r), err
 		}
 		// Persist send intent before crossing the network. Even a crash before send
@@ -276,15 +297,24 @@ func (a *Adapter) bindTask(ctx context.Context, r rt.EngineAttempt, t *a2a.Task)
 			return observation(r), ErrDeliveryUnknown
 		}
 	}
-	state, err := taskState(t.GetStatus().GetState())
-	if err != nil {
-		return observation(r), err
+	state, stateErr := taskState(t.GetStatus().GetState())
+	if stateErr != nil && !errors.Is(stateErr, ErrInteractionRequired) {
+		return observation(r), stateErr
 	}
 	r.TaskID = t.Id
 	r.Phase = "active"
 	r.State = state
-	r, err = a.save(ctx, r)
-	return observation(r), err
+	if t.GetStatus().GetState() == a2a.TaskState_TASK_STATE_CANCELED {
+		r.CancelRequested = true
+	}
+	r, err := a.save(ctx, r)
+	if err == nil && r.CancelRequested {
+		if err = a.delete(ctx, r); err != nil {
+			return observation(r), err
+		}
+		r, err = a.journal.GetEngineAttempt(ctx, r.AttemptID)
+	}
+	return observation(r), errors.Join(err, stateErr)
 }
 func taskState(s a2a.TaskState) (rt.State, error) {
 	switch s {
@@ -297,7 +327,7 @@ func taskState(s a2a.TaskState) (rt.State, error) {
 	case a2a.TaskState_TASK_STATE_CANCELED:
 		return rt.StateRunning, nil // deletion still required to prove termination
 	case a2a.TaskState_TASK_STATE_INPUT_REQUIRED, a2a.TaskState_TASK_STATE_AUTH_REQUIRED:
-		return "", errors.New("kagent task needs unsupported interaction; KINT-08 required")
+		return rt.StateRunning, ErrInteractionRequired
 	default:
 		return "", errors.New("kagent returned unknown task state")
 	}

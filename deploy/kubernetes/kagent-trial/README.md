@@ -46,7 +46,8 @@ There is no ingress, NodePort or UI. Administrative access is an authenticated
 Kubernetes port-forward bound to `127.0.0.1`. NetworkPolicy denies worker access
 to the controller, Deck, Kubernetes and the internet. Substrate uses generated
 pod certificates, trust bundles and Kubernetes-issued identity, in separate
-trial-owned namespaces. Its Secret reader is scoped to `kint-engine`; its
+trial-owned namespaces. Its Secret reader and atespace-to-namespace credential grant are scoped to
+`kint-engine`; its
 controller's Secret access is scoped to `ate-system`, and Deployment/WorkerPool/
 NetworkPolicy mutation is scoped to `kint-engine`. Required cluster watches and
 certificate signer grants remain. Exact cluster-scoped objects are listed in
@@ -63,8 +64,10 @@ The fixture has no upstream model/Git credential. Native Codex requires Response
 an exact DNS hostname and an API-key Secret reference. Its endpoint is the
 reserved nonexistent `no-inference.invalid:9`, with a locally generated random
 nonfunctional key. Do not invoke model tasks. No caller token passthrough,
-memory, tools or project context is configured. Full task admission, immediate
-revocation, budgets and the Marina gateway are KINT-03/04 work, not this trial.
+memory, tools or project context is configured. This no-inference fixture does not exercise governed calls. The separate
+[KINT-04 gateway recipe](GATEWAY.md) supplies synthetic model responses and tests
+Marina admission, injected credentials, revocation and budgets on this same
+isolated topology.
 
 ## Prepare and render
 
