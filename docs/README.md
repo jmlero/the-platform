@@ -8,6 +8,10 @@ Use the shortest document that answers the question:
 | Product direction | [Marina vision](../VISION.md), [Deck vision](../VISION_DECK.md), and [dark-factory definition](../DARK_FACTORY.md) |
 | Current ownership and runtime behavior | [Architecture](../ARCHITECTURE.md) |
 | Active work | [Backlog](../TODO.md) |
+| Backlog refinement, focused tasks and per-task context | [Work-preparation design](work-preparation.md), [decision 0018](decisions/0018-deck-work-preparation.md) |
+| Candidate projects for a real value pilot | [Repository assessment, 2026-09-22](pilot-project-assessment-2026-09-22.md) — Context Lens selected; ubahndoku completed |
+| Selected Context Lens pilot | [Task and worker preparation](../deploy/pilots/context-lens/README.md), [offline evidence and live gates](validation/context-lens-pilot-preparation-2026-09-22.md) |
+| Kagent integration and Marina code removal | [Implementation plan](kagent-integration-plan.md), [adoption analysis](kagent-adoption.md) |
 | Public Deck–Marina contract | [Contract map](../contracts/README.md) |
 | Local installation | [Podman/Kind guide](../deploy/kubernetes/local-podman/README.md) |
 | Repository workflow | [Installation guide](../deploy/kubernetes/first-release/README.md) |
@@ -35,6 +39,14 @@ The decisions most useful for understanding the current release are:
 - [0016](decisions/0016-workload-invocation-and-context-tool.md): public
   invocation and governed context reads
 
+The next engine direction is [0017](decisions/0017-kagent-core-engine.md): kagent
+integration and removal of redundant Marina execution code. KINT-01/02 local
+feasibility passed; governed integration and rollout remain pending.
+
+[0018](decisions/0018-deck-work-preparation.md) assigns backlog refinement and
+focused work preparation to Deck, with planning execution and immutable context
+assembly in Marina. PREP-01–08 implementation and acceptance remain pending.
+
 ## Validation
 
 Validation files are dated evidence snapshots. They support claims about a named
@@ -42,6 +54,7 @@ build and environment; they are not current operating instructions.
 
 | Scope | Evidence |
 | --- | --- |
+| Pinned kagent/Substrate, ARM64 native lifecycle, persistence, isolation and safe teardown | [KINT-01/02](validation/kint-01-02-2026-09-22.md), [lifecycle](validation/kint-01-02-lifecycle-2026-09-22.json), [resources](validation/kint-01-02-resources-2026-09-22.json), and [teardown](validation/kint-01-02-teardown-2026-09-22.json) |
 | Repository workflow, recovery, cancellation, failures, budgets, and final local state | [2026-09-21 acceptance](validation/poc-mvp-2026-09-21.md) and [machine-readable record](validation/poc-mvp-2026-09-21.json) |
 | Certificate rotation and artifact retention | [2026-09-17 operations](validation/first-release-operations-2026-09-17.md) |
 | Project context and repository association | [CTX-02–08](validation/ctx-02-08-2026-09-21.md) |

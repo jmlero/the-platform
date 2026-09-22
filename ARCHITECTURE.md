@@ -176,6 +176,22 @@ Live acceptance and deterministic coverage are indexed in
 
 ## Planned extensions
 
+[Decision 0018](docs/decisions/0018-deck-work-preparation.md) adds Deck-owned
+backlog refinement, versioned task breakdowns, dependencies, per-task context
+selections, budget allocations and readiness gates. Marina executes bounded
+planning assistance and eligible children, resolves selected sources, and owns
+the immutable packages actually delivered to agents. The
+[work-preparation design](docs/work-preparation.md) defines the handoff and
+PREP-01–08 delivery gates. These additions are planned; existing run plans do not
+provide a backlog-decomposition workflow.
+
+The accepted target in [decision 0017](docs/decisions/0017-kagent-core-engine.md)
+moves agent execution and engine interaction state to kagent while retaining
+Marina's governed workflows and Deck integration. The
+[implementation and removal plan](docs/kagent-integration-plan.md) tracks the
+adapter, proof, cutover and deletion of redundant Marina code. This is planned;
+the deployment and ownership descriptions above remain the implemented baseline.
+
 The active backlog is [TODO.md](TODO.md). The next product increments are
 task-linked web conversations, persistent unread result state, and bounded repair
 loops. Pause/resume, transparent harness-step recovery, independent semantic

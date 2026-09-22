@@ -4,9 +4,10 @@ Last reviewed: 2026-09-22.
 
 The supported release runs one bounded repository task or one pinned diagnostic
 analysis workload on local Kubernetes and returns verified evidence or a blocker.
-Repository work stops at a pull request for human review. The next product focus
-is durable conversation and result-return flows, followed by bounded repair
-loops.
+Repository work stops at a pull request for human review. The immediate engine
+priority is integrating kagent and removing redundant Marina execution code.
+Conversation and result-return flows should reuse that engine, followed by bounded
+repair loops. The current supported runtime remains in place until migration gates pass.
 
 IDs are stable and are never reused. `Open` means behavior is missing, `Decide`
 means a product choice is required, `Verify` means implementation exists but the
@@ -15,10 +16,81 @@ stated trigger. A row becomes `Done` only with linked evidence.
 
 ## Current priorities
 
+### Selected value pilot: Context Lens
+
+The operator selected Context Lens and confirmed ubahndoku is completed.
+The [assessment](docs/pilot-project-assessment-2026-09-22.md) and
+[pilot preparation](deploy/pilots/context-lens/README.md) define the bounded
+report/export/comparison increment. It can use the supported repository workflow;
+this does not claim the planned PREP or kagent capabilities are already available.
+
+| ID | State | Owner | Outcome |
+| --- | --- | --- | --- |
+| CLP-00 | Open | Operator/Ops | Bootstrap Context Lens CI, install/pin its offline worker and trusted checks, connect exact repository/context, and authorize only the selected task. [Offline preparation passed; CI and live setup remain](docs/validation/context-lens-pilot-preparation-2026-09-22.md). |
+| CLP-01 | Open | Pilot | After 00, implement the versioned privacy-safe report serializer/validator through Marina and return an independently verified PR. Deck draft: `tsk_c723190cc08ce495d5d1`. |
+| CLP-02 | Open | Pilot | After reviewed integration of 01, export the explicitly selected snapshot without private transcript/metadata leakage, preserving pause and error behavior. |
+| CLP-03 | Open | Pilot | After reviewed integration of 02, compare two valid reports locally with accurate metrics and explicit accounting limitations. |
+| CLP-04 | Open | Joint | After 01–03, record actual use, accepted results, blockers/rework and context continuity; distinguish product value from successful task execution. |
+
+### Kagent integration and Marina simplification
+
+[Decision 0017](docs/decisions/0017-kagent-core-engine.md) establishes the target:
+Deck remains the interface, Marina owns governed workflows, and kagent becomes
+the core agent engine. The [implementation and removal plan](docs/kagent-integration-plan.md)
+contains dependencies, acceptance criteria, concrete deletion targets and rollback.
+KINT-01/02 passed the isolated local feasibility trial; the trial was removed
+after teardown proof. Governed workload integration and migration remain planned.
+
+| ID | State | Owner | Outcome |
+| --- | --- | --- | --- |
+| KINT-01 | Done | Marina/Ops | Pinned source/charts/ARM64 images/APIs and recorded ownership, removal gates and baseline. [Lock and inventory evidence](docs/validation/kint-01-02-2026-09-22.md#kint-01-lock-and-ownership). |
+| KINT-02 | Done | Ops | Native Codex snapshot/restore, durable instance identity, isolation, resource sample and safe teardown passed on local Kind. [Live evidence and limits](docs/validation/kint-01-02-2026-09-22.md). |
+| KINT-03 | Open | Marina | After 01, implement engine lifecycle and durable identity/revision mapping; prove ambiguous-start and reconnect recovery on 02. |
+| KINT-04 | Open | Marina | After 03, enforce attempt-scoped model/tool/source access, fences, revocation and durable budgets through kagent execution. |
+| KINT-05 | Open | Marina | After 03–04, separate result validation and independent deterministic verification from legacy agent hosting. |
+| KINT-06 | Open | Marina | After 02–05, run the repository-to-verified-PR workflow through native kagent Codex. |
+| KINT-07 | Open | Marina | After 02–05, run the pinned LangChain diagnostic workload through kagent BYO with unchanged evidence and authority rules. |
+| KINT-08 | Open | Joint | After 03–04, project engine state and bridge exact pending questions/answers without a second conversation runtime or duplicate results. |
+| KINT-09 | Open | Joint | After 06–08, pass both workloads and the mandatory live failure matrix through real Deck/Marina/kagent. |
+| KINT-10 | Open | Ops/Marina | After 02 and 06–07, prove installation upgrade, credential handling, retained history and data-preserving rollback; measure full footprint. |
+| KINT-11 | Open | Marina/Ops | After 09–10, drain legacy executions and cut over both newly authorized profiles to kagent. |
+| KINT-12 | Open | Marina | After 11, delete replaced Codex/Python launch paths, agent Job support and unused worker entry/protocol branches. |
+| KINT-13 | Open | Marina | After 12, remove duplicated runtime/journal machinery while retaining workflow recovery, accounting and historical inspection. |
+| KINT-14 | Open | Marina/Ops | After 12–13, remove unused images, dependencies, configuration, grants and installation branches; retain necessary verification/BYO code only. |
+| KINT-15 | Open | Joint | After 14, verify the final simplified build, fresh install and live workflows; publish removal evidence and update supported-behavior documentation. |
+
+KINT-12–14 are required delivery work, not optional cleanup. A failed integration
+gate stops dependent cutover/deletion. Retain the working release while resolving
+the failure; do not leave a permanent dual-engine installation by default.
+
+### Backlog refinement and focused task preparation
+
+[Decision 0018](docs/decisions/0018-deck-work-preparation.md) establishes Deck's
+ownership of preparing small tasks and selecting their context. Marina runs
+planning assistance and governed execution. The
+[implementation design](docs/work-preparation.md) gives detailed acceptance
+criteria. Manual Deck work can proceed alongside KINT; new planning execution
+follows KINT-15. Start with one parent level and sequential children, preserving
+the human-review PR boundary. All PREP behavior is planned.
+
+| ID | State | Owner | Outcome |
+| --- | --- | --- | --- |
+| PREP-01 | Open | Deck/Joint | Define additive contracts and persist versioned work packages, breakdowns and child identities; preserve migration/export/import and reject stale edits or cyclic dependencies. |
+| PREP-02 | Open | Deck | After 01, support manual breakdown and atomic acceptance with criterion coverage, focused briefs and idempotent child creation. |
+| PREP-03 | Open | Joint | After 02, select and inspect per-child context, preserve mandatory guidance, and bind exact prerequisite inputs without mutating active work. |
+| PREP-04 | Open | Joint | After 02–03, enforce aggregate allocations, authorization, sequential release and review capacity at every claim path, including cancellation and ambiguous usage. |
+| PREP-05 | Open | Marina/Joint | After 03–04 and KINT-15, run a bounded read-only planning profile that proposes validated breakdowns without self-authorization or repository mutation. |
+| PREP-06 | Open | Joint | After 04–05, reconcile dependency evidence, parent acceptance/cancellation and usage; never treat an unmerged PR as an available code prerequisite. |
+| PREP-07 | Open | Joint | After 01–06, pass product checks and real-process conformance for preparation, dispatch, budgets, immutable context and recovery failure cases. |
+| PREP-08 | Open | Joint | After 07, prove the broad-outcome-to-focused-results flow in the local browser/Kind installation, including restart, and record redacted evidence. |
+
 ### Conversation and delegation
 
 These tasks implement [decision 0009](docs/decisions/0009-asynchronous-agent-work.md)
 using the existing Deck channels, task ledger, and explicit project context.
+CHAT-04/05/07 reuse KINT's engine and interaction integration; their full product
+acceptance remains separate. Intent/UI design and independent Deck work can
+continue while the engine migration is underway.
 
 | ID | State | Owner | Outcome |
 | --- | --- | --- | --- |
@@ -47,6 +119,8 @@ using the existing Deck channels, task ledger, and explicit project context.
 
 Preserve human merge and deployment authority. A new revision must receive fresh
 verification and current-head evidence.
+Implement new engine-dependent repair behavior after KINT-15 using kagent;
+AUTO-01 and AUTO-07 policy decisions can be specified earlier.
 
 | ID | State | Owner | Outcome |
 | --- | --- | --- | --- |

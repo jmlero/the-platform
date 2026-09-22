@@ -1,0 +1,225 @@
+{
+  "schema": 1,
+  "status": "qualified for KINT-01/02 local lifecycle trial only; governed workload acceptance remains KINT-03 onward",
+  "kagent_commit": "850c464726881317997c32515f8b621b949d6ce1",
+  "substrate_commit": "a7701e8dc8cb63a18d63e7fe771aff5a5ecca279",
+  "charts": [
+    {
+      "name": "kagent",
+      "version": "1.0.0-alpha1",
+      "url": "oci://ghcr.io/kagent-dev/kagent/helm/kagent",
+      "oci_digest": "sha256:1b4621d58c717a305bd649b7d62b7d397e574348b1a07c8150fa708de46afddc",
+      "archive": "kagent-1.0.0-alpha1.tgz",
+      "sha256": "3fb845e4235b39e43e7451944b0f967a583b4b5e68d5a1a8c5cfb1c1b8d3f963"
+    },
+    {
+      "name": "kagent-crds",
+      "version": "1.0.0-alpha1",
+      "url": "oci://ghcr.io/kagent-dev/kagent/helm/kagent-crds",
+      "oci_digest": "sha256:b3827dff329bed1911733d88d23edfbd0d87d4b6c65a3f31c66ec34282a93504",
+      "archive": "kagent-crds-1.0.0-alpha1.tgz",
+      "sha256": "a3b28d44808177c68b62b18fc319cd8c6c1e0f57d2dafcd2d7435c9a5bb7c50d"
+    },
+    {
+      "name": "substrate",
+      "version": "0.2.0-beta4",
+      "url": "oci://ghcr.io/kagent-dev/substrate/helm/substrate",
+      "oci_digest": "sha256:96582a7fa698e254aa656c970d43c7a1af3abf97c906c47a27c46cc8c50bd1b1",
+      "archive": "substrate-0.2.0-beta4.tgz",
+      "sha256": "0bf99e3f3b3964bc8ff5b0a2d5a69052a4238c26bdd81425545c75d3200ceab7"
+    },
+    {
+      "name": "substrate-crds",
+      "version": "0.2.0-beta4",
+      "url": "oci://ghcr.io/kagent-dev/substrate/helm/substrate-crds",
+      "oci_digest": "sha256:6f8484a0ddab9228ae09bf65b8f663bddeb88e24bede347f7fd80c575cd41829",
+      "archive": "substrate-crds-0.2.0-beta4.tgz",
+      "sha256": "fc9b5b72f7838bf392c019bd678c0daa31794c2e1efbec3c1a4ee15fc1dc3968"
+    }
+  ],
+  "images": [
+    {
+      "upstream": "amazon/aws-cli@sha256:643507c10ada7964ca6157b3d799f030b90577643da9955d319a77399ed80d73",
+      "pinned": "docker.io/amazon/aws-cli@sha256:5c849527880984df073af10d635a99ae7f6f21f84bcf5f2581ab8c2d759d7e4a",
+      "platform": "linux/arm64"
+    },
+    {
+      "upstream": "ghcr.io/agentgateway/agentgateway@sha256:fdde26d4b0ea11d3e740dc19905dfe9b26e88f40fa8b9985f94ed1d8420e389e",
+      "pinned": "ghcr.io/agentgateway/agentgateway@sha256:51b9a5f25af686f0f9a6dbbb808cb43a41dee9077a0265d2512d350bc51d1e90",
+      "platform": "linux/arm64"
+    },
+    {
+      "upstream": "ghcr.io/kagent-dev/substrate/ateapi:v0.2.0-beta4",
+      "pinned": "ghcr.io/kagent-dev/substrate/ateapi@sha256:734d3d7d325132b18133a47b982f53e853204fd62ecd75483ccedd66322f10e1",
+      "platform": "linux/arm64"
+    },
+    {
+      "upstream": "ghcr.io/kagent-dev/substrate/atecontroller:v0.2.0-beta4",
+      "pinned": "ghcr.io/kagent-dev/substrate/atecontroller@sha256:02624170f16dd358ecbb9104ed6dec43cca0bbdc808298e7fc03736e47eb8a72",
+      "platform": "linux/arm64"
+    },
+    {
+      "upstream": "ghcr.io/kagent-dev/substrate/atelet:v0.2.0-beta4",
+      "pinned": "ghcr.io/kagent-dev/substrate/atelet@sha256:01dbb957836356509a1b6891c2e245ab8bb6d15fb11d766d5132a8159883271d",
+      "platform": "linux/arm64"
+    },
+    {
+      "upstream": "ghcr.io/kagent-dev/substrate/atenet:v0.2.0-beta4",
+      "pinned": "ghcr.io/kagent-dev/substrate/atenet@sha256:fb016b694733b6d804f4a84cc78c5529f6a73960b0a676d923533c9d744bcd81",
+      "platform": "linux/arm64"
+    },
+    {
+      "upstream": "ghcr.io/kagent-dev/substrate/kubernetes-secrets:v0.2.0-beta4",
+      "pinned": "ghcr.io/kagent-dev/substrate/kubernetes-secrets@sha256:248fa78a8624a4e8eb945a782541465f952fc7656cc730ef0a172ad8eb0b0c37",
+      "platform": "linux/arm64"
+    },
+    {
+      "upstream": "ghcr.io/kagent-dev/substrate/podcertcontroller:v0.2.0-beta4",
+      "pinned": "ghcr.io/kagent-dev/substrate/podcertcontroller@sha256:418699ec98e5f80e6d778bd9d55c9b36f7272ba31650bc6ee575d88fe951235a",
+      "platform": "linux/arm64"
+    },
+    {
+      "upstream": "postgres@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15",
+      "pinned": "docker.io/library/postgres@sha256:122c9942437efcbbb8d595fc578dee7d26ee1543c2a8634d183adfa4a1e55b4d",
+      "platform": "linux/arm64"
+    },
+    {
+      "upstream": "rustfs/rustfs@sha256:378642b05b7dcb4849fb77ebe6aca4ced1c3f66e7e504247df95a5c9018d3358",
+      "pinned": "docker.io/rustfs/rustfs@sha256:c43b2bfc0c4bf396f48021fd45bec73a409b4d4c91c3238b071a6a2f92780415",
+      "platform": "linux/arm64"
+    },
+    {
+      "upstream": "ghcr.io/kagent-dev/substrate/ateom-gvisor:v0.2.0-beta4",
+      "pinned": "ghcr.io/kagent-dev/substrate/ateom-gvisor@sha256:421c6c509659061867557e89fbb9fce0a67f23b8ecf53a2365c685f5860bd291",
+      "platform": "linux/arm64"
+    },
+    {
+      "upstream": "ghcr.io/kagent-dev/kagent/controller:1.0.0-alpha1",
+      "pinned": "ghcr.io/kagent-dev/kagent/controller@sha256:b60c5df1645875530a6db71c0398e0d775bd8760a3083a1051aa81ff756c0d73",
+      "platform": "linux/arm64"
+    },
+    {
+      "upstream": "ghcr.io/kagent-dev/kagent/golang-adk:1.0.0-alpha1",
+      "pinned": "ghcr.io/kagent-dev/kagent/golang-adk@sha256:14d7a2bad649294ddda1042516e762d91e97d82e256586d7ea02bd53a852c84e",
+      "platform": "linux/arm64"
+    },
+    {
+      "upstream": "ghcr.io/kagent-dev/kagent/codex-harness:1.0.0-alpha1",
+      "pinned": "ghcr.io/kagent-dev/kagent/codex-harness@sha256:91f69cef4d02e30c078f866167a103853c4446f315e2aa59e6c4db8696881c85",
+      "platform": "linux/arm64"
+    },
+    {
+      "upstream": "docker.io/library/postgres:18.6-alpine3.23",
+      "pinned": "docker.io/library/postgres@sha256:1d70b0960b2d1c39a0a82cda0d19d78b9b676d64b2120efe82631cd9768d1814",
+      "platform": "linux/arm64"
+    },
+    {
+      "upstream": "registry.k8s.io/pause@sha256:f548e0e8e3dc1896ca956272154dde3314e8cc4fde0a57577ee9fa1c63f5baf4",
+      "pinned": "registry.k8s.io/pause@sha256:a433214620b407678934ebd69690a9ed6066247231eacfba181fab20dbc3dbf1",
+      "platform": "linux/arm64"
+    }
+  ],
+  "apis": {
+    "kagent_crds": "kagent.dev/v1alpha3",
+    "kagent_grpc": "kagent.api.v1alpha1",
+    "a2a_go": "v2.5.0",
+    "substrate_crds": "ate.dev/v1alpha1",
+    "certificates": "certificates.k8s.io/v1beta1"
+  },
+  "sandbox_asset": {
+    "url": "https://storage.googleapis.com/gvisor/releases/nightly/2026-09-02/aarch64/gvisor.tar.zstd",
+    "sha256": "a64916f9813ce7e4841a30480a599337f7dda07b421c6bf0123db2212aa7d1df"
+  },
+  "helm": {
+    "version": "v3.19.0",
+    "darwin_arm64_archive_sha256": "31513e1193da4eb4ae042eb5f98ef9aca7890cfa136f4707c8d4f70e2115bef6"
+  },
+  "source_files": [
+    {
+      "component": "kagent",
+      "path": "go/go.mod",
+      "sha256": "13b068e958bd2e181dd1fe7d9cb37ed2b4483bf6cfc44c0f1faed4249e55e961"
+    },
+    {
+      "component": "kagent",
+      "path": "go/go.sum",
+      "sha256": "923a13ff3a41febe3e6f8b18ba4ade756b8018635bbc22adfd817a164a8f53c8"
+    },
+    {
+      "component": "kagent",
+      "path": "proto/a2a.proto",
+      "sha256": "e195bf96ab630c69797851970203e1b2b6b19528f2e9803b7d904b91a5104016"
+    },
+    {
+      "component": "kagent",
+      "path": "proto/ateapi.proto",
+      "sha256": "818b48ea92f5fcb05f613853ede4fbe28f8fc308f51c6243c20e25959188208a"
+    },
+    {
+      "component": "kagent",
+      "path": "LICENSE",
+      "sha256": "3b1ee5b1e14fda40515c18ec2f0796d632e65a20b2aca8f017c654bc26ca77bd"
+    },
+    {
+      "component": "substrate",
+      "path": "go.mod",
+      "sha256": "068a56b3551dde0d6e144455ad43cc6507af0def7124793d920067d6a72ea942"
+    },
+    {
+      "component": "substrate",
+      "path": "go.sum",
+      "sha256": "3fa7574752fa8d26fcc2bb4160b842b9d79bb8ae8e9b4436ac0aa8fa4be18bbd"
+    },
+    {
+      "component": "substrate",
+      "path": "vendor/modules.txt",
+      "sha256": "b875c9a16dfd7def111b3c67f4ff6b6476eadf2a74dd30b81bbd8688591cdf14"
+    },
+    {
+      "component": "substrate",
+      "path": "LICENSE",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    }
+  ],
+  "cli_assets": [
+    {
+      "name": "kubectl-ate",
+      "sha256": "11968986732dd5ddbe5049994b46e82a2eeee21d11facd8f1ee51f3378f6dac4"
+    },
+    {
+      "name": "kagent-cli",
+      "sha256": "7a89b0430311c032882edb49b49976624d54359726000116814a808a184300c5"
+    }
+  ],
+  "substrate_transitive_license_bundle": {
+    "path": "_LICENSES",
+    "files": 268,
+    "tree_sha256": "3b53f2ea0ed00b17ee2061e366f86243de147b3666244f007a504305eac03b74",
+    "algorithm": "sorted relative path UTF-8 + NUL + SHA256(file bytes), concatenated then SHA256"
+  },
+  "licenses": {
+    "kagent": "Apache-2.0",
+    "substrate": "Apache-2.0",
+    "gvisor": "Apache-2.0",
+    "agentgateway": "Apache-2.0",
+    "codex": "Apache-2.0",
+    "rustfs": "Apache-2.0",
+    "aws_cli": "Apache-2.0",
+    "postgresql": "PostgreSQL",
+    "pause": "Apache-2.0",
+    "image_os_components": "Contained in pinned OCI images; retain image license notices on redistribution."
+  },
+  "disabled_chart_dependencies": {
+    "kmcp": "0.3.0",
+    "kagent-tools": "0.2.1",
+    "grafana-mcp": "1.0.0-alpha1",
+    "oauth2-proxy": "10.7.0"
+  },
+  "build_requirements": {
+    "kagent_go": "1.27.0",
+    "substrate_go": "1.27.0",
+    "native_codex_cli": "0.148.0",
+    "trial_kubernetes": "1.37.0",
+    "architecture": "linux/arm64"
+  }
+}

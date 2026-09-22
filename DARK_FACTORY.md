@@ -26,6 +26,14 @@ Humans remain responsible for product direction, architecture, acceptable risk,
 evidence standards, and decisions that must never be delegated. The factory owns
 the repeatable engineering work already authorized by those choices.
 
+Deck owns the preparation flow between these loops: prioritize backlog outcomes,
+break them into focused verifiable tasks, select their context, and record bounded
+authorization. Marina runs planning assistance and executes eligible work. This
+accepted direction is specified in
+[decision 0018](docs/decisions/0018-deck-work-preparation.md) and remains planned.
+Release work at the rate verification and review can support; small tasks must
+still preserve coherent architectural boundaries.
+
 ## What Marina contributes
 
 | Factory concept | Platform component |

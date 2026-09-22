@@ -1,0 +1,332 @@
+package kagent_test
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	a2a "github.com/a2aproject/a2a-go/v2/a2apb/v1"
+	"github.com/jmlero/the-platform/marina/internal/artifacts"
+	"github.com/jmlero/the-platform/marina/internal/execution"
+	"github.com/jmlero/the-platform/marina/internal/journal/sqlite"
+	"github.com/jmlero/the-platform/marina/internal/kagent"
+	rt "github.com/jmlero/the-platform/marina/internal/runtime"
+	api "github.com/kagent-dev/kagent/go/api/gen/kagent/api/v1alpha1"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
+	"google.golang.org/grpc/test/bufconn"
+)
+
+type engine struct {
+	api.UnimplementedAgentInstanceServiceServer
+	a2a.UnimplementedA2AServiceServer
+	instance                                               *api.AgentInstance
+	task                                                   *a2a.Task
+	creates, sends, deletes                                int
+	loseCreate, loseSend, loseDelete, hideTask, failDelete bool
+	revision                                               string
+}
+
+func (e *engine) CreateAgentInstance(_ context.Context, r *api.CreateAgentInstanceRequest) (*api.CreateAgentInstanceResponse, error) {
+	e.creates++
+	if e.instance == nil {
+		e.instance = &api.AgentInstance{Id: "instance-1", Harness: r.Harness, AgentTemplate: r.AgentTemplate, PreparedRevision: e.revision, ContextId: "context-1", A2AAuthority: "recorded-route", State: api.AgentInstanceState_AGENT_INSTANCE_STATE_READY}
+	}
+	if e.loseCreate {
+		e.loseCreate = false
+		return nil, status.Error(codes.Unavailable, "response lost")
+	}
+	return &api.CreateAgentInstanceResponse{AgentInstance: e.instance}, nil
+}
+func (e *engine) GetAgentInstance(context.Context, *api.GetAgentInstanceRequest) (*api.GetAgentInstanceResponse, error) {
+	if e.instance == nil {
+		return nil, status.Error(codes.NotFound, "gone")
+	}
+	return &api.GetAgentInstanceResponse{AgentInstance: e.instance}, nil
+}
+func (e *engine) DeleteAgentInstance(context.Context, *api.DeleteAgentInstanceRequest) (*api.DeleteAgentInstanceResponse, error) {
+	e.deletes++
+	if e.failDelete {
+		return nil, status.Error(codes.Unavailable, "still running")
+	}
+	e.instance = nil
+	if e.loseDelete {
+		e.loseDelete = false
+		return nil, status.Error(codes.Unavailable, "response lost")
+	}
+	return &api.DeleteAgentInstanceResponse{AgentInstance: &api.AgentInstance{State: api.AgentInstanceState_AGENT_INSTANCE_STATE_DELETED}}, nil
+}
+func (e *engine) SendMessage(_ context.Context, r *a2a.SendMessageRequest) (*a2a.SendMessageResponse, error) {
+	e.sends++
+	e.task = &a2a.Task{Id: "task-1", ContextId: r.Message.ContextId, History: []*a2a.Message{r.Message}, Status: &a2a.TaskStatus{State: a2a.TaskState_TASK_STATE_WORKING}}
+	if e.loseSend {
+		return nil, status.Error(codes.Unavailable, "response lost")
+	}
+	return &a2a.SendMessageResponse{Payload: &a2a.SendMessageResponse_Task{Task: e.task}}, nil
+}
+func (e *engine) ListTasks(context.Context, *a2a.ListTasksRequest) (*a2a.ListTasksResponse, error) {
+	r := &a2a.ListTasksResponse{}
+	if e.task != nil && !e.hideTask {
+		r.Tasks = []*a2a.Task{e.task}
+	}
+	return r, nil
+}
+func (e *engine) GetTask(context.Context, *a2a.GetTaskRequest) (*a2a.Task, error) {
+	if e.task == nil {
+		return nil, status.Error(codes.NotFound, "gone")
+	}
+	return e.task, nil
+}
+
+type fixture struct {
+	adapter *kagent.Adapter
+	store   *sqlite.Store
+	spec    rt.Specification
+	path    string
+	conn    *grpc.ClientConn
+	blobs   *artifacts.Store
+}
+
+func setup(t *testing.T, e *engine, selection ...rt.EngineSelection) *fixture {
+	t.Helper()
+	ctx := context.Background()
+	dir := t.TempDir()
+	f := &fixture{path: filepath.Join(dir, "journal.db")}
+	var err error
+	f.store, err = sqlite.Open(ctx, f.path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { f.store.Close() })
+	f.blobs, err = artifacts.New(filepath.Join(dir, "artifacts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest, err := f.blobs.Put([]byte(`{"task":"synthetic lifecycle test"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	ex, _, err := f.store.EnsureExecution(ctx, execution.NewExecution{WorkProvider: "deck", ExternalWorkID: "work", ExternalRunID: "run", AgentID: "marina", LeaseExpiresAt: now.Add(time.Hour), Budget: execution.Budget{DeadlineAt: now.Add(time.Hour), MaxAttempts: 2, MaxTokens: 100}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := rt.Specification{IdempotencyKey: "start-key", RepositoryURI: "https://example.invalid/repo", SourceRevision: "abc", ContextURI: "artifact://" + digest, ContextDigest: digest, ProfileDigest: strings.Repeat("a", 64), HarnessVersion: "fixture/v1", PolicyVersion: "policy/v1", AuthorityFence: ex.FenceToken, DeadlineAt: now.Add(time.Minute * 30), NetworkPolicy: "isolated", FilesystemPolicy: "workspace", Limits: rt.Limits{CPUMillis: 1, MemoryBytes: 1, EphemeralStorageBytes: 1, WallTimeSeconds: 60, MaxProcesses: 1}, Engine: &rt.EngineSelection{Backend: "kagent", Version: kagent.Version, Endpoint: "test-engine", Namespace: "trial", Harness: "codex", Template: "fixture", Revision: strings.Repeat("b", 64)}}
+	if len(selection) > 0 {
+		s.Engine = &selection[0]
+		s.IdempotencyKey = fmt.Sprintf("kint-03-%d", time.Now().UnixNano())
+	}
+	if e != nil {
+		e.revision = s.Engine.Revision
+	}
+	_, attempt, _, err := f.store.EnsureRuntimeAttempt(ctx, ex.ID, ex.Version, s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.spec = attempt.Specification
+	if e == nil {
+		return f
+	}
+	listener := bufconn.Listen(8 << 20)
+	server := grpc.NewServer()
+	api.RegisterAgentInstanceServiceServer(server, e)
+	a2a.RegisterA2AServiceServer(server, e)
+	go server.Serve(listener)
+	t.Cleanup(server.Stop)
+	f.conn, err = grpc.NewClient("passthrough:///engine", grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) { return listener.Dial() }))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { f.conn.Close() })
+	f.adapter = kagent.New(f.conn, "test-engine", f.store, f.blobs)
+	return f
+}
+func (f *fixture) restart(t *testing.T) {
+	t.Helper()
+	f.store.Close()
+	var err error
+	f.store, err = sqlite.Open(context.Background(), f.path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.adapter = kagent.New(f.conn, "test-engine", f.store, f.blobs)
+}
+
+func TestLostCreationAndMessageResponsesRecoverOriginalAttemptAfterRestart(t *testing.T) {
+	e := &engine{loseCreate: true, loseSend: true}
+	f := setup(t, e)
+	ctx := context.Background()
+	if _, err := f.adapter.Start(ctx, f.spec); err == nil {
+		t.Fatal("wanted uncertain create")
+	}
+	f.restart(t)
+	if _, err := f.adapter.InspectByKey(ctx, f.spec.IdempotencyKey); err == nil {
+		t.Fatal("wanted uncertain message")
+	}
+	f.restart(t)
+	obs, err := f.adapter.InspectByKey(ctx, f.spec.IdempotencyKey)
+	if err != nil || obs.State != rt.StateRunning {
+		t.Fatalf("recovery: %+v %v", obs, err)
+	}
+	if _, err = f.adapter.Start(ctx, f.spec); err != nil {
+		t.Fatal(err)
+	}
+	if e.creates != 2 || e.sends != 1 {
+		t.Fatalf("duplicate work: creates=%d sends=%d", e.creates, e.sends)
+	}
+	record, err := f.store.GetEngineAttempt(ctx, f.spec.AttemptID)
+	if err != nil || record.TaskID != "task-1" || record.ContextID != "context-1" || record.Route != "recorded-route" {
+		t.Fatalf("correlation: %+v %v", record, err)
+	}
+}
+func TestUnknownDeliveryNeverResends(t *testing.T) {
+	e := &engine{loseSend: true, hideTask: true}
+	f := setup(t, e)
+	ctx := context.Background()
+	f.adapter.Start(ctx, f.spec)
+	f.restart(t)
+	for i := 0; i < 2; i++ {
+		if _, err := f.adapter.InspectByKey(ctx, f.spec.IdempotencyKey); !errors.Is(err, kagent.ErrDeliveryUnknown) {
+			t.Fatalf("want truthful blocker: %v", err)
+		}
+	}
+	if e.sends != 1 {
+		t.Fatal("message was resent")
+	}
+}
+func TestChangedTemplateRevisionCannotReceiveWork(t *testing.T) {
+	e := &engine{}
+	f := setup(t, e)
+	e.revision = strings.Repeat("c", 64)
+	if _, err := f.adapter.Start(context.Background(), f.spec); !errors.Is(err, kagent.ErrRevisionMismatch) {
+		t.Fatalf("revision error: %v", err)
+	}
+	f.restart(t)
+	f.adapter.InspectByKey(context.Background(), f.spec.IdempotencyKey)
+	if e.sends != 0 {
+		t.Fatal("unauthorized revision received work")
+	}
+}
+func TestCancellationWaitsForDeletionAndRecoversLostResponse(t *testing.T) {
+	e := &engine{failDelete: true}
+	f := setup(t, e)
+	ctx := context.Background()
+	obs, err := f.adapter.Start(ctx, f.spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = f.adapter.Cancel(ctx, obs.ProviderHandle, true); err == nil {
+		t.Fatal("premature cancellation")
+	}
+	f.restart(t)
+	e.failDelete = false
+	e.loseDelete = true
+	if _, err = f.adapter.Cancel(ctx, obs.ProviderHandle, true); err == nil {
+		t.Fatal("wanted lost delete response")
+	}
+	f.restart(t)
+	obs, err = f.adapter.InspectByKey(ctx, f.spec.IdempotencyKey)
+	if err != nil || obs.State != rt.StateCancelled {
+		t.Fatalf("cancellation recovery: %+v %v", obs, err)
+	}
+	if e.creates != 1 || e.sends != 1 {
+		t.Fatal("replacement work during cancellation")
+	}
+}
+
+func TestCleanupPreservesArtifactsAcrossRestartAndNeverRecreatesInstance(t *testing.T) {
+	e := &engine{}
+	f := setup(t, e)
+	ctx := context.Background()
+	obs, err := f.adapter.Start(ctx, f.spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.task.Status.State = a2a.TaskState_TASK_STATE_COMPLETED
+	e.task.Artifacts = []*a2a.Artifact{{ArtifactId: "output", Parts: []*a2a.Part{{Content: &a2a.Part_Text{Text: "unverified result"}}}}}
+	obs, err = f.adapter.Inspect(ctx, obs.ProviderHandle)
+	if err != nil || obs.State != rt.StateSucceeded {
+		t.Fatalf("completion observation: %+v %v", obs, err)
+	}
+	if err = f.adapter.Cleanup(ctx, obs.ProviderHandle); err == nil {
+		t.Fatal("deleted uncollected results")
+	}
+	outputs, err := f.adapter.CollectArtifacts(ctx, obs.ProviderHandle)
+	if err != nil || len(outputs) != 1 {
+		t.Fatalf("outputs: %+v %v", outputs, err)
+	}
+	original := outputs[0]
+	bytes, err := f.blobs.Get(original.Digest)
+	if err != nil || !strings.Contains(string(bytes), "unverified result") {
+		t.Fatalf("artifact: %s %v", bytes, err)
+	}
+	if err = f.adapter.Cleanup(ctx, obs.ProviderHandle); err != nil {
+		t.Fatal(err)
+	}
+	f.restart(t)
+	outputs, err = f.adapter.CollectArtifacts(ctx, obs.ProviderHandle)
+	if err != nil || len(outputs) != 1 || outputs[0] != original {
+		t.Fatalf("retained outputs: %+v %v", outputs, err)
+	}
+	if _, err = f.adapter.Start(ctx, f.spec); err != nil {
+		t.Fatal(err)
+	}
+	if e.creates != 1 || e.sends != 1 {
+		t.Fatal("recreated deleted instance")
+	}
+}
+
+func TestCancellationDoesNotDeleteChangedInstanceIdentity(t *testing.T) {
+	e := &engine{}
+	f := setup(t, e)
+	ctx := context.Background()
+	obs, err := f.adapter.Start(ctx, f.spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.instance.ContextId = "other-context"
+	if _, err = f.adapter.Cancel(ctx, obs.ProviderHandle, true); !errors.Is(err, kagent.ErrIdentity) {
+		t.Fatalf("wanted identity blocker: %v", err)
+	}
+	if e.deletes != 0 {
+		t.Fatal("deleted an unexpected instance")
+	}
+}
+
+func TestCorrelationRejectsIdentityMutationAndStaleWrites(t *testing.T) {
+	e := &engine{}
+	f := setup(t, e)
+	ctx := context.Background()
+	if _, err := f.adapter.Start(ctx, f.spec); err != nil {
+		t.Fatal(err)
+	}
+	r, err := f.store.GetEngineAttempt(ctx, f.spec.AttemptID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed := r
+	changed.TaskID = "another-task"
+	if _, err = f.store.UpdateEngineAttempt(ctx, changed); !errors.Is(err, execution.ErrConflict) {
+		t.Fatalf("identity mutation: %v", err)
+	}
+	if _, err = f.store.UpdateEngineAttempt(ctx, r); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = f.store.UpdateEngineAttempt(ctx, r); !errors.Is(err, execution.ErrConflict) {
+		t.Fatalf("stale write: %v", err)
+	}
+	s := f.spec
+	copy := *s.Engine
+	copy.Revision = strings.Repeat("d", 64)
+	s.Engine = &copy
+	if _, err = f.adapter.Start(ctx, s); !errors.Is(err, execution.ErrConflict) {
+		t.Fatalf("spec mutation: %v", err)
+	}
+}

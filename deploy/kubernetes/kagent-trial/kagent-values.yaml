@@ -1,0 +1,45 @@
+# Isolated feasibility trial. No model credential or production workload.
+rbac:
+  namespaces: [kint-engine]
+controller:
+  replicas: 1
+  watchNamespaces: [kint-engine]
+  substrate:
+    enabled: true
+    ateApiEndpoint: dns:///api.ate-system.svc:443
+    atenetRouterURL: http://atenet-router.ate-system.svc:80
+    defaultWorkerPool:
+      namespace: kint-engine
+      name: kint-worker
+ui:
+  replicas: 0
+  route:
+    enabled: false
+kmcp:
+  enabled: false
+kagent-tools:
+  enabled: false
+grafana-mcp:
+  enabled: false
+oauth2-proxy:
+  enabled: false
+substrate:
+  enabled: false
+substrateWorkerPool:
+  create: true
+  name: kint-worker
+  replicas: 1
+  workerImage: ghcr.io/kagent-dev/substrate/ateom-gvisor:v0.2.0-beta4
+  template:
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: '2'
+        memory: 2Gi
+database:
+  postgres:
+    bundled:
+      storage: 500Mi
+      storageClassName: standard

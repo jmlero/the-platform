@@ -1,0 +1,439 @@
+{
+  "apiVersion": "v1",
+  "kind": "List",
+  "items": [
+    {
+      "apiVersion": "networking.k8s.io/v1",
+      "kind": "NetworkPolicy",
+      "metadata": {
+        "name": "kint-internal-only",
+        "namespace": "ate-system",
+        "labels": {
+          "the-platform.dev/trial": "kint-02"
+        }
+      },
+      "spec": {
+        "podSelector": {},
+        "policyTypes": [
+          "Ingress",
+          "Egress"
+        ],
+        "ingress": [
+          {
+            "from": [
+              {
+                "namespaceSelector": {
+                  "matchLabels": {
+                    "the-platform.dev/trial": "kint-02"
+                  }
+                }
+              }
+            ]
+          }
+        ],
+        "egress": [
+          {
+            "to": [
+              {
+                "namespaceSelector": {
+                  "matchLabels": {
+                    "the-platform.dev/trial": "kint-02"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "to": [
+              {
+                "namespaceSelector": {
+                  "matchLabels": {
+                    "kubernetes.io/metadata.name": "kube-system"
+                  }
+                },
+                "podSelector": {
+                  "matchLabels": {
+                    "k8s-app": "kube-dns"
+                  }
+                }
+              }
+            ],
+            "ports": [
+              {
+                "protocol": "UDP",
+                "port": 53
+              },
+              {
+                "protocol": "TCP",
+                "port": 53
+              }
+            ]
+          },
+          {
+            "to": [
+              {
+                "ipBlock": {
+                  "cidr": "10.89.0.2/32"
+                }
+              },
+              {
+                "ipBlock": {
+                  "cidr": "10.96.0.1/32"
+                }
+              }
+            ],
+            "ports": [
+              {
+                "port": 443
+              },
+              {
+                "port": 6443
+              },
+              {
+                "port": 8085
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "networking.k8s.io/v1",
+      "kind": "NetworkPolicy",
+      "metadata": {
+        "name": "kint-internal-only",
+        "namespace": "podcertificate-controller-system",
+        "labels": {
+          "the-platform.dev/trial": "kint-02"
+        }
+      },
+      "spec": {
+        "podSelector": {},
+        "policyTypes": [
+          "Ingress",
+          "Egress"
+        ],
+        "ingress": [
+          {
+            "from": [
+              {
+                "namespaceSelector": {
+                  "matchLabels": {
+                    "the-platform.dev/trial": "kint-02"
+                  }
+                }
+              }
+            ]
+          }
+        ],
+        "egress": [
+          {
+            "to": [
+              {
+                "namespaceSelector": {
+                  "matchLabels": {
+                    "the-platform.dev/trial": "kint-02"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "to": [
+              {
+                "namespaceSelector": {
+                  "matchLabels": {
+                    "kubernetes.io/metadata.name": "kube-system"
+                  }
+                },
+                "podSelector": {
+                  "matchLabels": {
+                    "k8s-app": "kube-dns"
+                  }
+                }
+              }
+            ],
+            "ports": [
+              {
+                "protocol": "UDP",
+                "port": 53
+              },
+              {
+                "protocol": "TCP",
+                "port": 53
+              }
+            ]
+          },
+          {
+            "to": [
+              {
+                "ipBlock": {
+                  "cidr": "10.89.0.2/32"
+                }
+              },
+              {
+                "ipBlock": {
+                  "cidr": "10.96.0.1/32"
+                }
+              }
+            ],
+            "ports": [
+              {
+                "port": 443
+              },
+              {
+                "port": 6443
+              },
+              {
+                "port": 8085
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "networking.k8s.io/v1",
+      "kind": "NetworkPolicy",
+      "metadata": {
+        "name": "kint-default-deny",
+        "namespace": "kint-engine",
+        "labels": {
+          "the-platform.dev/trial": "kint-02"
+        }
+      },
+      "spec": {
+        "podSelector": {},
+        "policyTypes": [
+          "Ingress",
+          "Egress"
+        ],
+        "ingress": [],
+        "egress": []
+      }
+    },
+    {
+      "apiVersion": "networking.k8s.io/v1",
+      "kind": "NetworkPolicy",
+      "metadata": {
+        "name": "kint-controller",
+        "namespace": "kint-engine",
+        "labels": {
+          "the-platform.dev/trial": "kint-02"
+        }
+      },
+      "spec": {
+        "podSelector": {
+          "matchLabels": {
+            "app.kubernetes.io/component": "controller",
+            "app.kubernetes.io/instance": "kint-engine"
+          }
+        },
+        "policyTypes": [
+          "Ingress",
+          "Egress"
+        ],
+        "ingress": [
+          {
+            "from": [
+              {
+                "podSelector": {
+                  "matchLabels": {
+                    "the-platform.dev/probe": "kint"
+                  }
+                }
+              }
+            ],
+            "ports": [
+              {
+                "port": 8083
+              }
+            ]
+          }
+        ],
+        "egress": [
+          {
+            "to": [
+              {
+                "namespaceSelector": {
+                  "matchLabels": {
+                    "the-platform.dev/trial": "kint-02"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "to": [
+              {
+                "namespaceSelector": {
+                  "matchLabels": {
+                    "kubernetes.io/metadata.name": "kube-system"
+                  }
+                },
+                "podSelector": {
+                  "matchLabels": {
+                    "k8s-app": "kube-dns"
+                  }
+                }
+              }
+            ],
+            "ports": [
+              {
+                "protocol": "UDP",
+                "port": 53
+              },
+              {
+                "protocol": "TCP",
+                "port": 53
+              }
+            ]
+          },
+          {
+            "to": [
+              {
+                "ipBlock": {
+                  "cidr": "10.89.0.2/32"
+                }
+              },
+              {
+                "ipBlock": {
+                  "cidr": "10.96.0.1/32"
+                }
+              }
+            ],
+            "ports": [
+              {
+                "port": 443
+              },
+              {
+                "port": 6443
+              },
+              {
+                "port": 8085
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "networking.k8s.io/v1",
+      "kind": "NetworkPolicy",
+      "metadata": {
+        "name": "kint-database",
+        "namespace": "kint-engine",
+        "labels": {
+          "the-platform.dev/trial": "kint-02"
+        }
+      },
+      "spec": {
+        "podSelector": {
+          "matchLabels": {
+            "app.kubernetes.io/component": "database"
+          }
+        },
+        "policyTypes": [
+          "Ingress",
+          "Egress"
+        ],
+        "ingress": [
+          {
+            "from": [
+              {
+                "podSelector": {
+                  "matchLabels": {
+                    "app.kubernetes.io/component": "controller",
+                    "app.kubernetes.io/instance": "kint-engine"
+                  }
+                }
+              }
+            ],
+            "ports": [
+              {
+                "port": 5432
+              }
+            ]
+          }
+        ],
+        "egress": []
+      }
+    },
+    {
+      "apiVersion": "networking.k8s.io/v1",
+      "kind": "NetworkPolicy",
+      "metadata": {
+        "name": "kint-workers",
+        "namespace": "kint-engine",
+        "labels": {
+          "the-platform.dev/trial": "kint-02"
+        }
+      },
+      "spec": {
+        "podSelector": {
+          "matchLabels": {
+            "ate.dev/worker-pool": "kint-worker"
+          }
+        },
+        "policyTypes": [
+          "Ingress",
+          "Egress"
+        ],
+        "ingress": [],
+        "egress": [
+          {
+            "to": [
+              {
+                "namespaceSelector": {
+                  "matchLabels": {
+                    "kubernetes.io/metadata.name": "ate-system"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "to": [
+              {
+                "namespaceSelector": {
+                  "matchLabels": {
+                    "kubernetes.io/metadata.name": "kube-system"
+                  }
+                },
+                "podSelector": {
+                  "matchLabels": {
+                    "k8s-app": "kube-dns"
+                  }
+                }
+              }
+            ],
+            "ports": [
+              {
+                "protocol": "UDP",
+                "port": 53
+              },
+              {
+                "protocol": "TCP",
+                "port": 53
+              }
+            ]
+          },
+          {
+            "to": [
+              {
+                "ipBlock": {
+                  "cidr": "10.89.0.2/32"
+                }
+              }
+            ],
+            "ports": [
+              {
+                "port": 8085
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

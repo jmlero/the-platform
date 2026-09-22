@@ -101,7 +101,8 @@ type CredentialReference struct {
 }
 
 type Specification struct {
-	Tools []string `json:"tools,omitempty"`
+	Engine *EngineSelection `json:"engine,omitempty"`
+	Tools  []string         `json:"tools,omitempty"`
 	// Empty Workload preserves the original repository specification and digest.
 	Workload             string                `json:"workload,omitempty"`
 	InputDigest          string                `json:"input_digest,omitempty"`
@@ -125,6 +126,16 @@ type Specification struct {
 }
 
 func (specification Specification) Validate(now time.Time) error {
+	if specification.Engine != nil {
+		if err := specification.Engine.Validate(); err != nil {
+			return err
+		}
+		for _, digest := range []string{specification.ProfileDigest, strings.TrimPrefix(specification.ContextDigest, "sha256:")} {
+			if !validEngineDigest(digest) {
+				return fmt.Errorf("engine inputs must be digest-bound: %w", ErrInvalidInput)
+			}
+		}
+	}
 	if len(specification.Tools) > 1 || len(specification.Tools) == 1 && (specification.Tools[0] != "read_context_source" || specification.Workload != "diagnostic-analysis/v1" || specification.HarnessVersion != "langchain-create-agent/v2") {
 		return fmt.Errorf("unsupported runtime tool: %w", ErrInvalidInput)
 	}

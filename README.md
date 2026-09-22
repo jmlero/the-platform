@@ -59,7 +59,7 @@ current system.
 
 ## Development
 
-Requirements: Go 1.26+, Node.js 24+, npm 11+, Python 3, and OpenSSL.
+Requirements: Go 1.27+, Node.js 24+, npm 11+, Python 3, and OpenSSL.
 
 ```bash
 make check

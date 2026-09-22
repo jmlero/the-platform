@@ -1,0 +1,294 @@
+# Integrate kagent and remove Marina's redundant agent engine
+
+- Date: 2026-09-22
+- Status: KINT-01/02 local feasibility passed; governed integration and rollout pending
+- Decision: [0017](decisions/0017-kagent-core-engine.md)
+- Tracking: [KINT-01–15 in TODO.md](../TODO.md#kagent-integration-and-marina-simplification)
+- Research: [adoption analysis](kagent-adoption.md)
+
+## Outcome
+
+Make kagent the core agent engine for newly authorized Marina workloads. Keep
+Marina as the durable workflow and governance service between Deck, kagent,
+verification, Git and CI. Remove Marina code whose responsibilities have moved
+to kagent; completion includes deletion and installation simplification.
+
+The target is one agent engine, not permanent support for both custom worker
+hosting and kagent. A separate deterministic verification Job can remain: it
+does not run an agent loop and preserves independent acceptance.
+
+The implementation baseline is the researched kagent `v1.0.0-alpha1`, commit
+`850c464726881317997c32515f8b621b949d6ce1`. KINT-01 locks compatible charts,
+images, Substrate and APIs before code depends on them. The analysis distinguishes
+this source from the moving `0.x` docs; do not mix examples or infer compatibility.
+The [KINT-01/02 trial](validation/kint-01-02-2026-09-22.md) locked the candidate
+and proved isolated native runtime, persistence, resource feasibility and teardown
+on local Kind. The trial was removed afterward. Marina integration and legacy
+code deletion have not started. See the [exact lock and installation guide](../deploy/kubernetes/kagent-trial/README.md)
+and [symbol/caller removal inventory](kagent-removal-inventory.md).
+
+## Responsibility boundary
+
+| Owner | Responsibilities after migration |
+| --- | --- |
+| Deck | Intent, authorization, plans, decisions, commands, conversation identity and operator-visible results. |
+| Marina | Deck claims/leases/fences, immutable workflow inputs, per-attempt authority and budget accounting, workflow transitions, source publication, independent verification, evidence admission, cross-system recovery and outbox. |
+| kagent/Substrate | Harness execution, agent loop and framework state, compiled runtime revisions, engine task history, runtime lifecycle and supported interaction continuation. |
+| Git/CI | Authoritative repository, PR-head and check observations. |
+
+Use public kagent lifecycle/A2A APIs behind a narrow Marina adapter. Keep Deck's
+HTTP/JSON contract and separate stores. Marina retains correlation records and
+workflow checkpoints, not another copy of kagent's complete event history.
+Engine completion is an observation, never sufficient evidence of task success.
+
+Prefer native Codex for repository work. Preserve the selected LangChain
+diagnostic harness through a small BYO integration initially; it is workload code,
+not a reason to retain Marina's old engine. A native ADK replacement can be
+considered separately with explicit profile/version and decision changes.
+
+## Sequence and acceptance
+
+All KINT tasks start **Open**. Mark a task **Verify** only after its implementation
+exists and named installation proof remains. Mark **Done** only with linked
+evidence. Dependencies below are completion dependencies; contract design can
+proceed before a live environment is ready. Implementation fixes follow failing
+test → smallest passing change → relevant checks.
+
+### Phase 1 — lock the boundary and prove local feasibility
+
+**KINT-01 — Inventory and pin the integration. Owner: Marina/Ops.**
+
+- Lock source/chart/image digests, public API versions, transitive dependencies,
+  licenses, storage and runtime requirements. Record a minimal local topology,
+  authentication/egress policy and measured or estimated resource requirements.
+- Turn the deletion map below into a file/symbol inventory: replacement, callers,
+  retained behavior, acceptance test and task authorizing removal. Establish the
+  current test and resource baseline before changes.
+- Exit: reproducible dependency/configuration lock and reviewed ownership/removal
+  inventory. A dependency or capability that cannot meet current requirements is
+  a concrete blocker, not a reason to silently weaken the requirements.
+
+**KINT-02 — Install an isolated local engine. Owner: Ops. Depends: 01.**
+
+- Render and install only required components into trial-owned resources on
+  `kind-marina-local`, using `podman-machine-default-root` explicitly. Verify
+  ARM64 images, Substrate prerequisites, supported snapshot storage and persistence.
+- Narrow RBAC and direct API access, disable unrelated tools, and inventory
+  cluster-scoped resources. Separate preparation downloads from runtime egress.
+- Exit: engine instance runs and survives component replacement with its recorded
+  state; CPU/memory/storage are measured; teardown preserves existing resources.
+  Keep the current Deck installation available at `https://localhost:8443`.
+
+### Phase 2 — integrate execution and preserve governance
+
+**KINT-03 — Add the engine adapter and durable correlation. Owner: Marina.
+Depends: 01; live proof also depends on 02.**
+
+- Implement start, lookup by recorded key, inspect, cancellation observation,
+  artifact collection and cleanup at the existing runtime boundary. Add only
+  the minimum types needed for a real kagent integration.
+- Persist the selected backend/version, immutable revision, profile/context
+  digests, instance route and A2A context/task/message IDs. Recover ambiguous
+  instance creation separately from ambiguous message delivery.
+- Exit: duplicate starts and lost responses converge to the original attempt or
+  a truthful blocker. Template edits cannot select unauthorized runtime inputs.
+  Reconnect/restart never creates replacement work blindly.
+
+**KINT-04 — Connect governed model, context and source access. Owner: Marina.
+Depends: 03.**
+
+- Reuse external admission, current-fence checks, token/time/cost reservations,
+  unknown-usage accounting, context revocation and allowed-path/source controls.
+  Adapt native runtime requests to the supported contract without broadening it.
+- Make every model/tool call, including retries, attributable to its attempt.
+  Test Responses streaming, TLS, credential rotation and denied bypass routes.
+  Use the smallest MCP bridge only where kagent needs it.
+- Exit: cancellation/expiry revokes new calls independently of credential caches;
+  agents receive no upstream model credential, Git write credential or Kubernetes
+  token. Optional memory/delegation cannot bypass budgets or context selection.
+
+**KINT-05 — Separate results and independent verification from worker hosting.
+Owner: Marina. Depends: 03–04.**
+
+- Extract the existing result/check formats, safe change validation and clean
+  verification behavior from mixed worker code only where needed by both paths.
+  Translate kagent artifacts into digest-bound Marina evidence; validate actual
+  bytes, scope, source revision and bounded sizes rather than trusting URLs/text.
+- Keep a minimal deterministic verifier Job initially, with no model authority
+  and a clean checkout. Bind its output to the exact published revision.
+- Exit: malformed results, disallowed changes, missing artifacts, false success,
+  and failed checks cannot pass acceptance. The verifier works without launching
+  Codex or Python agent code.
+
+**KINT-06 — Move repository implementation to native kagent Codex. Owner: Marina.
+Depends: 02–05.**
+
+- Run one Deck-authorized task using frozen context/source/profile and native
+  Codex. Marina publishes permitted changes, runs independent verification and
+  observes required CI at the same PR head.
+- Exit: one bounded task produces exactly one verified PR ready for human review
+  or a truthful blocker. Successful-path evidence is required before migration;
+  merge/deploy authority, automatic repair and new concurrency remain excluded.
+
+**KINT-07 — Move the diagnostic profile to kagent. Owner: Marina.
+Depends: 02–05.**
+
+- Package the pinned LangChain workload behind kagent's BYO contract; retain its
+  immutable fixture, governed context read and independent Go report validator.
+  Remove dependence on Marina launching its Python subprocess as an agent Job.
+- Publish a new exact profile revision; keep historical profile digests readable.
+  Replacing LangChain with native ADK requires a separate explicit harness choice.
+- Exit: both context-enabled and denied-access cases work through kagent; the
+  report validates without repository authority or source publication steps.
+
+**KINT-08 — Project engine state and bridge pending questions. Owner: Joint.
+Depends: 03–04.**
+
+- Map engine progress, blockers, usage and pending question IDs to durable Marina
+  records and Deck's supported surfaces. Correlate answers with exact pending
+  operations; reject stale, duplicated or cancelled answers. Avoid a second
+  custom conversation runtime or normal operator access directly to kagent.
+- If a public contract addition is necessary, update OpenAPI, fixtures, consumer
+  expectations and real-process conformance together. Do not advertise unsupported
+  approvals or operator pause/resume from upstream capability names.
+- Exit: a minimal question/answer and result projection survives disconnect and
+  service restart without duplicate action or publication. Full conversation UI,
+  task delegation and inbox acceptance remain the existing CHAT/INBOX tasks.
+
+### Phase 3 — prove parity and cut over
+
+**KINT-09 — Run the shared failure acceptance matrix. Owner: Joint.
+Depends: 06–08.**
+
+- Run every applicable case in the [mandatory matrix](kagent-adoption.md#mandatory-failure-matrix)
+  against real Deck/Marina/kagent processes on local Kubernetes, including both
+  workloads, isolated restarts, lost responses, cancellation during model/tool
+  calls, lease loss, budget exhaustion, source/context changes and stale evidence.
+- Cover the surviving verification Job and any child process/tool termination.
+  Safe blockers match the existing release boundary; transparent step recovery
+  and HA are not newly imposed requirements.
+- Exit: no duplicate external mutations, excess authority/budget, premature
+  cancellation or false completion. Store redacted evidence under `docs/validation/`.
+
+**KINT-10 — Rehearse installation upgrade and rollback. Owner: Ops/Marina.
+Depends: 02, 06–07.**
+
+- Measure the complete installation footprint. Exercise restart, credentials,
+  profile withdrawals, artifact retention and an upgrade with trial state.
+- Preserve previous images/configuration and history before schema changes;
+  rehearse the actual data-preserving rollback path. An image downgrade is not
+  assumed to reverse a schema migration. Backup automation remains deferred.
+- Exit: documented supported versions, reproducible installation and rollback,
+  retained state/evidence, and operation within existing environment/spend limits.
+
+**KINT-11 — Cut over new work to kagent. Owner: Marina/Ops.
+Depends: 09–10.**
+
+- Drain old executions, reconcile uncertain source effects, then change defaults
+  for newly authorized profiles. Never switch an active attempt between engines.
+  Cut over diagnostics and repository work separately with their evidence linked.
+- Keep prior release artifacts for rollback. Route rollback only to newly
+  authorized tasks after stopping and reconciling kagent-owned work.
+- Exit: both installed workload profiles use kagent, no legacy execution or
+  cleanup remains active, and old records/artifacts remain inspectable. Record
+  the date and removal owner; schedule KINT-12–14 as the next tranche before
+  unrelated engine features. The old backend has no indefinite fallback role.
+
+### Phase 4 — remove obsolete implementation
+
+**KINT-12 — Delete the replaced agent launch paths. Owner: Marina.
+Depends: 11.**
+
+Remove custom Codex invocation, Python subprocess agent hosting, agent-specific
+Job creation and obsolete worker command/protocol branches from the inventory.
+Preserve only the independently justified verifier and BYO workload behavior.
+Exit: neither migrated profile can select the legacy agent runtime, dead imports
+and flags are gone, and relevant acceptance tests execute against the kagent path.
+
+**KINT-13 — Simplify runtime and journal code. Owner: Marina. Depends: 12.**
+
+Remove obsolete provider-specific polling, retry, cleanup and worker-input state
+that kagent now owns. Keep durable side-effect intents, identity mapping, Deck
+leases, budget reservations, outbox, workflow checkpoints and evidence rules.
+Use forward migrations if needed; never edit old migrations or drop historical
+records just because their old execution path has been deleted. Exit: each
+remaining runtime/journal field has an active workflow, recovery or history-reader
+purpose; old data loads and artifact inspection still works.
+
+**KINT-14 — Remove obsolete images, configuration and installation plumbing.
+Owner: Marina/Ops. Depends: 12–13.**
+
+Delete unused image stages, dependencies, environment variables, grants, worker
+manifests and setup branches. Keep only what the verifier or supported BYO
+workload still uses. Remove obsolete tests only after transferring their required
+behavior coverage. Update installation/runbooks and report before/after code,
+image and service ownership. Exit: a fresh install needs no legacy agent image or
+launch configuration, and the upgrade path preserves existing data.
+
+**KINT-15 — Verify the simplified release and close the migration. Owner: Joint.
+Depends: 14.**
+
+Run deterministic product/installation checks and real-process contract
+conformance, then repeat both live workload paths and the affected failure cases
+on the final code after deletion. Publish a final removal inventory, retained-code
+rationale, supported dependency versions and local acceptance report. Update
+architecture, visions, AGENTS guidance, READMEs and backlog claims to the actual
+deployed boundary. Exit: all completion criteria below have linked evidence.
+
+## Concrete deletion map
+
+Paths are current starting points, not permission to delete whole directories.
+KINT-01 identifies exact symbols; KINT-12–14 remove them after their replacements
+and retained callers pass. A small moved helper is acceptable; renaming a legacy
+engine and keeping it active does not count as removal.
+
+| Current code/configuration | Planned treatment | Removal gate |
+| --- | --- | --- |
+| `marina/internal/flow/runtime.go` | Replace hard-coded Codex/Python command construction and agent-worker input transport with engine dispatch. Preserve workflow admission and result acceptance. | 06–09, 11–12 |
+| `marina/cmd/marina/workers.go`, worker branches in `main.go` | Replace unconditional Kubernetes agent adapter wiring; remove the legacy agent CLI entry path. Keep only verifier entry/configuration if required. | 05–07, 11–12 |
+| `marina/internal/worker/runner.go` | Remove agent command execution; preserve/extract clean checkout, safe path/change validation, check execution and result schema used by verification. | 05–06, 12 |
+| `marina/internal/worker/analysis.go` | Remove subprocess hosting and legacy analysis transport after the BYO workload passes. Preserve independently necessary report validation. | 07, 12 |
+| `marina/internal/worker/remote.go`, `authority.go` | Remove agent-specific input polling/result upload/watchdog plumbing only after equivalent fencing and termination are proven; retain any verifier-specific need. | 04–05, 09, 12 |
+| `marina/internal/kubernetes/adapter.go` | Remove coding/analysis Job support; narrow to independent verification if Jobs remain. Decouple shared credential helpers from the Kubernetes package. | 05, 09, 12–13 |
+| `marina/internal/workerapi/server.go`, `model.go`, `tools.go` | Remove unused legacy input/result/authority routes. Retain or adapt budget admission, context access, restricted source access and authenticated artifact delivery. | 04–05, 09, 12–14 |
+| `marina/internal/runtime`, runtime records in `journal/sqlite`, `execution/recovery.go` | Reduce provider-specific execution machinery; preserve attempt identity, accounting, cross-system recovery and historical readers. | 03, 09, 13 |
+| `marina/internal/flow/config.go`, `cmd/marina/profile.go` | Remove old agent-image/command settings; pin engine profile/revision. Keep required verifier settings and historical digest semantics. | 06–07, 11, 14 |
+| `marina/Dockerfile.worker`, `marina/Dockerfile.analysis-worker`, `marina/harnesses/langchain` | Replace agent-worker packaging with native Codex/BYO packaging; strip coding dependencies from verifier image. Retain LangChain workload code until an explicit replacement decision. | 05–07, 12, 14 |
+| `deploy/kubernetes/first-release/workers`, installation generators and validation scripts | Narrow RBAC/quotas/network policy to remaining verifier needs; remove old agent-image provisioning and test assumptions. Add pinned engine installation separately. | 02, 10–11, 14 |
+| `marina/internal/deck`, `workcontrol`, `policy`, `contextpack`, `sourcecontrol`, `artifacts`, `analysis` | Retain product contracts and evidence/governance behavior. Remove only proven dead callers/helpers; these packages do not become redundant merely because execution moves. | 13–15 |
+| `marina/internal/reconcile`, `flow`, `journal/sqlite` | Keep Deck reconciliation, workflow state and outbox. Remove only engine-owned details identified by the inventory. | 13–15 |
+
+## Completion and verification
+
+The migration is complete only when:
+
+1. Both current workloads run through kagent; at least repository work uses a
+   native harness, and no new task can select Marina's old agent engine.
+2. Independent checks, current-source evidence, budget enforcement, cancellation
+   and restart behavior pass the final build's acceptance gates.
+3. Every removal candidate is deleted or has a specific retained purpose and
+   tests. Temporary compatibility code has no unowned or indefinite exception.
+4. Old tasks, decisions, usage and artifacts remain inspectable; removed live
+   execution code is not needed to read history. Rollback uses retained releases,
+   not a permanent second production execution path in the new binary.
+5. A fresh install and the documented upgrade work without obsolete agent images,
+   credentials, manifests or configuration. Measured maintenance/resource costs
+   and any remaining limitations are recorded honestly.
+
+Run the narrowest meaningful tests first, then `make -C marina check` for Marina
+changes and `make check-installation` for installation changes. Joint API changes
+require `make check` and `make conformance`; final KINT-15 runs both regardless
+because this is a cross-component migration. Add `make -C deck test check` when
+Deck changes. Live acceptance uses the existing authorized local profile and
+bounded credentials/task/model settings; deterministic doubles do not prove it.
+
+CHAT-04/05/07 should build on this engine integration; CHAT-01/02/03/06/08 and
+INBOX work retain their own acceptance criteria. AUTO tasks follow migration
+and must use the selected engine. Do not grow a parallel custom agent runtime
+while these tasks are pending. Product UI/intent design and required fixes can
+continue independently.
+
+If a hard compatibility or safety gate fails, keep the current working release,
+record the exact failure and bounded remedy, and stop dependent cutover/deletion.
+That is a blocker to solve or a reason to revisit the direction with evidence;
+it is not permission to conceal a regression or leave an accidental hybrid.

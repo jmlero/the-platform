@@ -1,0 +1,80 @@
+{
+  "apiVersion": "v1",
+  "kind": "List",
+  "items": [
+    {
+      "apiVersion": "kagent.dev/v1alpha3",
+      "kind": "ModelConfig",
+      "metadata": {
+        "name": "kint-no-inference",
+        "namespace": "kint-engine",
+        "labels": {
+          "the-platform.dev/trial": "kint-02",
+          "kagent.dev/harness": "kint-codex"
+        }
+      },
+      "spec": {
+        "provider": "OpenAI",
+        "model": "kint-no-inference",
+        "openAI": {
+          "baseUrl": "http://no-inference.invalid:9/v1",
+          "apiFormat": "responses"
+        },
+        "apiKeySecret": "kint-dummy-model",
+        "apiKeySecretKey": "key"
+      }
+    },
+    {
+      "apiVersion": "kagent.dev/v1alpha3",
+      "kind": "Harness",
+      "metadata": {
+        "name": "kint-codex",
+        "namespace": "kint-engine",
+        "labels": {
+          "the-platform.dev/trial": "kint-02",
+          "kagent.dev/harness": "kint-codex"
+        }
+      },
+      "spec": {
+        "codex": {},
+        "workload": {
+          "image": "ghcr.io/kagent-dev/kagent/codex-harness@sha256:91f69cef4d02e30c078f866167a103853c4446f315e2aa59e6c4db8696881c85"
+        },
+        "substrate": {
+          "workerPoolRef": {
+            "name": "kint-worker"
+          },
+          "snapshotPolicy": {
+            "location": "s3://ate-snapshots/kint-codex"
+          }
+        },
+        "allowedAgentTemplates": {
+          "selector": {
+            "matchLabels": {
+              "kagent.dev/harness": "kint-codex"
+            }
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "kagent.dev/v1alpha3",
+      "kind": "AgentTemplate",
+      "metadata": {
+        "name": "kint-fixture",
+        "namespace": "kint-engine",
+        "labels": {
+          "the-platform.dev/trial": "kint-02",
+          "kagent.dev/harness": "kint-codex"
+        }
+      },
+      "spec": {
+        "modelConfig": {
+          "name": "kint-no-inference"
+        },
+        "description": "Local lifecycle fixture; no inference authority.",
+        "systemPrompt": "Synthetic installation fixture. No model invocation is authorized."
+      }
+    }
+  ]
+}

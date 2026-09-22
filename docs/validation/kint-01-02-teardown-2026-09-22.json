@@ -1,0 +1,41 @@
+{
+  "environment": "kind-marina-local / podman-machine-default-root",
+  "remaining_labelled_trial_resources": 0,
+  "original_api_server_manifest_restored": true,
+  "deck_https_status": 200,
+  "platform": [
+    {
+      "kind": "Deployment",
+      "name": "deck",
+      "uid": "e06334dc-bc5d-49b4-89e0-488580c559e0",
+      "spec_unchanged": true,
+      "ready_replicas": 1
+    },
+    {
+      "kind": "Deployment",
+      "name": "marina",
+      "uid": "8571023c-242c-4ebe-acd5-43095d77d666",
+      "spec_unchanged": true,
+      "ready_replicas": 1
+    },
+    {
+      "kind": "PersistentVolumeClaim",
+      "name": "appdeck-data",
+      "uid": "f0748990-48d1-4f05-82fe-a36c843494e4",
+      "volume": "pvc-f0748990-48d1-4f05-82fe-a36c843494e4"
+    },
+    {
+      "kind": "PersistentVolumeClaim",
+      "name": "marina-data",
+      "uid": "88ea8759-3a36-4438-8cf7-44b0da7531de",
+      "volume": "pvc-88ea8759-3a36-4438-8cf7-44b0da7531de"
+    }
+  ],
+  "retained_preparation_cache_kib": 652684,
+  "certificate_api_versions_after_restore": [
+    "certificates.k8s.io/v1"
+  ],
+  "remaining_cluster_trust_bundles": [
+    "kubernetes.io:kube-apiserver-serving:403d9392cf7e2a88cb21efb3"
+  ]
+}

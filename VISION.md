@@ -21,7 +21,8 @@ defines the term.
 
 Deck and Marina should feel like one product with three views of the same work:
 
-- **Board:** define outcomes, priorities, acceptance criteria, and budgets.
+- **Board:** manage the backlog, break outcomes into focused tasks, and prepare
+  acceptance criteria, dependencies, context, and budgets for each.
 - **Conversation:** develop intent, select context, delegate deliberately, and
   answer focused questions.
 - **Inbox:** find results awaiting review and decisions requiring attention.
@@ -41,6 +42,13 @@ work; they do not silently change active work.
 [Decision 0009](docs/decisions/0009-asynchronous-agent-work.md) records the
 conversation and inbox direction. [Decision 0014](docs/decisions/0014-project-repository-and-knowledge.md)
 records project knowledge and repository ownership.
+
+[Decision 0018](docs/decisions/0018-deck-work-preparation.md) establishes Deck's
+ownership of backlog refinement and task preparation. Marina runs bounded
+planning assistance and executes eligible children; Deck owns accepted breakdowns,
+context selections and authorization. The
+[implementation design](docs/work-preparation.md) preserves immutable run inputs,
+aggregate budgets, sequential execution and human review. This flow is planned.
 
 ## Current baseline
 
@@ -136,15 +144,26 @@ agent service.
 
 ## Direction
 
+The operator selected kagent as the target core agent engine, with Marina owning
+governed workflows and the interface to Deck. Integration includes removing
+redundant custom agent hosting and runtime machinery after equivalent behavior
+is proven. [Decision 0017](docs/decisions/0017-kagent-core-engine.md) and the
+[implementation plan](docs/kagent-integration-plan.md) define this next engineering
+priority; the current runtime remains supported until cutover passes its gates.
+Conversation and subsequent repair work should reuse the selected engine.
+
 The next increments are:
 
-1. Link project conversations to durable tasks and results.
-2. Add persistent reviewed/unread result state.
-3. Add bounded repair attempts that consume current verification or review
+1. Add Deck-owned backlog refinement, focused child tasks and per-task context;
+   manual preparation can progress alongside engine integration, with planning
+   agents following it.
+2. Link project conversations to durable tasks and results.
+3. Add persistent reviewed/unread result state.
+4. Add bounded repair attempts that consume current verification or review
    feedback and require fresh evidence.
-4. Select one production signal and one non-production delivery target only
+5. Select one production signal and one non-production delivery target only
    after repository work is reliable.
-5. Consider authority beyond PR review only for a measured, low-risk change
+6. Consider authority beyond PR review only for a measured, low-risk change
    class with explicit human-only boundaries.
 
 The active, acceptance-based sequence is [TODO.md](TODO.md). New workflows should

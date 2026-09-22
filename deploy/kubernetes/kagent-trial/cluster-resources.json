@@ -1,0 +1,106 @@
+[
+  {
+    "kind": "Namespace",
+    "name": "kint-engine"
+  },
+  {
+    "kind": "Namespace",
+    "name": "ate-system"
+  },
+  {
+    "kind": "CustomResourceDefinition",
+    "name": "mcpservers.kagent.dev"
+  },
+  {
+    "kind": "CustomResourceDefinition",
+    "name": "agenttemplates.kagent.dev"
+  },
+  {
+    "kind": "CustomResourceDefinition",
+    "name": "harnesses.kagent.dev"
+  },
+  {
+    "kind": "CustomResourceDefinition",
+    "name": "modelconfigs.kagent.dev"
+  },
+  {
+    "kind": "CustomResourceDefinition",
+    "name": "modelproviderconfigs.kagent.dev"
+  },
+  {
+    "kind": "CustomResourceDefinition",
+    "name": "remotemcpservers.kagent.dev"
+  },
+  {
+    "kind": "PriorityClass",
+    "name": "ate-node-critical"
+  },
+  {
+    "kind": "Namespace",
+    "name": "podcertificate-controller-system"
+  },
+  {
+    "kind": "ClusterRole",
+    "name": "ate-api-server-role"
+  },
+  {
+    "kind": "ClusterRole",
+    "name": "atelet-role"
+  },
+  {
+    "kind": "ClusterRole",
+    "name": "k8s-credential-provider-secret-reader"
+  },
+  {
+    "kind": "ClusterRole",
+    "name": "podcert-ate-dev-signer"
+  },
+  {
+    "kind": "ClusterRole",
+    "name": "ate-controller"
+  },
+  {
+    "kind": "ClusterRoleBinding",
+    "name": "ate-api-server-binding"
+  },
+  {
+    "kind": "ClusterRoleBinding",
+    "name": "ate-controller"
+  },
+  {
+    "kind": "ClusterRoleBinding",
+    "name": "atelet-binding"
+  },
+  {
+    "kind": "ClusterRoleBinding",
+    "name": "k8s-credential-provider-secret-reader"
+  },
+  {
+    "kind": "ClusterRoleBinding",
+    "name": "podcert-ate-dev-signer"
+  },
+  {
+    "kind": "SandboxConfig",
+    "name": "gvisor-default"
+  },
+  {
+    "kind": "ValidatingAdmissionPolicy",
+    "name": "sandboxconfig-assets"
+  },
+  {
+    "kind": "ValidatingAdmissionPolicyBinding",
+    "name": "sandboxconfig-assets"
+  },
+  {
+    "kind": "CustomResourceDefinition",
+    "name": "csidriverconfigs.ate.dev"
+  },
+  {
+    "kind": "CustomResourceDefinition",
+    "name": "sandboxconfigs.ate.dev"
+  },
+  {
+    "kind": "CustomResourceDefinition",
+    "name": "workerpools.ate.dev"
+  }
+]

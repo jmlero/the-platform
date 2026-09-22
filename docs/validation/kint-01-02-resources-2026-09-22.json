@@ -1,0 +1,101 @@
+{
+  "environment": "kind-marina-local / podman-machine-default-root",
+  "time": "2026-09-22T12:20:33Z",
+  "node_working_set_bytes": 2641178624,
+  "pods": [
+    {
+      "namespace": "marina-system",
+      "pod": "marina-5589ff56-7xx8d",
+      "cpu_nanocores": 3790363,
+      "working_set_bytes": 21929984
+    },
+    {
+      "namespace": "podcertificate-controller-system",
+      "pod": "podcertificate-controller-59db5b9cbf-sv9gw",
+      "cpu_nanocores": 569200,
+      "working_set_bytes": 8810496
+    },
+    {
+      "namespace": "ate-system",
+      "pod": "ate-controller-5c5558d8f5-hqs8v",
+      "cpu_nanocores": 530784,
+      "working_set_bytes": 14364672
+    },
+    {
+      "namespace": "kint-engine",
+      "pod": "kint-engine-controller-7665455b46-msdng",
+      "cpu_nanocores": 1197751,
+      "working_set_bytes": 33775616
+    },
+    {
+      "namespace": "ate-system",
+      "pod": "atenet-egress-7f98cf6786-h84nn",
+      "cpu_nanocores": 1880736,
+      "working_set_bytes": 21483520
+    },
+    {
+      "namespace": "kint-engine",
+      "pod": "kint-worker-7bd5fd5fb9-7fj74",
+      "cpu_nanocores": 256593,
+      "working_set_bytes": 39538688
+    },
+    {
+      "namespace": "ate-system",
+      "pod": "k8s-credential-provider-686d84df9c-565jd",
+      "cpu_nanocores": 91371,
+      "working_set_bytes": 7172096
+    },
+    {
+      "namespace": "ate-system",
+      "pod": "postgres-0",
+      "cpu_nanocores": 21760008,
+      "working_set_bytes": 48193536
+    },
+    {
+      "namespace": "ate-system",
+      "pod": "rustfs-84c48d955b-9ffft",
+      "cpu_nanocores": 1375153,
+      "working_set_bytes": 73052160
+    },
+    {
+      "namespace": "ate-system",
+      "pod": "atenet-router-69d7c597c4-f85fs",
+      "cpu_nanocores": 2274679,
+      "working_set_bytes": 20680704
+    },
+    {
+      "namespace": "ate-system",
+      "pod": "atelet-t9btv",
+      "cpu_nanocores": 300370,
+      "working_set_bytes": 43659264
+    },
+    {
+      "namespace": "kint-engine",
+      "pod": "kint-engine-postgresql-68b46dc5bb-gjp98",
+      "cpu_nanocores": 8056654,
+      "working_set_bytes": 39305216
+    },
+    {
+      "namespace": "ate-system",
+      "pod": "ate-api-server-786b49cf5b-znlbj",
+      "cpu_nanocores": 11890864,
+      "working_set_bytes": 20209664
+    },
+    {
+      "namespace": "marina-system",
+      "pod": "deck-6846ccc579-c44ch",
+      "cpu_nanocores": 7183976,
+      "working_set_bytes": 22020096
+    }
+  ],
+  "baseline": {
+    "node_working_set_bytes": 1888120832,
+    "node_cpu_nanocores": 194400744,
+    "time": "2026-09-22T11:25:24Z"
+  },
+  "storage": {
+    "pvc_requests_bytes": 2684354560,
+    "ateom_cache_allocated_kib": 652684,
+    "notes": "PVC requests are not usage or filesystem limits. Ateom cache excludes containerd images. Full-workload peak and snapshot growth not measured."
+  }
+}

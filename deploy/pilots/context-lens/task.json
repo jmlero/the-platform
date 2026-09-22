@@ -1,0 +1,17 @@
+{
+  "project_id": "prj_default",
+  "title": "Context Lens CLP-01: versioned privacy-safe session reports",
+  "description": "Target repository: jmlero/context-lens, baseline 5c7868925d255cb49d6b4b6e457adac0249975cf. Do not run against the acceptance fixture. Implement shared/report.ts with exported createReport(detail: SessionDetail) and parseReport(json: string). This is the first task in the Context Lens pilot; do not implement UI, comparison, new log formats or hosting. Read README.md, shared/types.ts and server/parser.ts. The exact JSON contract and trusted verification are in the installed /opt/context-lens/trusted/report.test.mts. Export schema_version: 1; metrics containing start_input_tokens, latest_input_tokens, peak_input_tokens, total_input_tokens, total_output_tokens, total_cached_input_tokens, compaction_count, elapsed_ms, context_window_tokens; limitations exactly ['not-billing','sessions-may-share-history','usage-may-be-incomplete']. Map only the corresponding summary fields; do not export session metadata, paths, IDs, model names, events or arbitrary warning text. All metrics except context_window_tokens must be nonnegative safe integers; context_window_tokens must be a positive safe integer or null. Cached input cannot exceed total input; start/latest cannot exceed peak. Context may exceed the reported window. parseReport accepts a JSON string at most 65536 UTF-8 bytes, rejects malformed data, unknown/missing keys and invalid versions/types/ranges/limitations, and emits generic errors without echoing input. createReport must validate metrics without mutating input. Write failing focused tests in server/report.test.ts first. Only shared/report.ts and server/report.test.ts may change. Run /opt/context-lens/check baseline and /opt/context-lens/check report. The existing application remains local-only. No dependencies, package manifests, parser semantics, workflows or existing tests may change.",
+  "acceptance_criteria": "The trusted external report-contract suite passes against shared/report.ts; all existing 13 tests, TypeScript check, lint and production build pass. Exact aggregates are preserved without adding cached/reasoning tokens twice. Exports contain only the defined allowlisted metrics and fixed limitation codes. Invalid imports fail clearly without disclosing their contents. The original input is unchanged. The resulting PR is for human review only.",
+  "status": "backlog",
+  "priority": "medium",
+  "budget": {
+    "time_minutes": 15,
+    "max_attempts": 2,
+    "max_tokens": 100000,
+    "max_cost_minor": 15,
+    "currency": "USD",
+    "max_concurrency": 1,
+    "authority": []
+  }
+}

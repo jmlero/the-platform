@@ -1,0 +1,72 @@
+{
+  "environment": "kind-marina-local / podman-machine-default-root",
+  "model_invocations": 0,
+  "before": {
+    "id": "01a0c90f-421c-7722-a948-0827651d1aed",
+    "creator": "admin@kagent.dev",
+    "harness": {
+      "namespace": "kint-engine",
+      "name": "kint-codex"
+    },
+    "agentTemplate": {
+      "namespace": "kint-engine",
+      "name": "kint-fixture"
+    },
+    "preparedRevision": "77430262edbe3ecf5df35eb9da526ea479bd49480b74810e3ef25619d11ce5a5",
+    "a2aAuthority": "ai-01a0c90f-421c-7722-a948-0827651d1aed.kint-engine.actors.resources.substrate.ate.dev",
+    "state": "AGENT_INSTANCE_STATE_READY",
+    "createdAt": "2026-09-22T12:20:15.516922Z",
+    "updatedAt": "2026-09-22T12:20:15.525065822Z",
+    "contextId": "e0d0193e-0b89-4b74-87be-4969d2c04930"
+  },
+  "after_component_replacement": {
+    "id": "01a0c90f-421c-7722-a948-0827651d1aed",
+    "creator": "admin@kagent.dev",
+    "harness": {
+      "namespace": "kint-engine",
+      "name": "kint-codex"
+    },
+    "agentTemplate": {
+      "namespace": "kint-engine",
+      "name": "kint-fixture"
+    },
+    "preparedRevision": "77430262edbe3ecf5df35eb9da526ea479bd49480b74810e3ef25619d11ce5a5",
+    "a2aAuthority": "ai-01a0c90f-421c-7722-a948-0827651d1aed.kint-engine.actors.resources.substrate.ate.dev",
+    "state": "AGENT_INSTANCE_STATE_READY",
+    "createdAt": "2026-09-22T12:20:15.516922Z",
+    "updatedAt": "2026-09-22T12:20:15.525065822Z",
+    "contextId": "e0d0193e-0b89-4b74-87be-4969d2c04930"
+  },
+  "restored_actor": {
+    "actorTemplate": {
+      "atespace": "kint-engine",
+      "name": "kint-fixture-kint-codex-77430262edbe"
+    },
+    "metadata": {
+      "atespace": "kint-engine",
+      "createTime": "2026-09-22T12:20:15.522601825Z",
+      "name": "ai-01a0c90f-421c-7722-a948-0827651d1aed",
+      "uid": "a31120bd-8711-4c6b-b014-f60dcd3181dd",
+      "updateTime": "2026-09-22T12:24:52.754755079Z",
+      "version": "3"
+    },
+    "status": {
+      "currentActorTemplateUid": "1620575c-e386-451e-839f-ac68955da8db",
+      "externalSnapshot": {
+        "contentScope": "SNAPSHOT_CONTENT_SCOPE_FULL",
+        "snapshotUri": "s3://ate-snapshots/kint-codex/atespaces/ate-golden/tags/501f5732-6413-454d-9869-ab7e24b63cf8"
+      },
+      "state": "ACTOR_STATE_RUNNING",
+      "workerAssignment": {
+        "worker": {
+          "name": "534be9ca-c5f8-4ff9-bff6-d1000d91e6d1"
+        },
+        "workerNamespace": "kint-engine",
+        "workerPod": "kint-worker-744d5fbb58-fpmbt",
+        "workerPodIp": "192.168.180.153",
+        "workerPodUid": "534be9ca-c5f8-4ff9-bff6-d1000d91e6d1",
+        "workerPool": "kint-worker"
+      }
+    }
+  }
+}

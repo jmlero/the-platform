@@ -7,6 +7,12 @@ performed by Marina or another compatible execution system. It keeps outcomes,
 budgets, plans, decisions, commands, progress, artifacts, and evidence durable
 and understandable.
 
+Deck also owns preparing work: managing the backlog, refining broad outcomes into
+small focused tasks, defining their dependencies and acceptance criteria, and
+selecting the right context for each agent. This is accepted product direction;
+the decomposition and readiness flow is planned in
+[decision 0018](docs/decisions/0018-deck-work-preparation.md).
+
 Deck does not schedule Pods, check out repositories, call models, or maintain an
 execution journal. Its public contract lets replaceable workers participate
 without gaining direct database access.
@@ -15,7 +21,7 @@ without gaining direct database access.
 
 Deck should present three connected views of the same work:
 
-- a board for defining and prioritizing outcomes;
+- a board for prioritizing outcomes and preparing focused, verifiable child tasks;
 - project conversations for developing intent and delegating deliberately; and
 - an inbox for decisions and unreviewed results.
 
@@ -71,6 +77,14 @@ agent hosting.
    back up, and restart until measured needs justify a different store.
 
 ## Near-term direction
+
+Add a work-preparation flow from backlog outcome to a versioned breakdown,
+per-child context, bounded authorization, and an eligible task queue. Deck owns
+the proposed and accepted work; Marina runs planning assistance and assembles
+immutable execution packages. Begin with manual preparation and sequential work,
+then add agent-generated proposals through the selected kagent integration.
+The [implementation design](docs/work-preparation.md) covers shared budgets,
+dependencies, review capacity, and evidence-based parent acceptance.
 
 The next Deck work links conversations to tasks, adds explicit agent invocation,
 persists clarification and result replies, and tracks reviewed/unread results

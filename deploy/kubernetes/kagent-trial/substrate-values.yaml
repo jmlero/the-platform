@@ -1,0 +1,19 @@
+# Upstream uses these two fixed namespaces internally; reserve them for the trial.
+postgres:
+  storageSize: 1Gi
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: '1'
+      memory: 512Mi
+rustfs:
+  storageSize: 1Gi
+credentialProvider:
+  namespacePolicies: []
+ateApi:
+  extraArgs:
+    - --template-resync-interval=250ms
+otel:
+  endpoint: ''

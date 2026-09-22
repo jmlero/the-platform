@@ -106,7 +106,7 @@ before work-control calls. See the [local Podman profile](../deploy/kubernetes/l
 
 Requirements:
 
-- Go 1.26+
+- Go 1.27+ (required by the pinned kagent API module)
 
 Useful commands:
 
