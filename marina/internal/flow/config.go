@@ -13,32 +13,36 @@ import (
 	"strings"
 
 	"github.com/jmlero/the-platform/marina/internal/analysis"
+	"github.com/jmlero/the-platform/marina/internal/kagent"
 	"github.com/jmlero/the-platform/marina/internal/kubernetes"
+	runtimeapi "github.com/jmlero/the-platform/marina/internal/runtime"
 	"github.com/jmlero/the-platform/marina/internal/sourcecontrol/github"
-	"github.com/jmlero/the-platform/marina/internal/worker"
 	"github.com/jmlero/the-platform/marina/internal/workerapi"
+	"github.com/jmlero/the-platform/marina/internal/workresult"
 )
 
 type Config struct {
-	Version           int               `json:"version,omitempty"`
-	Analysis          *analysis.Profile `json:"analysis,omitempty"`
-	ProjectID         string            `json:"project_id"`
-	PublicURL         string            `json:"public_url"`
-	TLSCertFile       string            `json:"tls_cert_file"`
-	TLSKeyFile        string            `json:"tls_key_file"`
-	SigningKeyFile    string            `json:"signing_key_file"`
-	ArtifactDirectory string            `json:"artifact_directory"`
-	ArtifactTokenFile string            `json:"artifact_token_file"`
-	Kubernetes        kubernetes.Config `json:"kubernetes"`
-	Git               github.Config     `json:"git"`
-	Model             workerapi.Model   `json:"model"`
-	AllowedPaths      []string          `json:"allowed_paths"`
-	Checks            []worker.Check    `json:"checks"`
-	RequiredCI        []string          `json:"required_ci"`
-	RequireApproval   bool              `json:"require_approval"`
-	MaxTokens         int64             `json:"max_tokens"`
-	BudgetMinutes     int               `json:"budget_minutes"`
-	PolicyVersion     string            `json:"policy_version"`
+	Version                    int                         `json:"version,omitempty"`
+	Analysis                   *analysis.Profile           `json:"analysis,omitempty"`
+	ProjectID                  string                      `json:"project_id"`
+	PublicURL                  string                      `json:"public_url"`
+	TLSCertFile                string                      `json:"tls_cert_file"`
+	TLSKeyFile                 string                      `json:"tls_key_file"`
+	SigningKeyFile             string                      `json:"signing_key_file"`
+	ArtifactDirectory          string                      `json:"artifact_directory"`
+	ArtifactTokenFile          string                      `json:"artifact_token_file"`
+	Kubernetes                 kubernetes.Config           `json:"kubernetes"`
+	RepositoryEngine           *runtimeapi.EngineSelection `json:"repository_engine,omitempty"`
+	RepositoryEngineGatewayURL string                      `json:"repository_engine_gateway_url,omitempty"`
+	Git                        github.Config               `json:"git"`
+	Model                      workerapi.Model             `json:"model"`
+	AllowedPaths               []string                    `json:"allowed_paths"`
+	Checks                     []workresult.Check          `json:"checks"`
+	RequiredCI                 []string                    `json:"required_ci"`
+	RequireApproval            bool                        `json:"require_approval"`
+	MaxTokens                  int64                       `json:"max_tokens"`
+	BudgetMinutes              int                         `json:"budget_minutes"`
+	PolicyVersion              string                      `json:"policy_version"`
 }
 
 func safeURL(value string) bool {
@@ -65,6 +69,19 @@ func (c Config) Validate() error {
 			return errors.New("analysis limits cannot exceed installation limits")
 		}
 	}
+	if c.RepositoryEngine != nil {
+		if err := c.RepositoryEngine.Validate(); err != nil {
+			return err
+		}
+		if c.RepositoryEngineGatewayURL != "https://marina.marina-system.svc" ||
+			c.RepositoryEngine.Version != kagent.Version || c.RepositoryEngine.Endpoint != "kint-engine-controller.kint-engine.svc:8083" ||
+			c.RepositoryEngine.Namespace != "kint-engine" || c.RepositoryEngine.Harness != "kint-codex" || !c.RepositoryEnabled() {
+			return errors.New("repository engine requires the pinned native Codex profile and repository binding")
+		}
+	}
+	if c.RepositoryEngine == nil && c.RepositoryEngineGatewayURL != "" {
+		return errors.New("repository engine gateway requires a selected engine")
+	}
 	if c.RepositoryEnabled() || c.Analysis == nil {
 		if !safeURL(c.Git.APIURL) || !safeURL(c.Git.CloneURL) || c.Git.Repository == "" || c.Git.AuthorName == "" || c.Git.AuthorEmail == "" || c.Git.BaseBranch == "" || len(c.Checks) == 0 || len(c.Checks) > 20 || len(c.AllowedPaths) == 0 {
 			return errors.New("repository profile requires explicit Git destinations, identity, scope and trusted checks")
@@ -84,7 +101,7 @@ func (c Config) Validate() error {
 		seen[check.ID] = true
 	}
 	for _, scope := range c.AllowedPaths {
-		if scope != "." && !worker.AllowedPath([]string{"."}, scope) {
+		if scope != "." && !workresult.AllowedPath([]string{"."}, scope) {
 			return errors.New("invalid allowed path")
 		}
 	}

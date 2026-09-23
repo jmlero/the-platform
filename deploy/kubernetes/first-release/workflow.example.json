@@ -25,13 +25,13 @@
     "author_email": "jmlero@hotmail.com"
   },
   "model": {
-    "endpoint": "https://YOUR_MODEL_HOST/v1",
-    "name": "YOUR_CODING_MODEL",
+    "endpoint": "https://openrouter.ai/api/v1",
+    "name": "openai/gpt-6-luna",
     "token_file": "/run/marina-secrets/model-token",
     "max_output_tokens": 8192,
-    "input_micros_per_million": 0,
-    "output_micros_per_million": 0,
-    "currency": "EUR"
+    "input_micros_per_million": 100000,
+    "output_micros_per_million": 500000,
+    "currency": "USD"
   },
   "allowed_paths": ["src", "tests"],
   "checks": [{"id": "regression", "directory": ".", "command": ["go", "test", "./..."]}],

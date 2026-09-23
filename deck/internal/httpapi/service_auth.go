@@ -39,6 +39,15 @@ func (identity ServiceIdentity) AllowsProject(projectID string) bool {
 	return ok
 }
 
+// Projects returns the granted project IDs as a non-nil slice.
+func (identity ServiceIdentity) Projects() []string {
+	projects := make([]string, 0, len(identity.projects))
+	for projectID := range identity.projects {
+		projects = append(projects, projectID)
+	}
+	return projects
+}
+
 func (identity ServiceIdentity) AllowsCapability(capability string) bool {
 	_, ok := identity.capabilities[capability]
 	return ok

@@ -39,8 +39,9 @@ Deck remains the interface, Marina owns governed workflows, and kagent becomes
 the core agent engine. The [implementation and removal plan](docs/kagent-integration-plan.md)
 contains dependencies, acceptance criteria, concrete deletion targets and rollback.
 KINT-01/02 passed the isolated local feasibility trial; the trial was removed
-after teardown proof. KINT-03 adds the adapter and durable correlation, with
-isolated local recovery proof. Governed workload integration and migration remain planned.
+after teardown proof. KINT-03/04 add the governed adapter and gateway; KINT-05
+adds the shared result boundary. KINT-06 passed one native repository pilot;
+the two-workload cutover remains planned.
 
 | ID | State | Owner | Outcome |
 | --- | --- | --- | --- |
@@ -48,8 +49,8 @@ isolated local recovery proof. Governed workload integration and migration remai
 | KINT-02 | Done | Ops | Native Codex snapshot/restore, durable instance identity, isolation, resource sample and safe teardown passed on local Kind. [Live evidence and limits](docs/validation/kint-01-02-2026-09-22.md). |
 | KINT-03 | Done | Marina | Pinned lifecycle adapter, durable revision/A2A correlation, no-resend recovery, observed cancellation and artifact cleanup. [Deterministic checks and isolated local recovery proof](docs/validation/kint-03-2026-09-22.md); active workloads remain unchanged. |
 | KINT-04 | Done | Marina | Governed admission and attempt-scoped model/tool/source access, with real local Substrate HTTPS injection, credential rotation, cached-credential cancellation/expiry, denied bypasses and durable accounting. [Checks, live evidence and safe teardown](docs/validation/kint-04-2026-09-22.md); workload migration remains pending. |
-| KINT-05 | Open | Marina | After 03–04, separate result validation and independent deterministic verification from legacy agent hosting. |
-| KINT-06 | Open | Marina | After 02–05, run the repository-to-verified-PR workflow through native kagent Codex. |
+| KINT-05 | Done | Marina | Shared bounded result validation, digest-bound kagent artifact translation, and agent-free clean verification. [Deterministic checks and real-process conformance](docs/validation/kint-05-2026-09-23.md); installed workload migration remains pending. |
+| KINT-06 | Done | Marina | One Deck-authorized native Codex task produced [verified PR #13](docs/validation/kint-06-2026-09-23.md) on local Kind: separate clean verification and required CI passed at the exact head; the PR remains open and unmerged. The pilot was torn down after proof. |
 | KINT-07 | Open | Marina | After 02–05, run the pinned LangChain diagnostic workload through kagent BYO with unchanged evidence and authority rules. |
 | KINT-08 | Open | Joint | After 03–04, project engine state and bridge exact pending questions/answers without a second conversation runtime or duplicate results. |
 | KINT-09 | Open | Joint | After 06–08, pass both workloads and the mandatory live failure matrix through real Deck/Marina/kagent. |

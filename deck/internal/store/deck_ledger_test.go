@@ -279,10 +279,11 @@ func TestChannelMessageReferencesCanonicalResourcesAndPromotesBoundedTask(t *tes
 	if promoted.Version != 1 || promoted.Description != message.Body || !reflect.DeepEqual(promoted.Budget, budget) {
 		t.Fatalf("promoted task = %#v", promoted)
 	}
-	messages, err := appStore.ListChannelMessages(ctx, channel.ID, 20)
+	page, err := appStore.PageChannelMessages(ctx, channel.ID, 20, "")
 	if err != nil {
 		t.Fatalf("list messages: %v", err)
 	}
+	messages := page.Items
 	if len(messages) != 1 || messages[0].PromotedTaskID == nil || *messages[0].PromotedTaskID != promoted.ID {
 		t.Fatalf("messages after promotion = %#v", messages)
 	}

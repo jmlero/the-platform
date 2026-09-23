@@ -1,7 +1,7 @@
 # Integrate kagent and remove Marina's redundant agent engine
 
 - Date: 2026-09-22
-- Status: KINT-01–03 feasibility and lifecycle adapter passed; governed workload integration and rollout pending
+- Status: KINT-01–06 passed their scoped gates, including one native repository pilot; two-workload rollout pending
 - Decision: [0017](decisions/0017-kagent-core-engine.md)
 - Tracking: [KINT-01–15 in TODO.md](../TODO.md#kagent-integration-and-marina-simplification)
 - Research: [adoption analysis](kagent-adoption.md)
@@ -27,6 +27,8 @@ on local Kind. The trial was removed afterward. [KINT-03](validation/kint-03-202
 adds the lifecycle adapter and durable correlation with isolated local recovery
 proof; governed workload dispatch and legacy deletion remain pending. See the [exact lock and installation guide](../deploy/kubernetes/kagent-trial/README.md)
 and [symbol/caller removal inventory](kagent-removal-inventory.md).
+The [KINT-06 local pilot](validation/kint-06-2026-09-23.md) produced one
+verified PR through native Codex, with the trial removed afterward.
 
 ## Responsibility boundary
 
@@ -127,6 +129,10 @@ the supported runtime.
 **KINT-05 — Separate results and independent verification from worker hosting.
 Owner: Marina. Depends: 03–04.**
 
+Completed at the deterministic boundary in [KINT-05 evidence](validation/kint-05-2026-09-23.md).
+The installed workload backend remains unchanged; KINT-06/07 must emit and
+prove the selected inline result artifact through their actual harnesses.
+
 - Extract the existing result/check formats, safe change validation and clean
   verification behavior from mixed worker code only where needed by both paths.
   Translate kagent artifacts into digest-bound Marina evidence; validate actual
@@ -139,6 +145,10 @@ Owner: Marina. Depends: 03–04.**
 
 **KINT-06 — Move repository implementation to native kagent Codex. Owner: Marina.
 Depends: 02–05.**
+
+Completed for one bounded local Kind pilot in [KINT-06 evidence](validation/kint-06-2026-09-23.md).
+The verified PR remains open and unmerged. The trial was removed after proof;
+two-workload cutover and the broader live failure matrix remain KINT-09/11.
 
 - Run one Deck-authorized task using frozen context/source/profile and native
   Codex. Marina publishes permitted changes, runs independent verification and

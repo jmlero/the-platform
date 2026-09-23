@@ -135,6 +135,9 @@ func (specification Specification) Validate(now time.Time) error {
 				return fmt.Errorf("engine inputs must be digest-bound: %w", ErrInvalidInput)
 			}
 		}
+		if messageDigest, ok := strings.CutPrefix(specification.ContextURI, "artifact://sha256:"); !ok || !validEngineDigest(messageDigest) {
+			return fmt.Errorf("engine message must be an immutable artifact: %w", ErrInvalidInput)
+		}
 	}
 	if len(specification.Tools) > 1 || len(specification.Tools) == 1 && (specification.Tools[0] != "read_context_source" || specification.Workload != "diagnostic-analysis/v1" || specification.HarnessVersion != "langchain-create-agent/v2") {
 		return fmt.Errorf("unsupported runtime tool: %w", ErrInvalidInput)

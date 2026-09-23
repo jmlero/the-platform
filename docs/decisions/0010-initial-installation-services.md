@@ -70,6 +70,14 @@ CLI setup; no Platform workload or acceptance exercise was run in GCP.
 
 ## Model and network interpretation
 
+On 2026-09-23, the operator selected OpenRouter `openai/gpt-6-luna` as the
+default for newly prepared workflows and the local development installation.
+The earlier `z-ai/glm-5.3-flash` acceptance remains historical evidence; the new
+model requires its own live compatibility and cost validation before it inherits
+those claims. Installed workflow configuration remains explicit and pinned. The
+[local default-update evidence](../validation/openrouter-gpt-6-luna-2026-09-23.md)
+records the basic live probe and installation state.
+
 OpenRouter documents a [Responses endpoint](https://openrouter.ai/docs/api/api-reference/responses/create-responses).
 The Marina configuration uses base URL `https://openrouter.ai/api/v1`, which the
 gateway calls with the `/responses` suffix. The local pilot validated the pinned

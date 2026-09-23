@@ -84,3 +84,23 @@ func TestRepositoryPromotionExplainsReadinessWithoutCreatingWork(t *testing.T) {
 		t.Fatalf("draft not allowed: %s", response.Body.String())
 	}
 }
+
+func TestUnauthenticatedChannelMessageUsesSharedFallbackActor(t *testing.T) {
+	s, handler := newTestStoreAndHandler(t)
+	channel, err := s.CreateChannel(context.Background(), "prj_default", "fallback")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/channels/"+channel.ID+"/messages", strings.NewReader(`{"body":"hello"}`)))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("post message = %d %s", rec.Code, rec.Body)
+	}
+	var message domain.ChannelMessage
+	if err := json.Unmarshal(rec.Body.Bytes(), &message); err != nil {
+		t.Fatal(err)
+	}
+	if message.AuthorType != "agent" || message.AuthorID != fallbackServiceActorID {
+		t.Fatalf("author = %s/%s, want agent/%s", message.AuthorType, message.AuthorID, fallbackServiceActorID)
+	}
+}

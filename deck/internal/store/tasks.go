@@ -597,17 +597,28 @@ func (s *Store) NextReadyTask(ctx context.Context) (domain.Task, error) {
 	return task, nil
 }
 
-func (s *Store) ListEvents(ctx context.Context, limit int, afterID int64) ([]domain.Event, error) {
+// ListEvents returns events newer than afterID in ascending order, or the
+// newest events when afterID is zero. A non-nil projectIDs keeps only task
+// events in those projects; filtering before LIMIT lets scoped readers page
+// past events they cannot see.
+func (s *Store) ListEvents(ctx context.Context, limit int, afterID int64, projectIDs []string) ([]domain.Event, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
 	query := `
 		SELECT id, task_id, run_id, agent_id, type, message, payload_json, created_at
-		FROM events
+		FROM events WHERE 1 = 1
 	`
-	args := make([]any, 0, 2)
+	args := make([]any, 0, len(projectIDs)+2)
+	if projectIDs != nil {
+		// The leading NULL keeps the list valid and matches nothing when empty.
+		query += " AND task_id IN (SELECT id FROM tasks WHERE project_id IN (NULL" + strings.Repeat(", ?", len(projectIDs)) + "))"
+		for _, projectID := range projectIDs {
+			args = append(args, projectID)
+		}
+	}
 	if afterID > 0 {
-		query += " WHERE id > ? ORDER BY id ASC LIMIT ?"
+		query += " AND id > ? ORDER BY id ASC LIMIT ?"
 		args = append(args, afterID, limit)
 	} else {
 		query += " ORDER BY id DESC LIMIT ?"

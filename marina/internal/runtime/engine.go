@@ -3,6 +3,7 @@ package runtime
 import (
 	"encoding/hex"
 	"fmt"
+	"regexp"
 	"strings"
 )
 
@@ -22,12 +23,20 @@ func validEngineDigest(s string) bool {
 	b, err := hex.DecodeString(s)
 	return err == nil && len(b) == 32 && strings.ToLower(s) == s
 }
+
+var engineResourceName = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
+
 func (e EngineSelection) Validate() error {
 	if e.Backend != "kagent" || !validEngineDigest(e.Revision) {
 		return fmt.Errorf("invalid engine selection: %w", ErrInvalidInput)
 	}
 	for _, s := range []string{e.Version, e.Endpoint, e.Namespace, e.Harness, e.Template} {
 		if strings.TrimSpace(s) == "" {
+			return ErrInvalidInput
+		}
+	}
+	for _, name := range []string{e.Namespace, e.Harness, e.Template} {
+		if len(name) > 63 || !engineResourceName.MatchString(name) {
 			return ErrInvalidInput
 		}
 	}

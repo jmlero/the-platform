@@ -16,7 +16,7 @@ import (
 	runtimeapi "github.com/jmlero/the-platform/marina/internal/runtime"
 	"github.com/jmlero/the-platform/marina/internal/sourcecontrol"
 	"github.com/jmlero/the-platform/marina/internal/workcontrol"
-	"github.com/jmlero/the-platform/marina/internal/worker"
+	"github.com/jmlero/the-platform/marina/internal/workresult"
 )
 
 type Provider interface {
@@ -33,6 +33,8 @@ type Controller struct {
 	Journal       *sqlite.Store
 	Provider      Provider
 	Runtime       runtimeapi.Adapter
+	EngineRuntime runtimeapi.Adapter
+	PrepareEngine func(context.Context, runtimeapi.Specification) error
 	Artifacts     *artifacts.Store
 	Source        func(execution.Execution) (sourcecontrol.Port, error)
 }
@@ -421,7 +423,11 @@ func (c *Controller) advance(ctx context.Context, e execution.Execution) error {
 			return nil
 		}
 		if attempt.State != runtimeapi.StateSucceeded {
-			return c.block(ctx, e, r, stage+" worker failed; inspect the Kubernetes Job and create a revised task")
+			message := stage + " worker failed; inspect the Kubernetes Job and create a revised task"
+			if attempt.Specification.Engine != nil {
+				message = stage + " engine task failed; inspect the recorded kagent task and create a revised task"
+			}
+			return c.block(ctx, e, r, message)
 		}
 		if stage == "analyze" {
 			s.Implementer = attempt.ID
@@ -459,13 +465,9 @@ func (c *Controller) advance(ctx context.Context, e execution.Execution) error {
 		return c.save(ctx, e, s)
 	}
 	if s.Step == "publish" {
-		b, err := c.Artifacts.Get(s.ImplementationDigest)
+		result, err := c.checkedResult(s.ImplementationDigest, workresult.Expected{Stage: "implement", SourceRevision: s.Base, AllowedPaths: c.Config.AllowedPaths})
 		if err != nil {
-			return err
-		}
-		var result worker.Result
-		if err = json.Unmarshal(b, &result); err != nil {
-			return err
+			return c.block(ctx, e, r, "Implementation artifact is missing or outside the authorized source boundary")
 		}
 		source, err := c.Source(e)
 		if err != nil {
@@ -473,7 +475,7 @@ func (c *Controller) advance(ctx context.Context, e execution.Execution) error {
 		}
 		changes := make([]sourcecontrol.Change, 0, len(result.Changes))
 		for _, change := range result.Changes {
-			if !worker.AllowedPath(c.Config.AllowedPaths, change.Path) {
+			if !workresult.AllowedPath(c.Config.AllowedPaths, change.Path) {
 				return c.block(ctx, e, r, "Worker output exceeds configured file scope")
 			}
 			digest, err := c.Artifacts.Put(change.Content)
@@ -628,13 +630,9 @@ func (c *Controller) block(ctx context.Context, e execution.Execution, r workcon
 }
 
 func (c *Controller) evidence(ctx context.Context, e execution.Execution, r workcontrol.Run, s state) error {
-	b, err := c.Artifacts.Get(s.VerificationDigest)
+	result, err := c.checkedResult(s.VerificationDigest, workresult.Expected{Stage: "verify", SourceRevision: s.Head, Checks: c.Config.Checks})
 	if err != nil {
-		return err
-	}
-	var result worker.Result
-	if err = json.Unmarshal(b, &result); err != nil {
-		return err
+		return c.block(ctx, e, r, "Independent verification artifact is missing or invalid")
 	}
 	index := len(s.EvidenceIDs)
 	if index >= len(result.Checks) {

@@ -56,6 +56,7 @@ func testContextToolEnforcesFrozenAllowlistAndLiveRevocation(t *testing.T, engin
 	if engine {
 		spec.CredentialReferences = []runtimeapi.CredentialReference{{Kind: "engine-gateway", Reference: "secret://trial/attempt/gateway", ExpiresAt: lease}}
 		spec.Engine = &runtimeapi.EngineSelection{Backend: "kagent", Version: "pinned", Endpoint: "engine", Namespace: "trial", Harness: "byo", Template: "attempt", Revision: strings.Repeat("d", 64)}
+		spec.ContextURI = "artifact://sha256:" + strings.Repeat("a", 64)
 	}
 	e, a, _, err := j.EnsureRuntimeAttempt(ctx, e.ID, e.Version, spec)
 	if err != nil {

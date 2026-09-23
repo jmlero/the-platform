@@ -9,6 +9,7 @@ import (
 	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -92,6 +93,53 @@ func Token(key []byte, specification runtimeapi.Specification) string {
 	mac := hmac.New(sha256.New, key)
 	_, _ = mac.Write([]byte(specification.AttemptID + "\x00" + digest))
 	return hex.EncodeToString(mac.Sum(nil))
+}
+
+// InstallEngineCredential updates only a pre-created attempt-exclusive Secret.
+// Resource-version preconditions prevent replacing a concurrent administrator edit.
+func (adapter *Adapter) InstallEngineCredential(ctx context.Context, spec runtimeapi.Specification, credential string) error {
+	if _, err := spec.EngineGatewayReference(); err != nil {
+		return err
+	}
+	if credential != spec.AttemptID+"."+Token(adapter.config.SigningKey, spec) {
+		return runtimeapi.ErrInvalidInput
+	}
+	name := spec.Engine.Template
+	endpoint := "/api/v1/namespaces/" + spec.Engine.Namespace + "/secrets/" + name
+	var secret struct {
+		APIVersion string `json:"apiVersion"`
+		Kind       string `json:"kind"`
+		Type       string `json:"type"`
+		Metadata   struct {
+			Name            string `json:"name"`
+			Namespace       string `json:"namespace"`
+			ResourceVersion string `json:"resourceVersion"`
+		} `json:"metadata"`
+		Data map[string]string `json:"data"`
+	}
+	status, err := adapter.request(ctx, http.MethodGet, endpoint, nil, &secret)
+	if err != nil {
+		return err
+	}
+	if status != http.StatusOK || secret.APIVersion != "v1" || secret.Kind != "Secret" || secret.Type != "Opaque" ||
+		secret.Metadata.Name != name || secret.Metadata.Namespace != spec.Engine.Namespace || secret.Metadata.ResourceVersion == "" ||
+		len(secret.Data) != 1 || secret.Data["gateway"] == "" {
+		return errors.New("attempt-exclusive engine Secret is unavailable or invalid")
+	}
+	encoded := base64.StdEncoding.EncodeToString([]byte(credential))
+	if secret.Data["gateway"] == encoded {
+		return nil
+	}
+	patch := []map[string]string{{"op": "test", "path": "/metadata/resourceVersion", "value": secret.Metadata.ResourceVersion},
+		{"op": "replace", "path": "/data/gateway", "value": encoded}}
+	status, err = adapter.requestWithType(ctx, http.MethodPatch, endpoint, patch, nil, "application/json-patch+json")
+	if err != nil {
+		return err
+	}
+	if status != http.StatusOK {
+		return apiError("install engine credential", status)
+	}
+	return nil
 }
 
 func jobName(key string) string {
@@ -346,6 +394,9 @@ func apiError(action string, status int) error {
 	return fmt.Errorf("Kubernetes %s returned HTTP %d", action, status)
 }
 func (adapter *Adapter) request(ctx context.Context, method, path string, body, result any) (int, error) {
+	return adapter.requestWithType(ctx, method, path, body, result, "application/json")
+}
+func (adapter *Adapter) requestWithType(ctx context.Context, method, path string, body, result any, contentType string) (int, error) {
 	var reader io.Reader
 	if body != nil {
 		encoded, err := json.Marshal(body)
@@ -358,7 +409,7 @@ func (adapter *Adapter) request(ctx context.Context, method, path string, body, 
 	if err != nil {
 		return 0, err
 	}
-	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Content-Type", contentType)
 	if adapter.config.TokenFile != "" {
 		token, err := os.ReadFile(adapter.config.TokenFile)
 		if err != nil {

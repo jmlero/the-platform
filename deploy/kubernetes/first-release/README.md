@@ -100,6 +100,12 @@ Edit `workflow.json`: Git locations and identity, model location/name/rates,
 worker image **digest**, trusted commands, allowed paths, required CI names and
 budget. Set the independently built Deck and Marina images in the generated
 `kustomization.yaml`. Push/load your images using your registry's normal process.
+The generated workflow selects OpenRouter
+[`openai/gpt-6-luna`](https://openrouter.ai/openai/gpt-6-luna) with its published
+USD 0.10/M input and USD 0.50/M output token rates as the starting configuration.
+Review current pricing and validate this model with the installed harnesses before
+enabling intake; existing installations keep their explicit workflow setting
+until updated separately.
 The worker cannot download dependencies from the internet. Vendor dependencies
 in the repository or extend the image with pre-fetched dependencies and tools.
 Go uses `/opt/marina-cache/go`, `GOPROXY=off`, `GOTOOLCHAIN=local` and a disposable

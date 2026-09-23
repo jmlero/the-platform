@@ -463,3 +463,48 @@ func newTestStoreAndHandler(t *testing.T) (*store.Store, http.Handler) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	return appStore, New(appStore, logger).Handler()
 }
+
+func TestProjectScopedEventListPagesPastEventsOutsideScope(t *testing.T) {
+	appStore, _ := newTestStoreAndHandler(t)
+	ctx := context.Background()
+	channel, err := appStore.CreateChannel(ctx, "prj_default", "outside-scope")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 3; i++ {
+		if _, err := appStore.PostChannelMessage(ctx, domain.ChannelMessageInput{ChannelID: channel.ID, AuthorType: "human", AuthorID: "operator:test", Body: fmt.Sprint(i)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	latest, err := appStore.ListEvents(ctx, 3, 0, nil)
+	if err != nil || len(latest) != 3 {
+		t.Fatalf("seed events = %#v, err %v", latest, err)
+	}
+	after := latest[2].ID - 1
+	task, err := appStore.CreateTask(ctx, domain.CreateTaskInput{Title: "Scoped", Status: domain.TaskReady, Priority: "high", BudgetMinutes: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	policyPath := filepath.Join(t.TempDir(), "service-auth.json")
+	writeServiceAuthPolicy(t, policyPath, serviceAuthTokenOne, []string{capabilityEventList}, []string{"prj_default"})
+	authorizer, err := NewFileServiceAuthorizer(policyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := New(appStore, slog.New(slog.NewTextHandler(io.Discard, nil)), WithServiceAuthorizer(authorizer)).Handler()
+
+	request := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/events?after_id=%d&limit=2", after), nil)
+	request.Header.Set("Authorization", "Bearer "+serviceAuthTokenOne)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("list events = %d %s", response.Code, response.Body)
+	}
+	var events []domain.Event
+	if err := json.NewDecoder(response.Body).Decode(&events); err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 || events[0].TaskID == nil || *events[0].TaskID != task.ID {
+		t.Fatalf("scoped page = %#v, want the task event beyond out-of-scope events", events)
+	}
+}

@@ -12,10 +12,14 @@ import (
 	"github.com/jmlero/the-platform/marina/internal/execution"
 	"github.com/jmlero/the-platform/marina/internal/flow"
 	"github.com/jmlero/the-platform/marina/internal/journal/sqlite"
+	"github.com/jmlero/the-platform/marina/internal/kagent"
 	"github.com/jmlero/the-platform/marina/internal/kubernetes"
+	runtimeapi "github.com/jmlero/the-platform/marina/internal/runtime"
 	"github.com/jmlero/the-platform/marina/internal/sourcecontrol"
 	"github.com/jmlero/the-platform/marina/internal/sourcecontrol/github"
 	"github.com/jmlero/the-platform/marina/internal/workerapi"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 func configureWorkers(config flow.Config, journal *sqlite.Store, provider flow.Provider) (*flow.Controller, http.Handler, error) {
@@ -84,5 +88,20 @@ func configureWorkers(config flow.Config, journal *sqlite.Store, provider flow.P
 		effective, err := controller.ConfigurationForExecution(ctx, e)
 		return effective.Git.CloneURL, effective.Git.TokenFile, err
 	}, ContextCheck: controller.CheckContext, PublicURL: config.PublicURL, SigningKey: key, SourceURL: config.Git.CloneURL, SourceTokenFile: config.Git.TokenFile, ArtifactTokenFile: config.ArtifactTokenFile, Model: config.Model}, journal, store, provider, nil)
+	// Retain cancellation and inspection for a journaled pilot attempt even
+	// after the profile stops selecting the engine for new work.
+	const engineEndpoint = "kint-engine-controller.kint-engine.svc:8083"
+	conn, err := grpc.NewClient(engineEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil, nil, err
+	}
+	controller.EngineRuntime = kagent.New(conn, engineEndpoint, journal, store, gateway)
+	controller.PrepareEngine = func(ctx context.Context, spec runtimeapi.Specification) error {
+		credential, err := gateway.EngineCredential(ctx, spec)
+		if err != nil {
+			return err
+		}
+		return runtime.InstallEngineCredential(ctx, spec, credential)
+	}
 	return controller, gateway, nil
 }

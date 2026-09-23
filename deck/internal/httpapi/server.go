@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -29,6 +30,7 @@ type Server struct {
 	artifactURL           string
 	artifactTokenFile     string
 	artifactCAFile        string
+	artifactClients       artifactClientCache
 }
 
 type Option func(*Server)
@@ -252,10 +254,7 @@ func (s *Server) lookupClaim(w http.ResponseWriter, r *http.Request) {
 	if projectID == "" || !s.requireProject(w, r, projectID) {
 		return
 	}
-	actorID := "local-prototype"
-	if identity, ok := serviceIdentityFromRequest(r); ok {
-		actorID = "service:" + identity.ID
-	}
+	actorID := serviceActorID(r)
 	run, err := s.store.LookupClaim(r.Context(), projectID, actorID, r.PathValue("key"))
 	if err != nil {
 		s.writeError(w, err)
@@ -515,11 +514,9 @@ func (s *Server) postChannelMessage(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, err)
 		return
 	}
-	authorType, authorID := "agent", "service:local-prototype"
+	authorType, authorID := "agent", serviceActorID(r)
 	if operatorID, ok := operatorSessionFromRequest(r); ok {
 		authorType, authorID = "human", "operator:"+operatorID.OperatorID
-	} else if identity, ok := serviceIdentityFromRequest(r); ok {
-		authorID = "service:" + identity.ID
 	}
 	message, err := s.store.PostChannelMessage(r.Context(), domain.ChannelMessageInput{
 		ChannelID: channel.ID, AuthorType: authorType, AuthorID: authorID,
@@ -671,7 +668,7 @@ func (s *Server) bootstrap(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, err)
 		return
 	}
-	events, err := s.store.ListEvents(r.Context(), 80, 0)
+	events, err := s.store.ListEvents(r.Context(), 80, 0, nil)
 	if err != nil {
 		s.writeError(w, err)
 		return
@@ -693,34 +690,21 @@ func (s *Server) bootstrap(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) listTasks(w http.ResponseWriter, r *http.Request) {
+	status := strings.TrimSpace(r.URL.Query().Get("status"))
+	if status != "" && !slices.Contains(domain.TaskStatuses, status) {
+		s.writeError(w, fmt.Errorf("unknown task status %q: %w", status, domain.ErrInvalidInput))
+		return
+	}
 	tasks, err := s.store.ListTasks(r.Context())
 	if err != nil {
 		s.writeError(w, err)
 		return
 	}
-	status := strings.TrimSpace(r.URL.Query().Get("status"))
-	if status == "" {
-		writeJSON(w, http.StatusOK, filterTasksForServiceIdentity(r, tasks))
-		return
+	tasks = filterTasksForServiceIdentity(r, tasks)
+	if status != "" {
+		tasks = slices.DeleteFunc(tasks, func(task domain.Task) bool { return task.Status != status })
 	}
-	validStatus := false
-	for _, candidate := range domain.TaskStatuses {
-		if status == candidate {
-			validStatus = true
-			break
-		}
-	}
-	if !validStatus {
-		s.writeError(w, fmt.Errorf("unknown task status %q: %w", status, domain.ErrInvalidInput))
-		return
-	}
-	filtered := make([]domain.Task, 0, len(tasks))
-	for _, task := range tasks {
-		if task.Status == status && serviceIdentityAllowsProject(r, task.ProjectID) {
-			filtered = append(filtered, task)
-		}
-	}
-	writeJSON(w, http.StatusOK, filtered)
+	writeJSON(w, http.StatusOK, tasks)
 }
 
 func (s *Server) createTask(w http.ResponseWriter, r *http.Request) {
@@ -1101,17 +1085,12 @@ func (s *Server) answerDecision(w http.ResponseWriter, r *http.Request) {
 func (s *Server) listEvents(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	afterID, _ := strconv.ParseInt(r.URL.Query().Get("after_id"), 10, 64)
-	events, err := s.store.ListEvents(r.Context(), limit, afterID)
+	events, err := s.store.ListEvents(r.Context(), limit, afterID, serviceProjectScope(r))
 	if err != nil {
 		s.writeError(w, err)
 		return
 	}
-	filtered, err := s.filterEventsForServiceIdentity(r, events)
-	if err != nil {
-		s.writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, filtered)
+	writeJSON(w, http.StatusOK, events)
 }
 
 func (s *Server) streamEvents(w http.ResponseWriter, r *http.Request) {
@@ -1129,12 +1108,8 @@ func (s *Server) streamEvents(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	lastEventID, _ := strconv.ParseInt(r.Header.Get("Last-Event-ID"), 10, 64)
 	if lastEventID > 0 {
-		missed, err := s.store.ListEvents(r.Context(), 500, lastEventID)
+		missed, err := s.store.ListEvents(r.Context(), 500, lastEventID, serviceProjectScope(r))
 		if err == nil {
-			missed, err = s.filterEventsForServiceIdentity(r, missed)
-			if err != nil {
-				return
-			}
 			for _, event := range missed {
 				if err := writeSSE(w, event); err != nil {
 					return
@@ -1303,11 +1278,20 @@ func newOperatorSecret() (string, error) {
 	return hex.EncodeToString(value), nil
 }
 
-func mutationFromRequest(r *http.Request) (store.Mutation, error) {
-	actorID := "local-prototype"
+// fallbackServiceActorID attributes service-route writes when service
+// authentication is not configured. Claims and idempotency records are keyed
+// on it, so it must stay stable.
+const fallbackServiceActorID = "local-prototype"
+
+func serviceActorID(r *http.Request) string {
 	if identity, ok := serviceIdentityFromRequest(r); ok {
-		actorID = "service:" + identity.ID
+		return "service:" + identity.ID
 	}
+	return fallbackServiceActorID
+}
+
+func mutationFromRequest(r *http.Request) (store.Mutation, error) {
+	actorID := serviceActorID(r)
 	values := r.Header.Values("Idempotency-Key")
 	if len(values) > 1 {
 		return store.Mutation{}, fmt.Errorf("Idempotency-Key must be sent at most once: %w", domain.ErrInvalidInput)
@@ -1420,24 +1404,12 @@ func (s *Server) filterDecisionsForServiceIdentity(
 	return filtered, nil
 }
 
-func (s *Server) filterEventsForServiceIdentity(
-	r *http.Request,
-	events []domain.Event,
-) ([]domain.Event, error) {
-	if _, ok := serviceIdentityFromRequest(r); !ok {
-		return events, nil
+// serviceProjectScope returns nil when the request has no service identity.
+func serviceProjectScope(r *http.Request) []string {
+	if identity, ok := serviceIdentityFromRequest(r); ok {
+		return identity.Projects()
 	}
-	filtered := make([]domain.Event, 0, len(events))
-	for _, event := range events {
-		allowed, err := s.serviceIdentityAllowsEvent(r, event)
-		if err != nil {
-			return nil, err
-		}
-		if allowed {
-			filtered = append(filtered, event)
-		}
-	}
-	return filtered, nil
+	return nil
 }
 
 func (s *Server) serviceIdentityAllowsEvent(r *http.Request, event domain.Event) (bool, error) {

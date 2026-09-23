@@ -183,11 +183,6 @@ type ChannelMessagePage struct {
 	NextCursor string                  `json:"next_cursor,omitempty"`
 }
 
-func (s *Store) ListChannelMessages(ctx context.Context, channelID string, limit int) ([]domain.ChannelMessage, error) {
-	page, err := s.PageChannelMessages(ctx, channelID, limit, "")
-	return page.Items, err
-}
-
 func (s *Store) PageChannelMessages(ctx context.Context, channelID string, limit int, cursor string) (ChannelMessagePage, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 100

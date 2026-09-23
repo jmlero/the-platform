@@ -26,6 +26,7 @@ class InstallationPreflightTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             config = json.loads((Path(__file__).resolve().parents[1] / "deploy/kubernetes/first-release/workflow.example.json").read_text())
+            config["model"]["name"] = ""
             (root / "workflow.json").write_text(json.dumps(config))
             (root / "git-token").write_text("")
             (root / "model-token").write_text("private-test-value")

@@ -38,7 +38,7 @@ func TestChannelMessagesPublishDurableEventsAndPageWithoutGaps(t *testing.T) {
 	if _, err = s.db.ExecContext(ctx, "UPDATE channel_messages SET created_at = 123"); err != nil {
 		t.Fatal(err)
 	}
-	events, err := s.ListEvents(ctx, 500, 0)
+	events, err := s.ListEvents(ctx, 500, 0, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

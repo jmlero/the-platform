@@ -149,7 +149,7 @@ func setup(t *testing.T, e *engine, selection ...rt.EngineSelection) *fixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := rt.Specification{IdempotencyKey: "start-key", RepositoryURI: "https://example.invalid/repo", SourceRevision: "abc", ContextURI: "artifact://" + digest, ContextDigest: digest, ProfileDigest: strings.Repeat("a", 64), HarnessVersion: "fixture/v1", PolicyVersion: "policy/v1", AuthorityFence: ex.FenceToken, DeadlineAt: now.Add(time.Minute * 30), NetworkPolicy: "isolated", FilesystemPolicy: "workspace", Limits: rt.Limits{CPUMillis: 1, MemoryBytes: 1, EphemeralStorageBytes: 1, WallTimeSeconds: 60, MaxProcesses: 1}, Engine: &rt.EngineSelection{Backend: "kagent", Version: kagent.Version, Endpoint: "test-engine", Namespace: "trial", Harness: "codex", Template: "fixture", Revision: strings.Repeat("b", 64)}}
+	s := rt.Specification{IdempotencyKey: "start-key", RepositoryURI: "https://example.invalid/repo", SourceRevision: "abc", ContextURI: "artifact://" + digest, ContextDigest: "sha256:" + strings.Repeat("c", 64), ProfileDigest: strings.Repeat("a", 64), HarnessVersion: "fixture/v1", PolicyVersion: "policy/v1", AuthorityFence: ex.FenceToken, DeadlineAt: now.Add(time.Minute * 30), NetworkPolicy: "isolated", FilesystemPolicy: "workspace", Limits: rt.Limits{CPUMillis: 1, MemoryBytes: 1, EphemeralStorageBytes: 1, WallTimeSeconds: 60, MaxProcesses: 1}, Engine: &rt.EngineSelection{Backend: "kagent", Version: kagent.Version, Endpoint: "test-engine", Namespace: "trial", Harness: "codex", Template: "fixture", Revision: strings.Repeat("b", 64)}}
 	if len(selection) > 0 {
 		s.Engine = &selection[0]
 		s.IdempotencyKey = fmt.Sprintf("kint-03-%d", time.Now().UnixNano())

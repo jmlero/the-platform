@@ -40,9 +40,9 @@ The decisions most useful for understanding the current release are:
   invocation and governed context reads
 
 The next engine direction is [0017](decisions/0017-kagent-core-engine.md): kagent
-integration and removal of redundant Marina execution code. KINT-01/02 local
-feasibility and KINT-03 lifecycle correlation passed; governed workload
-integration and rollout remain pending.
+integration and removal of redundant Marina execution code. KINT-01–06 passed
+their scoped gates, including one native repository pilot; two-workload rollout
+remains pending.
 
 [0018](decisions/0018-deck-work-preparation.md) assigns backlog refinement and
 focused work preparation to Deck, with planning execution and immutable context
@@ -55,6 +55,8 @@ build and environment; they are not current operating instructions.
 
 | Scope | Evidence |
 | --- | --- |
+| One Deck-authorized native Codex repository task, verified PR head and safe local teardown | [KINT-06](validation/kint-06-2026-09-23.md) |
+| Shared result validation, digest-bound engine artifact translation and independent verifier boundary | [KINT-05](validation/kint-05-2026-09-23.md) |
 | Governed engine gateway; real local native Codex/Substrate HTTPS injection, rotation, revocation, bypass denial and safe teardown | [KINT-04](validation/kint-04-2026-09-22.md) |
 | Pinned engine adapter, durable revision/A2A correlation and isolated local recovery | [KINT-03](validation/kint-03-2026-09-22.md) |
 | Pinned kagent/Substrate, ARM64 native lifecycle, persistence, isolation and safe teardown | [KINT-01/02](validation/kint-01-02-2026-09-22.md), [lifecycle](validation/kint-01-02-lifecycle-2026-09-22.json), [resources](validation/kint-01-02-resources-2026-09-22.json), and [teardown](validation/kint-01-02-teardown-2026-09-22.json) |

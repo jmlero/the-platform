@@ -25,6 +25,7 @@ import (
 	runtimeapi "github.com/jmlero/the-platform/marina/internal/runtime"
 	"github.com/jmlero/the-platform/marina/internal/workcontrol"
 	"github.com/jmlero/the-platform/marina/internal/worker"
+	"github.com/jmlero/the-platform/marina/internal/workresult"
 )
 
 type Model struct {
@@ -226,66 +227,33 @@ func (server *Server) result(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if attempt.Specification.Engine != nil {
+		http.Error(w, "engine results require artifact collection", 403)
+		return
+	}
 	input, err := server.Input(r.Context(), attempt)
 	if err != nil {
 		http.Error(w, "worker input is unavailable", 503)
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, worker.MaxResultBytes)
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	var result worker.Result
-	if err = decoder.Decode(&result); err != nil {
+	data, err := io.ReadAll(r.Body)
+	if err != nil {
 		http.Error(w, "invalid worker result", 400)
 		return
 	}
-	var extra any
-	if decoder.Decode(&extra) != io.EOF {
-		http.Error(w, "one result is required", 400)
-		return
-	}
-	if result.Stage != input.Stage || result.SourceRevision != input.SourceRevision || result.ObservedAt.Before(attempt.CreatedAt.Add(-time.Minute)) || result.ObservedAt.After(time.Now().Add(time.Minute)) {
-		http.Error(w, "result does not match the immutable worker input", 409)
-		return
-	}
+	want := workresult.Expected{Stage: input.Stage, SourceRevision: input.SourceRevision, AllowedPaths: input.AllowedPaths, Checks: input.Checks,
+		NotBefore: attempt.CreatedAt.Add(-time.Minute), Now: time.Now()}
 	if input.Stage == "analyze" {
-		if result.Analysis == nil || result.InputDigest != input.Analysis.InputDigest || result.ProfileDigest != input.Analysis.ProfileDigest ||
-			result.SourceRevision != "" || len(result.Changes) != 0 || len(result.Checks) != 0 {
-			http.Error(w, "analysis result does not match the immutable workload", 409)
+		if input.Analysis == nil {
+			http.Error(w, "analysis input is unavailable", 503)
 			return
 		}
-	} else if result.Analysis != nil || result.InputDigest != "" || result.ProfileDigest != "" {
-		http.Error(w, "repository result contains unsupported analysis fields", 400)
-		return
-	} else if input.Stage == "implement" {
-		if len(result.Changes) == 0 || len(result.Changes) > 30 || len(result.Checks) != 0 {
-			http.Error(w, "invalid implementation result", 400)
-			return
-		}
-		seen := map[string]bool{}
-		total := 0
-		for _, change := range result.Changes {
-			total += len(change.Content)
-			if seen[change.Path] || !worker.AllowedPath(input.AllowedPaths, change.Path) || (change.Mode != "100644" && change.Mode != "100755") || (change.Delete && len(change.Content) > 0) || total > 2<<20 {
-				http.Error(w, "change exceeds the task boundary", 403)
-				return
-			}
-			seen[change.Path] = true
-		}
-	} else if input.Stage == "verify" {
-		if len(result.Changes) != 0 || len(result.Checks) != len(input.Checks) {
-			http.Error(w, "incomplete verification result", 400)
-			return
-		}
-		for index, check := range result.Checks {
-			want := input.Checks[index]
-			if check.ID != want.ID || check.Directory != want.Directory || !reflect.DeepEqual(check.Command, want.Command) || check.OutputDigest != artifacts.Digest([]byte(check.Output)) {
-				http.Error(w, "verification result does not match the required checks", 409)
-				return
-			}
-		}
-	} else {
-		http.Error(w, "unsupported worker stage", 403)
+		want.InputDigest, want.ProfileDigest = input.Analysis.InputDigest, input.Analysis.ProfileDigest
+	}
+	result, err := workresult.Parse(data, want)
+	if err != nil {
+		http.Error(w, "result does not match the immutable worker input", 409)
 		return
 	}
 	encoded, _ := json.Marshal(result)

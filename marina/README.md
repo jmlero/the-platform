@@ -20,11 +20,17 @@ Read [the root architecture](../ARCHITECTURE.md) for the joint Deck–Marina com
 The [KINT-03 kagent adapter](internal/kagent/README.md) implements the pinned
 engine lifecycle and durable correlation at the runtime boundary, with
 [isolated local recovery evidence](../docs/validation/kint-03-2026-09-22.md).
-It is not selected by `serve` or installed workload profiles. The
+`serve` can select it only through an explicit pinned repository-engine profile. The
 [KINT-04 gateway](internal/workerapi/README.md) adds governed admission and
 attempt-scoped access, with real local native Codex/Substrate HTTPS injection,
 revocation, rotation and bypass acceptance. Installed workload migration remains
 pending; the live gateway fixture used synthetic Deck and model responses.
+The [KINT-05 result boundary](../docs/validation/kint-05-2026-09-23.md)
+validates legacy or collected kagent output against frozen attempt inputs and
+retains the agent-free clean verifier.
+The [KINT-06 local pilot](../docs/validation/kint-06-2026-09-23.md) selected
+native Codex for one Deck-authorized repository task and reached a verified PR.
+The trial profile was removed afterward; regular intake uses the original image.
 
 The following implementations and reusable foundations are present; the configured repository workflow below uses a narrower subset:
 

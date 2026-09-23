@@ -201,7 +201,11 @@ func (a *Adapter) advance(ctx context.Context, s rt.Specification, r rt.EngineAt
 		if err = s.Validate(time.Now()); err != nil {
 			return observation(r), err
 		}
-		body, err := a.blobs.Get(s.ContextDigest)
+		messageDigest, ok := strings.CutPrefix(s.ContextURI, "artifact://")
+		if !ok {
+			return observation(r), fmt.Errorf("engine message must be an immutable artifact: %w", rt.ErrInvalidInput)
+		}
+		body, err := a.blobs.Get(messageDigest)
 		if err != nil {
 			return observation(r), err
 		}

@@ -3,17 +3,18 @@
 KINT-03 implements `runtime.Adapter` using the public
 `kagent.api.v1alpha1.AgentInstanceService` and A2A v1 gRPC APIs from the
 [locked source](../../../deploy/kubernetes/kagent-trial/lock.json).
-It is not selected by `marina serve`: the [KINT-04 gateway](../workerapi/README.md)
-implements governed admission and access, with live Substrate acceptance pending;
-workflow result admission and installed profile dispatch remain KINT-05–07. No new operator capability is
-advertised and the supported workers remain unchanged.
+The [KINT-04 gateway](../workerapi/README.md) implements governed admission and
+access. `marina serve` can select this adapter for an explicit repository pilot
+profile; the installed configuration still selects the supported worker until
+KINT-06 live acceptance. No new operator capability is advertised.
 
-The caller supplies an authenticated `grpc.ClientConnInterface`, its installed
+The caller supplies a `grpc.ClientConnInterface`, its installed
 endpoint identity, the SQLite journal, the existing artifact store and a required
 `Admission` implementation (`workerapi.Server` for governed work). Each
 runtime specification must select the backend/version, endpoint, namespace,
 harness/template and exact prepared revision, plus profile and context digests.
-The context artifact's verified bytes are the initial message. This is the
+The digest-addressed artifact named by `ContextURI` contains the initial message;
+`ContextDigest` separately binds the frozen selected context package. This is the
 lifecycle transport boundary, not the later workload-specific input contract.
 The adapter calls admission before instance creation and message delivery,
 including recovery. The gateway rechecks calls and owns source access and budget

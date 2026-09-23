@@ -31,10 +31,13 @@ func TestVerificationChecksThePinnedRevisionInAFreshWorkspace(t *testing.T) {
 	git("add", "answer.txt")
 	git("commit", "--quiet", "-m", "fixture")
 	head := git("rev-parse", "HEAD")
-	input := Input{Stage: "verify", SourceURL: repo, SourceRevision: head, Checks: []Check{{ID: "regression", Directory: ".", Command: []string{"git", "grep", "--quiet", "expected", "HEAD:answer.txt"}}}}
-	result, err := Run(context.Background(), input, t.TempDir())
+	input := Input{Stage: "verify", SourceURL: repo, SourceRevision: head, Harness: []string{"/nonexistent-agent-harness"}, Checks: []Check{{ID: "regression", Directory: ".", Command: []string{"git", "grep", "--quiet", "expected", "HEAD:answer.txt"}}}}
+	result, err := RunVerification(context.Background(), input, t.TempDir())
 	if err != nil || result.SourceRevision != head || len(result.Checks) != 1 || result.Checks[0].ExitCode != 0 {
 		t.Fatalf("verification: %#v %v", result, err)
+	}
+	if _, err := Run(context.Background(), input, t.TempDir()); err != nil {
+		t.Fatalf("worker entry did not select verifier: %v", err)
 	}
 	input.Checks[0].Command = []string{"git", "grep", "--quiet", "absent", "HEAD:answer.txt"}
 	result, err = Run(context.Background(), input, t.TempDir())
@@ -44,7 +47,7 @@ func TestVerificationChecksThePinnedRevisionInAFreshWorkspace(t *testing.T) {
 }
 
 func TestChangesCannotEscapeAuthorizedPathsOrModifyControlFiles(t *testing.T) {
-	for _, name := range []string{"../secret", "/etc/passwd", ".git/config", ".github/workflows/build.yml", "AGENTS.md", "cli/../deck/file.go"} {
+	for _, name := range []string{".", "../secret", "/etc/passwd", ".git/config", ".github/workflows/build.yml", "AGENTS.md", "cli/../deck/file.go"} {
 		if AllowedPath([]string{"."}, name) {
 			t.Errorf("unsafe path allowed: %s", name)
 		}

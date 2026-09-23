@@ -28,11 +28,7 @@ func (s *Server) publishWorkloads(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, err)
 		return
 	}
-	owner := "local-prototype"
-	if id, ok := serviceIdentityFromRequest(r); ok {
-		owner = "service:" + id.ID
-	}
-	if err := s.store.PublishWorkloads(r.Context(), r.PathValue("project"), owner, input); err != nil {
+	if err := s.store.PublishWorkloads(r.Context(), r.PathValue("project"), serviceActorID(r), input); err != nil {
 		s.writeError(w, err)
 		return
 	}
