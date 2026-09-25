@@ -1,6 +1,6 @@
 # Decision 0015: Extend Marina into a bounded Kubernetes agent platform
 
-- Status: accepted; AGENT-01 through AGENT-13 complete within the bounded two-workload scope
+- Status: accepted; AGENT-01 through AGENT-13 complete within the bounded two-workload scope; the LangChain diagnostic workload is retired by [decision 0023](0023-focus-kagent-cutover.md)
 - Date: 2026-09-21
 - Scope: Marina execution, Deck governance, and AGENT-01 through AGENT-13
 

@@ -1,7 +1,7 @@
 # Decision 0017: Make kagent Marina's core agent engine
 
 - Date: 2026-09-22
-- Status: accepted implementation direction; integration, rollout and removal pending
+- Status: accepted implementation direction; integration, rollout and removal pending; cutover gates narrowed and the diagnostic workload retired by [decision 0023](0023-focus-kagent-cutover.md)
 - Scope: Marina engine ownership and KINT-01–15
 
 ## Decision

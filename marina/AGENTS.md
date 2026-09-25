@@ -134,7 +134,9 @@ second-device testing were removed from the local acceptance scope by the operat
 Prefer changes that strengthen this vertical slice or the next accepted backlog
 item over scaffolding for a hypothetical maturity stage.
 
-The same foundation also runs one pinned LangChain diagnostic workload. Follow
+The same foundation also runs one pinned LangChain diagnostic workload. It is
+retired by [decision 0023](../docs/decisions/0023-focus-kagent-cutover.md) and
+removed under KINT-12; do not extend it. Until then, follow
 the [workload profiles](docs/workloads/profiles-v1.md),
 [decision 0016](../docs/decisions/0016-workload-invocation-and-context-tool.md),
 and the [installation guide](../deploy/kubernetes/agent-platform/README.md).

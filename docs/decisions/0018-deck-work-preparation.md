@@ -1,7 +1,7 @@
 # Decision 0018: Deck owns backlog refinement and focused work preparation
 
 - Date: 2026-09-22
-- Status: accepted product direction; implementation planned
+- Status: accepted ownership; the PREP breakdown design is retired and replaced by PRD-derived tasks under [decision 0022](0022-autonomous-software-factory.md) (PRD-01–03)
 - Scope: Deck backlog, task decomposition, context selection, and Marina handoff
 
 ## Channel-first clarification, 2026-09-23
@@ -52,7 +52,7 @@ products while keeping Deck the authoritative backlog and work-control surface.
   supported human-review PR boundary. Parent completion is not inferred merely
   from successful child runs or agent assertions.
 
-The [implementation design](../plans/work-preparation.md) defines records, lifecycle,
+The [implementation design](https://github.com/jmlero/the-platform/blob/83ff021/docs/plans/work-preparation.md) (retired) defined records, lifecycle,
 context, contract changes, failure behavior, and PREP-01–08 acceptance criteria.
 
 ## Relationship to existing direction

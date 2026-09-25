@@ -49,7 +49,7 @@ Follow the layout in [docs/INDEX.md](docs/INDEX.md). Capitalized documents (INDE
 
 [docs/status.md](docs/status.md) is the only description of what is supported, implemented but not yet accepted, and not supported. Link to it; do not restate it in other documents. Update it in the same change that ships, removes or re-scopes a capability. Ledger records and reusable foundations alone do not establish a supported workflow capability.
 
-For diagnostic workload work, follow the [profile contract](marina/docs/workloads/profiles-v1.md), [API guide](marina/docs/workloads/api-v1.md) and [installation guide](deploy/kubernetes/agent-platform/README.md).
+For workload profile work, follow the [profile contract](marina/docs/workloads/profiles-v1.md), [API guide](marina/docs/workloads/api-v1.md) and [installation guide](deploy/kubernetes/agent-platform/README.md). The diagnostic workload is retired ([decision 0023](docs/decisions/0023-focus-kagent-cutover.md)); do not extend it.
 
 ## Project repository and context
 

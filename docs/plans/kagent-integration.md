@@ -1,9 +1,9 @@
 # Integrate kagent and remove Marina's redundant agent engine
 
 - Date: 2026-09-22
-- Status: KINT-01–06 passed their scoped gates, including one native repository pilot; two-workload rollout pending
-- Decision: [0017](../decisions/0017-kagent-core-engine.md)
-- Tracking: [KINT-01–15 in the backlog](../backlog.md#kagent-integration-and-marina-simplification)
+- Status: KINT-01–08 passed their scoped gates; permanent installation, core failure cases, cutover and removal pending
+- Decisions: [0017](../decisions/0017-kagent-core-engine.md); gates and scope narrowed by [0023](../decisions/0023-focus-kagent-cutover.md)
+- Tracking: KINT in [the backlog](../backlog.md)
 - Research: [adoption analysis](https://github.com/jmlero/the-platform/blob/744204a/docs/kagent-adoption.md)
 
 ## Outcome
@@ -44,10 +44,10 @@ HTTP/JSON contract and separate stores. Marina retains correlation records and
 workflow checkpoints, not another copy of kagent's complete event history.
 Engine completion is an observation, never sufficient evidence of task success.
 
-Prefer native Codex for repository work. Preserve the selected LangChain
-diagnostic harness through a small BYO integration initially; it is workload code,
-not a reason to retain Marina's old engine. A native ADK replacement can be
-considered separately with explicit profile/version and decision changes.
+Prefer native Codex for repository work. The chat agent uses kagent's BYO path.
+The LangChain diagnostic workload is retired by
+[decision 0023](../decisions/0023-focus-kagent-cutover.md): KINT-07 proved it on
+kagent, but it is not a cutover target, and KINT-12–14 delete it.
 
 ## Sequence and acceptance
 
@@ -186,46 +186,58 @@ question projection, restart, one correlated answer and validated result passed.
   approvals or operator pause/resume from upstream capability names.
 - Exit: a minimal question/answer and result projection survives disconnect and
   service restart without duplicate action or publication. Full conversation UI,
-  task delegation and inbox acceptance remain the existing CHAT/INBOX tasks.
+  task delegation and browser acceptance remain the existing CHAT tasks.
 
-### Phase 3 — prove parity and cut over
+### Phase 3 — install for real, prove the core cases and cut over
 
-**KINT-09 — Run the shared failure acceptance matrix. Owner: Joint.
-Depends: 06–08.**
+**KINT-16 — Install kagent permanently and turn on the chat agent. Owner:
+Ops/Marina. Depends: 01–08.**
 
-- Run every applicable case in the [mandatory matrix](kagent-integration.md#mandatory-failure-matrix)
-  against real Deck/Marina/kagent processes on local Kubernetes, including both
-  workloads, isolated restarts, lost responses, cancellation during model/tool
-  calls, lease loss, budget exhaustion, source/context changes and stale evidence.
+- Install the pinned kagent and Substrate into the regular local installation,
+  not a trial, and enable the conversation profile with a fixed delegation
+  budget. Repository work stays on the current runtime until KINT-11.
+- Exit: the chat agent answers in Deck threads at `https://localhost:8443`,
+  history stays readable, and the local installation guide describes the setup.
+  This period with two engines ends with KINT-12–14.
+
+**KINT-09 — Run the core failure cases. Owner: Joint. Depends: 06–08.**
+
+- Run the rows marked **core** in the [mandatory matrix](#mandatory-failure-matrix)
+  against real Deck/Marina/kagent processes on local Kubernetes with repository
+  work ([decision 0023](../decisions/0023-focus-kagent-cutover.md)). The other
+  rows move to KINT-17.
 - Cover the surviving verification Job and any child process/tool termination.
   Safe blockers match the existing release boundary; transparent step recovery
   and HA are not newly imposed requirements.
-- Exit: no duplicate external mutations, excess authority/budget, premature
-  cancellation or false completion. Store redacted evidence under `docs/validation/`.
+- Exit: no duplicate external mutations, excess budget, premature cancellation
+  or false completion. Store redacted evidence under `docs/validation/`.
 
-**KINT-10 — Rehearse installation upgrade and rollback. Owner: Ops/Marina.
-Depends: 02, 06–07.**
+**KINT-10 — Rehearse upgrade and rollback. Owner: Ops/Marina. Depends: 16.**
 
-- Measure the complete installation footprint. Exercise restart, credentials,
-  profile withdrawals, artifact retention and an upgrade with trial state.
-- Preserve previous images/configuration and history before schema changes;
-  rehearse the actual data-preserving rollback path. An image downgrade is not
-  assumed to reverse a schema migration. Backup automation remains deferred.
-- Exit: documented supported versions, reproducible installation and rollback,
+- Upgrade the installation with active kagent data; history and in-flight work
+  survive. Roll back by restoring the previous release and the retained data
+  copy. A schema-aware downgrade and the full footprint measurement move to
+  KINT-17. Backup automation remains deferred.
+- Exit: documented supported versions, a reproducible upgrade and rollback,
   retained state/evidence, and operation within existing environment/spend limits.
 
-**KINT-11 — Cut over new work to kagent. Owner: Marina/Ops.
+**KINT-11 — Cut over repository work to kagent. Owner: Marina/Ops.
 Depends: 09–10.**
 
-- Drain old executions, reconcile uncertain source effects, then change defaults
-  for newly authorized profiles. Never switch an active attempt between engines.
-  Cut over diagnostics and repository work separately with their evidence linked.
+- Drain old executions, reconcile uncertain source effects, then change the
+  default for newly authorized repository work. Never switch an active attempt
+  between engines.
 - Keep prior release artifacts for rollback. Route rollback only to newly
   authorized tasks after stopping and reconciling kagent-owned work.
-- Exit: both installed workload profiles use kagent, no legacy execution or
-  cleanup remains active, and old records/artifacts remain inspectable. Record
-  the date and removal owner; schedule KINT-12–14 as the next tranche before
-  unrelated engine features. The old backend has no indefinite fallback role.
+- Exit: repository work and the chat agent use kagent, no legacy execution or
+  cleanup remains active, and old records/artifacts remain inspectable. KINT-12–14
+  follow; the old backend has no indefinite fallback role.
+
+**KINT-17 — Run the remaining failure cases. Owner: Joint. Later.**
+
+The matrix rows not marked core, plus a schema-aware rollback and the full
+footprint measurement. Required before the platform runs on an independent
+cluster or for other users.
 
 ### Phase 4 — remove obsolete implementation
 
@@ -262,7 +274,7 @@ launch configuration, and the upgrade path preserves existing data.
 Depends: 14.**
 
 Run deterministic product/installation checks and real-process contract
-conformance, then repeat both live workload paths and the affected failure cases
+conformance, then repeat live repository and chat work and the affected failure cases
 on the final code after deletion. Publish a final removal inventory, retained-code
 rationale, supported dependency versions and local acceptance report. Update
 architecture, visions, AGENTS guidance, READMEs and backlog claims to the actual
@@ -280,23 +292,24 @@ engine and keeping it active does not count as removal.
 | `marina/internal/flow/runtime.go` | Replace hard-coded Codex/Python command construction and agent-worker input transport with engine dispatch. Preserve workflow admission and result acceptance. | 06–09, 11–12 |
 | `marina/cmd/marina/workers.go`, worker branches in `main.go` | Replace unconditional Kubernetes agent adapter wiring; remove the legacy agent CLI entry path. Keep only verifier entry/configuration if required. | 05–07, 11–12 |
 | `marina/internal/worker/runner.go` | Remove agent command execution; preserve/extract clean checkout, safe path/change validation, check execution and result schema used by verification. | 05–06, 12 |
-| `marina/internal/worker/analysis.go` | Remove subprocess hosting and legacy analysis transport after the BYO workload passes. Preserve independently necessary report validation. | 07, 12 |
+| `marina/internal/worker/analysis.go` | Delete with the retired diagnostic workload ([decision 0023](../decisions/0023-focus-kagent-cutover.md)). | 11–12 |
 | `marina/internal/worker/remote.go`, `authority.go` | Remove agent-specific input polling/result upload/watchdog plumbing only after equivalent fencing and termination are proven; retain any verifier-specific need. | 04–05, 09, 12 |
 | `marina/internal/kubernetes/adapter.go` | Remove coding/analysis Job support; narrow to independent verification if Jobs remain. Decouple shared credential helpers from the Kubernetes package. | 05, 09, 12–13 |
 | `marina/internal/workerapi/server.go`, `model.go`, `tools.go` | Remove unused legacy input/result/authority routes. Retain or adapt budget admission, context access, restricted source access and authenticated artifact delivery. | 04–05, 09, 12–14 |
 | `marina/internal/runtime`, runtime records in `journal/sqlite`, `execution/recovery.go` | Reduce provider-specific execution machinery; preserve attempt identity, accounting, cross-system recovery and historical readers. | 03, 09, 13 |
 | `marina/internal/flow/config.go`, `cmd/marina/profile.go` | Remove old agent-image/command settings; pin engine profile/revision. Keep required verifier settings and historical digest semantics. | 06–07, 11, 14 |
-| `marina/Dockerfile.worker`, `marina/Dockerfile.analysis-worker`, `marina/harnesses/langchain` | Replace agent-worker packaging with native Codex/BYO packaging; strip coding dependencies from verifier image. Retain LangChain workload code until an explicit replacement decision. | 05–07, 12, 14 |
+| `marina/Dockerfile.worker`, `marina/Dockerfile.analysis-worker`, `marina/harnesses/langchain` | Replace agent-worker packaging with native Codex/BYO packaging; strip coding dependencies from verifier image. Delete the analysis image and LangChain harness (decision 0023). | 05–07, 12, 14 |
 | `deploy/kubernetes/first-release/workers`, installation generators and validation scripts | Narrow RBAC/quotas/network policy to remaining verifier needs; remove old agent-image provisioning and test assumptions. Add pinned engine installation separately. | 02, 10–11, 14 |
-| `marina/internal/deck`, `workcontrol`, `policy`, `contextpack`, `sourcecontrol`, `artifacts`, `analysis` | Retain product contracts and evidence/governance behavior. Remove only proven dead callers/helpers; these packages do not become redundant merely because execution moves. | 13–15 |
+| `marina/internal/deck`, `workcontrol`, `policy`, `contextpack`, `sourcecontrol`, `artifacts` | Retain product contracts and evidence/governance behavior. Remove only proven dead callers/helpers; these packages do not become redundant merely because execution moves. | 13–15 |
 | `marina/internal/reconcile`, `flow`, `journal/sqlite` | Keep Deck reconciliation, workflow state and outbox. Remove only engine-owned details identified by the inventory. | 13–15 |
 
 ## Completion and verification
 
 The migration is complete only when:
 
-1. Both current workloads run through kagent; at least repository work uses a
-   native harness, and no new task can select Marina's old agent engine.
+1. Repository work runs through native Codex and the chat agent through BYO on
+   kagent; the diagnostic workload is removed, and no new task can select
+   Marina's old agent engine.
 2. Independent checks, current-source evidence, budget enforcement, cancellation
    and restart behavior pass the final build's acceptance gates.
 3. Every removal candidate is deleted or has a specific retained purpose and
@@ -315,9 +328,8 @@ because this is a cross-component migration. Add `make -C deck test check` when
 Deck changes. Live acceptance uses the existing authorized local profile and
 bounded credentials/task/model settings; deterministic doubles do not prove it.
 
-CHAT-04/05/07 should build on this engine integration; CHAT-01/02/03/06/08 and
-INBOX work retain their own acceptance criteria. AUTO tasks follow migration
-and must use the selected engine. Do not grow a parallel custom agent runtime
+CHAT-04–10 build on this engine integration and keep their own acceptance
+criteria. AUTO tasks follow KINT-11 and must use the selected engine. Do not grow a parallel custom agent runtime
 while these tasks are pending. Product UI/intent design and required fixes can
 continue independently.
 
@@ -328,23 +340,25 @@ it is not permission to conceal a regression or leave an accidental hybrid.
 
 ## Mandatory failure matrix
 
-KINT-09 runs every applicable row against real Deck, Marina and kagent
-processes. Carried over from the adoption analysis.
+KINT-09 runs the rows marked **core** against real Deck, Marina and kagent
+processes with repository work; KINT-17 runs the rest later
+([decision 0023](../decisions/0023-focus-kagent-cutover.md)). Carried over from
+the adoption analysis.
 
-| Test | Passing observation |
-| --- | --- |
-| Duplicate start/send; lose instance-create and send responses separately | Original instance/attempt recovered or safely blocked; no replacement coding work or duplicate billed invocation through blind retry. |
-| Restart Marina, kagent gateway, agent compute and engine database separately during work | Inspect the original identities; resume where proven or block truthfully. No invented completion or uncontrolled second attempt. |
-| Disconnect event stream; duplicate/out-of-order events | Reconstruct committed engine state and publish each logical Deck transition/result once. |
-| Cancel during a model call, tool call, and waiting-for-input state | Admission revoked; termination observed; late responses cannot publish new mutations or revive the run. |
-| Lose Deck/lease ownership; expire or revoke context | Further calls denied and compute stopped under the current fence rules. Credential-cache freshness cannot substitute for revocation. |
-| Exhaust time/tokens/cost; lose final streaming usage | Deny further consumption, keep unresolved reservations, report known and unknown usage separately, including internal retries. |
-| Bypass Marina via model egress, MCP, engine API, or child delegation | No unauthorized provider/tool access or task invocation; no upstream secret, Git write credential, or Kubernetes token available to agent code. |
-| Fail verification; change PR head; fail required CI | Evidence becomes failed/stale and Deck cannot show successful completion. |
-| Lose commit/PR/publication response | Reconcile the original source operation and outbox receipt; no duplicate PR or false failure followed by a new mutation. |
-| Edit template/model/tools while an instance starts or runs | Authorized revision remains pinned, or mismatch blocks before invocation. |
-| Answer a question twice, after expiry, or after cancel | Correct pending operation only; reject stale answers and preserve the original human decision. |
-| Fail artifact storage or cleanup; upgrade and roll back | No completion without retained evidence; cleanup remains visible/retryable and existing history remains readable. |
+| Test | Passing observation | Gate |
+| --- | --- | --- |
+| Duplicate start/send; lose instance-create and send responses separately | Original instance/attempt recovered or safely blocked; no replacement coding work or duplicate billed invocation through blind retry. | core |
+| Restart Marina, kagent gateway, agent compute and engine database separately during work | Inspect the original identities; resume where proven or block truthfully. No invented completion or uncontrolled second attempt. | core |
+| Disconnect event stream; duplicate/out-of-order events | Reconstruct committed engine state and publish each logical Deck transition/result once. | KINT-17 |
+| Cancel during a model call, tool call, and waiting-for-input state | Admission revoked; termination observed; late responses cannot publish new mutations or revive the run. | core |
+| Lose Deck/lease ownership; expire or revoke context | Further calls denied and compute stopped under the current fence rules. Credential-cache freshness cannot substitute for revocation. | KINT-17 |
+| Exhaust time/tokens/cost; lose final streaming usage | Deny further consumption, keep unresolved reservations, report known and unknown usage separately, including internal retries. | core |
+| Bypass Marina via model egress, MCP, engine API, or child delegation | No unauthorized provider/tool access or task invocation; no upstream secret, Git write credential, or Kubernetes token available to agent code. | KINT-17 |
+| Fail verification; change PR head; fail required CI | Evidence becomes failed/stale and Deck cannot show successful completion. | core |
+| Lose commit/PR/publication response | Reconcile the original source operation and outbox receipt; no duplicate PR or false failure followed by a new mutation. | core |
+| Edit template/model/tools while an instance starts or runs | Authorized revision remains pinned, or mismatch blocks before invocation. | KINT-17 |
+| Answer a question twice, after expiry, or after cancel | Correct pending operation only; reject stale answers and preserve the original human decision. | KINT-17 |
+| Fail artifact storage or cleanup; upgrade and roll back | No completion without retained evidence; cleanup remains visible/retryable and existing history remains readable. | KINT-17 |
 
 ## Removal inventory
 
@@ -365,7 +379,7 @@ against the replacement and the live failure matrix.
 | `cmd/marina/workers.go`: `configureWorkers`, `kubernetes.New` and `AdditionalImages` wiring | `serve` wires the runtime/gateway. Select the pinned engine revision for agent attempts; retain a verifier adapter. | Source binding, scoped gateway, TLS/credential validation, artifact store and per-execution configuration remain. `TestConfigurationRequiresExplicitDestinationsAndVerification`; KINT-04/05/09. | 12, 14 |
 | `cmd/marina/main.go`: worker command branch | Worker image invokes the CLI entry; replace agent entry with upstream/native or BYO runtime entry. | Keep a separately usable deterministic verifier command. CLI worker deletion follows image/caller inventory, not the command name alone. | 12 |
 | `internal/worker/runner.go`: agent branch of `Run`, `promptFor`, `harnessFailure`, `parseHarness` | `RunRemote` calls `Run`; native Codex adapter supplies the agent loop and structured result conversion. | KINT-05 moved result/check formats and path validation to `internal/workresult`, shared input to `internal/worker/input.go`, and clean checkout/check execution/process termination to `internal/worker/verification.go`. Retain those independently justified pieces when deleting the agent branch. `TestVerificationChecksThePinnedRevisionInAFreshWorkspace`, `TestChangesCannotEscapeAuthorizedPathsOrModifyControlFiles`, `TestGitReadUsesOneScopedBearerHeader`. | 12 |
-| `internal/worker/analysis.go`: `runAnalysis` | `Run` analysis branch hosts Python; KINT-07 BYO owns hosting. | Keep the chosen LangChain workload and independent `internal/analysis` validator. `TestAnalysisWorkerRunsWithoutGitOrCodingHarness`, `TestAnalysisEvidenceBindsContextForVersionTwo`; repeat scope/invalid-report cases through BYO. | 12 |
+| `internal/worker/analysis.go`: `runAnalysis` | `Run` analysis branch hosts Python. The diagnostic workload is retired (decision 0023). | Delete with the workload, including the `internal/analysis` validator once no retained caller needs it. `TestAnalysisWorkerRunsWithoutGitOrCodingHarness`, `TestAnalysisEvidenceBindsContextForVersionTwo`; repeat scope/invalid-report cases through BYO. | 12 |
 | `internal/worker/remote.go`: `RunRemote`; `authority.go`: `watchAuthority`, `retryGatewayRead` | Legacy worker entry reads inputs, posts results and polls authority. Agent path replaced by engine transport and externally enforced authority. | A verifier may still require scoped input/result transfer and termination watchdog. `TestAuthorityWatchdogStopsImmediatelyOnRevocation`, `TestAuthorityWatchdogNeverOutlivesLastConfirmedLease`, temporary-outage tests; live termination under KINT-09. | 12 |
 | `internal/kubernetes/adapter.go`: `Adapter.Start`, `manifest`, `Inspect`, `InspectByKey`, `Cancel`, `Cleanup`, `jobName` | `configureWorkers` supplies this adapter for all workloads; KINT-03 replaces coding/analysis Job lifecycle. | Keep narrow verifier Job support. Preserve lost-response lookup, cancellation waiting for observed termination, cleanup and pinned image checks. `TestStartReusesExactJobAfterLostResponseAndRejectsChangedSpecification`, `TestCancelIsNotAcknowledgedUntilJobTerminationIsObserved`. | 12–13 |
 | `internal/kubernetes/adapter.go`: `Token` | Worker API and Job creation share attempt credential derivation. Move only if surviving callers need it outside the verifier adapter. | Attempt/fence/expiry binding and constant-time verification must survive. `TestWorkerCredentialCannotOutliveProviderFence`; KINT-04. | 13 |
@@ -375,7 +389,7 @@ against the replacement and the live failure matrix.
 | `internal/journal/sqlite/runtime_records.go`: `EnsureRuntimeAttempt`, `MarkRuntimeStarting`, `RecordRuntimeObservation`, cleanup/artifact records | Flow, gateway, diagnostics and retention use these records. Retain correlation and historical readers; identify obsolete fields only after KINT-03 fixes the actual mapping. | Do not delete attempt/usage/evidence history or edit old migrations. `TestRuntimeAttemptsPersistSpecificationObservationArtifactsAndCleanup`, restart/attempt-limit tests. Every proposed column removal requires a caller and migration review. | 13 |
 | `internal/execution/recovery.go`: `PlanRecovery`; `internal/flow/runtime.go`: `stop`, `Command`, `cleanup` | Reconciliation uses these to enforce workflow state, leases and termination. | Retain cross-system recovery and command semantics; simplify only duplicated engine polling. `TestRestartPlannerUsesPersistedActiveStateWithoutClaiming`, cancellation tests, KINT-09 failure matrix. | Retain; narrow in 13 |
 | `internal/flow/config.go`: `Config`, `Validate`, `Digest`, `AnalysisDigest`; `cmd/marina/profile.go`: `runWorkloadProfile` | Installation loader and discovery pin current worker/harness settings. New profiles pin engine revisions. | Keep old profile digests readable and withdrawn selections rejected. No active-attempt backend switch. Config tests plus KINT-10 upgrade/history proof. | 14 |
-| `Dockerfile.worker`, `Dockerfile.analysis-worker`, `harnesses/langchain/run.py`, `requirements.txt` | Installation builds and pins worker images. Native Codex replaces custom coding image; BYO packages the selected diagnostic workload. | Strip Codex/Python agent dependencies from verifier image, retain trusted offline checks and exact LangChain dependency hashes. Do not delete the diagnostic workload merely because its launcher moves. | 14 |
+| `Dockerfile.worker`, `Dockerfile.analysis-worker`, `harnesses/langchain/run.py`, `requirements.txt` | Installation builds and pins worker images. Native Codex replaces custom coding image; the diagnostic workload is retired (decision 0023). | Strip Codex/Python agent dependencies from verifier image and retain trusted offline checks. Delete the analysis image and LangChain harness. | 14 |
 | Root `deploy/kubernetes/first-release/workers/`, `scripts/prepare-installation.py`, `prepare-agent-installation.py`, acceptance helpers | Installation provisions Job RBAC, quota, network isolation and images. Replace agent provisioning with the pinned engine; preserve verifier needs. | Transfer network/fence/cancel proof, data-preserving rollback, credentials and historical inspection before deleting old setup paths. `make check-installation`, KINT-09/10/15. | 14 |
 | `internal/deck`, `workcontrol`, `policy`, `contextpack`, `sourcecontrol`, `artifacts`, `analysis`, workflow reconciliation and outbox | Deck contract, source publication and evidence acceptance are Marina responsibilities. | Retain. Engine success cannot complete a Deck task. Keep leases, immutable acquisition/context, source-current CI, budget accounting, artifact integrity and idempotent outbox. Run product checks and real-process conformance after joint changes. | No package-wide deletion |
 

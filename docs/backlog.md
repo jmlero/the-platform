@@ -1,190 +1,145 @@
-# The Platform backlog
+# Backlog
 
 Last reviewed: 2026-09-25.
 
-The current state is in [status.md](status.md) and the direction in
-[VISION.md](VISION.md). This file holds
-the order of work and its acceptance status. The immediate engine
-priority is integrating kagent and removing redundant Marina execution code.
-Conversation and result-return flows should reuse that engine, followed by bounded
-repair loops. The current supported runtime remains in place until migration gates pass.
+The order of work. The direction is in [VISION.md](VISION.md), and what works
+today is in [status.md](status.md).
 
-IDs are stable and are never reused. `Open` means behavior is missing, `Decide`
-means a product choice is required, `Verify` means implementation exists but the
-named acceptance proof is missing, `Retired` means a decision made the item obsolete, and `Later` means work starts only after its
-stated trigger. A row becomes `Done` only with linked evidence.
+IDs are stable and never reused. States: `Open` means the behavior is missing,
+`Verify` means it is built but the named acceptance proof is missing, `Later`
+means work starts at its trigger, `Done` needs linked evidence, and `Retired`
+means a decision made the item obsolete.
 
-CLP-00–04 are retired. The Context Lens pilot is the operator's own use of the
-platform, not agent backlog work; see [status.md](status.md#environment-and-use).
+## Priority now
 
-## Channel-first experience
+Everything serves the [first milestone](VISION.md#direction): one real
+repository, one PRD born in the chat, and agents landing its tasks on main
+without me touching the code.
 
-[Decision 0019](decisions/0019-channel-first-project-work.md) is the accepted
-human workflow: one GitHub repository/project channel, automatic Backlog drafts,
-Ready authorization, human-accepted Done, and automatic reference notes separated
-from approved instructions. The channel-first shell, manual draft promotion,
-thread UI, human acceptance and basic dependency guards are implemented. This does
-not complete CHAT dispatch or PREP decomposition. Current verification is in
-[the channel-first evidence](validation/deck-channel-first-2026-09-23.md).
+1. **kagent for real, and the chat agent live** (KINT-16, then CHAT-04–10).
+   kagent has only run as throwaway trials. A permanent installation turns on
+   the chat agent, which is the main tool of the outer loop, and everything else
+   builds on it.
+2. **Repository work on native Codex** (KINT-09 and KINT-10, then KINT-11). Pass
+   the core failure cases of [decision 0023](decisions/0023-focus-kagent-cutover.md),
+   then send new repository work to kagent.
+3. **Land on main instead of opening a pull request** (LAND-01). This is Marina's
+   Git delivery code and does not depend on the engine, so it runs alongside 1
+   and 2.
+4. **The three-column Deck** (UI-01). Deck only; it runs alongside the rest.
 
-| ID | State | Owner | Outcome |
-| --- | --- | --- | --- |
-| LEAN-01 | Done | Deck | Channel-first project navigation, thread UI, compact task list, manual draft promotion and project-scoped context. [Checks and local browser evidence](validation/deck-channel-first-2026-09-23.md). |
-| LEAN-02 | Done | Deck/Joint | Human acceptance and same-project dependency gates, source-availability confirmation and retained history. [Product checks, real-process conformance and restart proof](validation/deck-channel-first-2026-09-23.md). |
-| LEAN-03 | Open | Joint | After governed conversational dispatch, let agents create idempotent Backlog drafts and maintain provenance-bound reference notes; require human approval for guidance/decision changes. |
+After that, in order: the feedback loop and review (AUTO), PRDs from the chat
+(PRD), and the milestone proof (FLOW-01). Removing the old runtime (KINT-12–15)
+runs alongside AUTO.
 
-## Autonomous factory
-
-[Decision 0022](decisions/0022-autonomous-software-factory.md) sets the direction:
-PRDs come from the chat and live in the project repository; agents land changes
-on main without pull requests after the platform check and GitHub CI, learning
-from failures through the AUTO repair loop. UI-01 can start now. LAND-01 reuses
-the repair loop from AUTO-03–04 for failed checks.
+## Now
 
 | ID | State | Owner | Outcome |
 | --- | --- | --- | --- |
-| LAND-01 | Open | Marina/Joint | Replace PR delivery: after independent review and clean verification (unit and end-to-end tests), push the exact commit to a task branch, wait for required GitHub CI on it, then fast-forward main. If main moved, rebase and pass both checks again; never force-push. Only Marina holds Git write credentials. |
-| LAND-02 | Open | Joint | Complete a task automatically when its commit lands on main with evidence, and move human acceptance to the PRD. Observe code prerequisites on main instead of asking the operator to confirm them. |
-| PRD-01 | Open | Joint | The chat agent drafts a PRD from a conversation; after operator approval, Marina commits it to the project repository. |
-| PRD-02 | Open | Deck/Joint | Derive top-level tasks from an approved PRD, each linked to the PRD's path and revision. |
-| UI-01 | Open | Deck | Three columns: projects, a very simple middle column (in progress, to do, recently landed on main), and the chat. |
+| KINT-16 | Open | Ops/Marina | Install the pinned kagent and Substrate permanently in the local installation, not as a trial, with the chat agent's conversation profile and a fixed delegation budget. Repository work stays on the current runtime until KINT-11. Deck keeps working at `https://localhost:8443` and history stays readable. The local installation guide describes the setup. |
+| CHAT-04–10 | Verify | Joint | Built; product checks and real Deck conformance pass ([04](validation/chat-04-2026-09-23.md), [05](validation/chat-05-2026-09-23.md), [06–08](validation/chat-06-08-2026-09-25.md)). Remaining, in the browser on the installation from KINT-16: a model reply in the thread (04), a question answered in the thread (05), a request that becomes a task (06), results and blockers back in the thread (07), a follow-up task (08), restart and duplicate-request cases (09), and the whole chat-to-result flow (10). |
+| KINT-09 | Open | Joint | The core live failure cases of decision 0023, on real Deck, Marina and kagent with repository work: duplicate and lost responses, restarts during work, cancel during a model call, a tool call and a question, budget exhaustion and lost usage, and failed verification or CI. No duplicate work, commits or spend, and no false completion. Partial evidence: [23–24 September](validation/kint-09-10-2026-09-24.md), [cancel while waiting](validation/kint-09-2026-09-25.md). |
+| KINT-10 | Open | Ops/Marina | After 16, upgrade the installation with active kagent data and keep history and in-flight work. Roll back by restoring the previous release and the retained data copy. [Partial evidence](validation/kint-09-10-2026-09-24.md). |
+| KINT-11 | Open | Marina/Ops | After 09–10, drain legacy executions and send new repository work to native Codex on kagent. An active attempt never moves between engines. |
+| LAND-01 | Open | Marina/Joint | Replace the pull request ([decision 0022](decisions/0022-autonomous-software-factory.md)): after clean verification, push the exact commit to a task branch, wait for required GitHub CI on it, then fast-forward main to it. If main moved, block for now (LAND-03 adds rebase). Lost push or update responses reconcile without a second push. Never force-push; only Marina holds Git write credentials. Configure the acceptance repository so Marina may update main while branch protection still requires CI. Proof: product checks, conformance and one live task on local Kind. |
+| UI-01 | Open | Deck | Three columns: projects; a very simple middle column with in progress, to do, and recently landed on main (recently completed until LAND-01); and the chat. Nothing more in the middle column for now. |
 
-## Current priorities
+## Next
 
-### Kagent integration and Marina simplification
+### Feedback loop and review
 
-[Decision 0017](decisions/0017-kagent-core-engine.md) establishes the target:
-Deck remains the interface, Marina owns governed workflows, and kagent becomes
-the core agent engine. The [implementation and removal plan](plans/kagent-integration.md)
-contains dependencies, acceptance criteria, concrete deletion targets and rollback.
-KINT-01/02 passed the isolated local feasibility trial; the trial was removed
-after teardown proof. KINT-03/04 add the governed adapter and gateway; KINT-05
-adds the shared result boundary. KINT-06 passed one native repository pilot;
-the two-workload cutover remains planned.
-
-| ID | State | Owner | Outcome |
-| --- | --- | --- | --- |
-| KINT-01 | Done | Marina/Ops | Pinned source/charts/ARM64 images/APIs and recorded ownership, removal gates and baseline. [Lock and inventory evidence](validation/kint-01-02-2026-09-22.md#kint-01-lock-and-ownership). |
-| KINT-02 | Done | Ops | Native Codex snapshot/restore, durable instance identity, isolation, resource sample and safe teardown passed on local Kind. [Live evidence and limits](validation/kint-01-02-2026-09-22.md). |
-| KINT-03 | Done | Marina | Pinned lifecycle adapter, durable revision/A2A correlation, no-resend recovery, observed cancellation and artifact cleanup. [Deterministic checks and isolated local recovery proof](validation/kint-03-2026-09-22.md); active workloads remain unchanged. |
-| KINT-04 | Done | Marina | Governed admission and attempt-scoped model/tool/source access, with real local Substrate HTTPS injection, credential rotation, cached-credential cancellation/expiry, denied bypasses and durable accounting. [Checks, live evidence and safe teardown](validation/kint-04-2026-09-22.md); workload migration remains pending. |
-| KINT-05 | Done | Marina | Shared bounded result validation, digest-bound kagent artifact translation, and agent-free clean verification. [Deterministic checks and real-process conformance](validation/kint-05-2026-09-23.md); installed workload migration remains pending. |
-| KINT-06 | Done | Marina | One Deck-authorized native Codex task produced [verified PR #13](validation/kint-06-2026-09-23.md) on local Kind: separate clean verification and required CI passed at the exact head; the PR remains open and unmerged. The pilot was torn down after proof. |
-| KINT-07 | Done | Marina | Pinned LangChain BYO runs through kagent with frozen context and independent validation. Local live proof passed for selected context reads and denied access with no false report. [Evidence and limits](validation/kint-07-08-2026-09-23.md). |
-| KINT-08 | Done | Joint | Live engine question projected to Deck, survived restart, continued the same task with one answer, rejected a duplicate and published an independently validated result. Contract and recovery checks pass. [Evidence and limits](validation/kint-07-08-2026-09-23.md). |
-| KINT-09 | Open | Joint | After 06–08, pass both workloads and the mandatory live failure matrix through real Deck/Marina/kagent. [Partial local fault evidence](validation/kint-09-10-2026-09-24.md) and [waiting-for-input cancellation follow-up](validation/kint-09-2026-09-25.md); remaining gates still apply. |
-| KINT-10 | Open | Ops/Marina | After 02 and 06–07, prove installation upgrade, credential handling, retained history and data-preserving rollback; measure full footprint. [Partial local upgrade and rollback evidence](validation/kint-09-10-2026-09-24.md). |
-| KINT-11 | Open | Marina/Ops | After 09–10, drain legacy executions and cut over both newly authorized profiles to kagent. |
-| KINT-12 | Open | Marina | After 11, delete replaced Codex/Python launch paths, agent Job support and unused worker entry/protocol branches. |
-| KINT-13 | Open | Marina | After 12, remove duplicated runtime/journal machinery while retaining workflow recovery, accounting and historical inspection. |
-| KINT-14 | Open | Marina/Ops | After 12–13, remove unused images, dependencies, configuration, grants and installation branches; retain necessary verification/BYO code only. |
-| KINT-15 | Open | Joint | After 14, verify the final simplified build, fresh install and live workflows; publish removal evidence and update supported-behavior documentation. |
-
-KINT-12–14 are required delivery work, not optional cleanup. A failed integration
-gate stops dependent cutover/deletion. Retain the working release while resolving
-the failure; do not leave a permanent dual-engine installation by default.
-
-### Backlog refinement and focused task preparation
-
-[Decision 0018](decisions/0018-deck-work-preparation.md) establishes Deck's
-ownership of preparing small tasks and selecting their context. Marina runs
-planning assistance and governed execution. The
-[implementation design](plans/work-preparation.md) gives detailed acceptance
-criteria. Manual Deck work can proceed alongside KINT; new planning execution
-follows KINT-15. Start with one parent level and sequential children, preserving
-the human-review PR boundary. All PREP behavior is planned.
+The limits are in [decision 0020](decisions/0020-bounded-repair-policy.md) and
+the review in [decision 0021](decisions/0021-semantic-review-gate.md). This work
+starts after KINT-11 and uses kagent. Landing replaces the pull request in both:
+a repair pushes new commits to the same task branch, and a failed check or
+review is feedback for the next attempt.
 
 | ID | State | Owner | Outcome |
 | --- | --- | --- | --- |
-| PREP-01 | Open | Deck/Joint | Define additive contracts and persist versioned work packages, breakdowns and child identities; preserve migration/export/import and reject stale edits or cyclic dependencies. |
-| PREP-02 | Open | Deck | After 01, support manual breakdown and atomic acceptance with criterion coverage, focused briefs and idempotent child creation. |
-| PREP-03 | Open | Joint | After 02, select and inspect per-child context, preserve mandatory guidance, and bind exact prerequisite inputs without mutating active work. |
-| PREP-04 | Open | Joint | After 02–03, enforce aggregate allocations, authorization, sequential release and review capacity at every claim path, including cancellation and ambiguous usage. |
-| PREP-05 | Open | Marina/Joint | After 03–04 and KINT-15, run a bounded read-only planning profile that proposes validated breakdowns without self-authorization or repository mutation. |
-| PREP-06 | Open | Joint | After 04–05, reconcile dependency evidence, parent acceptance/cancellation and usage; never treat an unmerged PR as an available code prerequisite. |
-| PREP-07 | Open | Joint | After 01–06, pass product checks and real-process conformance for preparation, dispatch, budgets, immutable context and recovery failure cases. |
-| PREP-08 | Open | Joint | After 07, prove the broad-outcome-to-focused-results flow in the local browser/Kind installation, including restart, and record redacted evidence. |
+| AUTO-02 | Open | Marina | Persist attempts and the remaining budget across restarts. |
+| AUTO-03 | Open | Marina | A failed clean verification feeds one repair attempt. A diagnosis and a different approach are recorded first; the new commit gets fresh verification. |
+| AUTO-04 | Open | Marina | A failed required CI check on the task branch feeds a repair attempt the same way, as untrusted data. |
+| AUTO-05 | Open | Joint | Earlier evidence stays as history; only evidence for the latest commit can land or complete the task. |
+| AUTO-06 | Open | Joint | A repair loop recovers across restart with no duplicate commits or pushes and no extra budget. |
+| AUTO-08 | Open | Marina/Joint | After 02–05, an independent reviewer passes every change right before commit. Only the exact reviewed patch is committed, the verdict is stored as evidence, and a failed review feeds the repair loop. The reviewer rejects changes that weaken, remove or skip tests. |
 
-### Conversation and delegation
-
-These tasks implement [decision 0009](decisions/0009-asynchronous-agent-work.md)
-using the existing Deck channels, task ledger, and explicit project context.
-CHAT-04/05/07 reuse KINT's engine and interaction integration; their full product
-acceptance remains separate. Intent/UI design and independent Deck work can
-continue while the engine migration is underway.
+### Landing and tests
 
 | ID | State | Owner | Outcome |
 | --- | --- | --- | --- |
-| CHAT-01 | Done | Joint | Agreed message intent, persistent thread agent selection, natural-language delegation without keywords, and a task proposal/start action for unclear intent. Clear requests proceed within existing limits. [Accepted rules and examples](decisions/0009-asynchronous-agent-work.md#chat-01-conversation-intent-and-authorization); implementation remains CHAT-02–08. |
-| CHAT-02 | Done | Deck | Persisted channel threads, canonical replies and task origins with replay-safe creation/linking, migration and export/import. [Store/HTTP checks and two-session real-process restart evidence](validation/chat-02-2026-09-23.md); browser/agent invocation remains CHAT-03 onward. |
-| CHAT-03 | Done | Deck | Thread view and explicit configured-agent invocation with durable selection, idempotent request recording, export/import and isolated local browser proof. [Evidence and limits](validation/chat-03-2026-09-23.md); execution remains CHAT-04. |
-| CHAT-04 | Verify | Marina | Run a bounded conversational agent with no source-write authority. Deterministic dispatch, gateway, artifact and recovery checks pass; local engine/model acceptance remains. [Evidence and limits](validation/chat-04-2026-09-23.md). |
-| CHAT-05 | Verify | Joint | Deck persists engine questions and one answer in the invoked thread; Marina routes that exact answer to the waiting kagent attempt. Product checks and real Deck restart/export conformance pass; installed engine/browser acceptance remains. [Evidence and limits](validation/chat-05-2026-09-23.md). |
-| CHAT-06 | Verify | Joint | Explicit delegation creates one authorized, replay-safe Ready task or Backlog draft. Product and real Deck contract checks pass; installed actor/browser proof remains. [Evidence and limits](validation/chat-06-08-2026-09-25.md). |
-| CHAT-07 | Verify | Marina | Terminal replies and selected run milestones, blockers, results, and evidence reach the originating thread once. Product and real Deck checks pass; installed actor/browser proof remains. [Evidence and limits](validation/chat-06-08-2026-09-25.md). |
-| CHAT-08 | Verify | Joint | Explicit feedback creates a linked follow-up task while preserving completed history. Store and contract checks pass; installed actor/browser proof remains. [Evidence and limits](validation/chat-06-08-2026-09-25.md). |
-| CHAT-09 | Verify | Joint | Pass dispatch, clarification, duplicate-request, restart, and result-publication conformance through real Deck. |
-| CHAT-10 | Verify | Joint | Complete the conversation-to-result workflow across two browser sessions on the selected installation. |
+| LAND-02 | Open | Joint | After LAND-01, a task completes on its own when its commit lands on main with evidence. Marina observes code prerequisites on main; the operator no longer confirms them. |
+| LAND-03 | Open | Marina | After LAND-01, when main moved, rebase the task commit and pass both checks again. A conflict becomes repair feedback (AUTO) or a blocker. Never force-push. |
+| VER-01 | Open | Marina/Ops | Each project's verification image carries what its unit and end-to-end tests need, such as browsers, prepackaged. Checks run without runtime downloads. |
+| TEST-01 | Open | Deck | Browser end-to-end tests for Deck's main flows run in CI: open a project, chat, see a task move through the middle column, open its result. |
 
-### Inbox and browser experience
+### PRDs from the chat
 
 | ID | State | Owner | Outcome |
 | --- | --- | --- | --- |
-| INBOX-01 | Open | Deck | Persist reviewed/unread state independently of task completion. |
-| INBOX-02 | Open | Deck | Keep new results visible until reviewed while decisions remain in attention. |
-| INBOX-03 | Open | Deck | Link board, thread, decision, and result views to the same task and run. |
-| INBOX-04 | Open | Deck | Summarize meaningful changes since the last visit without promoting routine heartbeats. |
-| INBOX-05 | Verify | Deck | Cover login, task creation, approval, cancellation, reconnect, and evidence access in the desktop browser. Add conversation coverage after CHAT-03. |
-| INBOX-06 | Done | Deck/Ops | Open local Deck without token sign-in and remove import/export, owner, and sign-out controls from the header. Preserve this operator preference on local upgrades. [Chrome and local acceptance](validation/deck-local-access-2026-09-23.md). |
+| CHAT-11 | Open | Marina/Joint | The chat agent can read the project's repository at a pinned revision, plus the selected project context, without write access, so conversations and PRDs reflect the code. |
+| PRD-01 | Open | Joint | After CHAT-04 and LAND-01, the chat agent drafts a PRD in a thread. After I approve it, Marina commits it to the project repository (default `docs/prd/`) through the landing path. |
+| PRD-02 | Open | Deck/Joint | After PRD-01, the agent proposes top-level tasks from an approved PRD, with acceptance criteria and an order. One approval makes them Ready in that order. Each task links to the PRD's path and revision. |
+| PRD-03 | Open | Deck | After LAND-02 and PRD-02, Deck shows each PRD with its tasks and what landed. I accept the PRD or ask for follow-ups in the chat. |
 
-### Bounded repair loops
+### Removing the old runtime
 
-Preserve human merge and deployment authority. A new revision must receive fresh
-verification and current-head evidence.
-Implement new engine-dependent repair and review behavior after KINT-15 using kagent.
+Required work, not optional cleanup; the [kagent plan](plans/kagent-integration.md)
+lists what goes and what stays. A failed gate stops the dependent deletion; the
+working release stays until the failure is fixed.
 
 | ID | State | Owner | Outcome |
 | --- | --- | --- | --- |
-| AUTO-01 | Done | Marina | Define retryable failures, limits, budget reuse, and escalation for one repository workflow. [Decision 0020](decisions/0020-bounded-repair-policy.md): at most three failures, each repair grounded in new evidence and a different approach. |
-| AUTO-02 | Open | Marina | Persist revision attempts and remaining budgets across restart. |
-| AUTO-03 | Open | Marina | Feed one failed verification result into a separately verified repair attempt. |
-| AUTO-04 | Open | Marina | Feed current-revision CI or review feedback into a bounded repair attempt as untrusted data. |
-| AUTO-05 | Open | Joint | Keep old evidence as history while requiring fresh evidence for the new head. |
-| AUTO-06 | Open | Joint | Recover one repair loop across restart without duplicate commits, PRs, or excess budget. |
-| AUTO-07 | Done | Joint | Define the first independent semantic-review gate and escalation rule. [Decision 0021](decisions/0021-semantic-review-gate.md): an independent review against the acceptance criteria right before every commit. |
-| AUTO-08 | Open | Marina/Joint | After AUTO-02–05, review every candidate change independently right before commit, commit only the exact reviewed patch, store the verdict as evidence, and feed failures into the repair loop per decision 0021. |
+| KINT-12 | Open | Marina | After 11, delete the replaced Codex launch path, the retired LangChain workload, agent Job support, and unused worker entry and protocol branches. |
+| KINT-13 | Open | Marina | After 12, remove duplicated runtime and journal machinery; keep workflow recovery, accounting and history readers. |
+| KINT-14 | Open | Marina/Ops | After 12–13, remove unused images, dependencies, configuration, grants and installation branches. |
+| KINT-15 | Open | Joint | After 14, verify the simplified build, a fresh install, and live repository and chat work. Publish the removal evidence and update the docs. |
 
-### Operations and measurement
+### Milestone proof and more projects
 
 | ID | State | Owner | Outcome |
 | --- | --- | --- | --- |
-| OPS-01 | Later | Ops | When backup recovery becomes a requirement, create one consistent backup of both SQLite stores, WAL state, artifacts, identities, and required private configuration. |
+| FLOW-01 | Open | Joint | After AUTO-08, VER-01 and PRD-03: on local Kind with the acceptance repository, a chat becomes a PRD in the repository and its tasks land on main with unit and end-to-end tests. One failing check is repaired, and a restart during a task loses nothing. Store redacted evidence. Running this on a real project is the operator's own use, not agent work. |
+| PROJ-01 | Open | Joint | After FLOW-01, every Deck project can run work on its own repository: Marina binds a repository, checks and credentials per project. Still one active task at a time. |
+
+## Later
+
+| ID | State | Owner | Outcome and trigger |
+| --- | --- | --- | --- |
+| KINT-17 | Later | Joint | The live failure cases that decision 0023 moved out of KINT-09: event reordering, lease loss and context revocation during a call, bypass attempts, template edits during a call, artifact storage failure, schema-aware rollback, and a full footprint measurement. Required before an independent cluster or other users. |
+| LATER-01 | Later | Joint | Several tasks in parallel. Trigger: after FLOW-01, when one active task is the bottleneck. |
+| LATER-06 | Later | Joint | Context and knowledge bases for agents in the outer loop, including notes that agents maintain. Trigger: after PRD-03. |
+| LATER-07 | Later | Ops | Move to an independent Kubernetes cluster, in the cloud or on-premises. Trigger: FLOW-01 passes and the laptop limits daily use; needs KINT-17. |
+| OPS-01 | Later | Ops | One consistent backup of both SQLite stores, WAL state, artifacts, identities and required private configuration. Trigger: backup recovery becomes a requirement. |
 | OPS-02 | Later | Joint | After OPS-01, restore into an isolated installation without identity loss or duplicate external work. |
-| OPS-04 | Verify | Joint | Rehearse operator, service, Git, and model credential rotation with no secret leakage. |
-| VALUE-02 | Open | Joint | After CHAT-10, compare board and conversational delegation for repeated context, intervention, result quality, and human effort. |
-
-## Later decisions
-
-| ID | State | Trigger |
-| --- | --- | --- |
-| LATER-01 | Later | Pilot evidence shows a need for a second project workflow or concurrent work. |
-| LATER-03 | Later | Repository work is reliable enough to select one diagnosis-only production signal. |
-| LATER-04 | Later | A concrete preview/canary target and rollback rule are available. |
-| LATER-05 | Retired | Superseded by [decision 0022](decisions/0022-autonomous-software-factory.md): agents land on main after the platform check and GitHub CI. |
+| OPS-04 | Verify | Joint | Rehearse operator, service, Git and model credential rotation with no secret leakage. Marina's GitHub token expires on 2026-12-20. |
 
 ## Completed milestones
 
 | IDs | Result | Evidence |
 | --- | --- | --- |
-| FIX-01–06 | Entry-point budgets, readiness checks, channel recovery, CLI authentication, and capability wording completed. | Current product checks and contract conformance. |
-| RUN-01–09, RUN-11–16, RUN-18 | Local installation and repository workflow passed, including restart, cancellation, failure, stale-head, outage, and budget cases. RUN-10 and RUN-17 are retired. | [Repository acceptance](validation/poc-mvp-2026-09-21.md) |
-| OPS-03, OPS-05–06 | Certificate renewal, conservative artifact retention, and recovery runbook completed. | [Operations evidence](validation/first-release-operations-2026-09-17.md), [runbook](../deploy/kubernetes/first-release/OPERATIONS.md) |
-| CTX-01–08 | Versioned project knowledge, selected conversation context, immutable packages, inspection, and repository association completed. | [Decision](decisions/0014-project-repository-and-knowledge.md), [evidence](validation/ctx-02-08-2026-09-21.md) |
-| AGENT-01–13 | Codex repository work and a pinned LangChain diagnostic workload share Marina's governed execution foundation. | [PoC](validation/agent-02-06-2026-09-21.md), [API/tool/context](validation/agent-07-10-2026-09-21.md), [MVP](validation/agent-11-13-2026-09-22.md) |
-| VALUE-01 | Closed by the operator; representative human-effort and provider-billing measurement was declined. | [Closure record](validation/poc-mvp-2026-09-21.md#value-01-initial-measurement) |
+| KINT-01–08 | kagent pinned; lifecycle adapter, governed gateway and shared result boundary built; native Codex, the LangChain workload and a question round-trip passed isolated local trials. | [01–02](validation/kint-01-02-2026-09-22.md), [03](validation/kint-03-2026-09-22.md), [04](validation/kint-04-2026-09-22.md), [05](validation/kint-05-2026-09-23.md), [06](validation/kint-06-2026-09-23.md), [07–08](validation/kint-07-08-2026-09-23.md) |
+| CHAT-01–03 | Message intent rules, persisted threads and explicit agent invocation. | [Rules](decisions/0009-asynchronous-agent-work.md#chat-01-conversation-intent-and-authorization), [CHAT-02](validation/chat-02-2026-09-23.md), [CHAT-03](validation/chat-03-2026-09-23.md) |
+| LEAN-01–02 | Channel-first Deck: project channels, threads, a compact task list, manual draft promotion, human acceptance and dependency gates. | [Evidence](validation/deck-channel-first-2026-09-23.md) |
+| AUTO-01, AUTO-07 | Repair limits and the independent review gate decided. | [Decision 0020](decisions/0020-bounded-repair-policy.md), [decision 0021](decisions/0021-semantic-review-gate.md) |
+| INBOX-06 | Local Deck opens without sign-in. | [Evidence](validation/deck-local-access-2026-09-23.md) |
+| FIX-01–06 | Entry-point budgets, readiness checks, channel recovery, CLI authentication and capability wording. | Product checks and contract conformance. |
+| RUN-01–09, RUN-11–16, RUN-18 | Local installation and repository workflow, including restart, cancellation, failure, stale-head, outage and budget cases. | [Repository acceptance](validation/poc-mvp-2026-09-21.md) |
+| OPS-03, OPS-05–06 | Certificate renewal, conservative artifact retention and the recovery runbook. | [Operations evidence](validation/first-release-operations-2026-09-17.md), [runbook](../deploy/kubernetes/first-release/OPERATIONS.md) |
+| CTX-01–08 | Versioned project knowledge, selected conversation context, immutable packages, inspection and repository association. | [Decision](decisions/0014-project-repository-and-knowledge.md), [evidence](validation/ctx-02-08-2026-09-21.md) |
+| AGENT-01–13 | Codex repository work and a pinned LangChain diagnostic workload on Marina's governed execution foundation. | [PoC](validation/agent-02-06-2026-09-21.md), [API/tool/context](validation/agent-07-10-2026-09-21.md), [MVP](validation/agent-11-13-2026-09-22.md) |
+| VALUE-01 | Closed by the operator; human-effort and provider-billing measurement was declined. | [Closure record](validation/poc-mvp-2026-09-21.md#value-01-initial-measurement) |
 | LATER-02 | A second harness completed through the shared platform controls. | [Two-workload proof](validation/agent-02-06-2026-09-21.md) |
 
-Completed implementation detail belongs in source, decisions, and validation
-records rather than an ever-growing backlog. See [INDEX.md](INDEX.md)
-for the documentation map; evidence is linked from each row and from
-[status.md](status.md).
+## Retired
+
+| IDs | Why |
+| --- | --- |
+| PREP-01–08 | Replaced by PRD-01–03 ([decision 0022](decisions/0022-autonomous-software-factory.md)). The earlier design is kept in [history](https://github.com/jmlero/the-platform/blob/83ff021/docs/plans/work-preparation.md). |
+| LEAN-03 | Drafts from the chat are CHAT-06 and PRD-02; notes that agents maintain are LATER-06. |
+| INBOX-01–04 | The middle column's "recently landed" list replaces an inbox (UI-01). |
+| INBOX-05 | Replaced by TEST-01. |
+| VALUE-02 | It compared the board with the chat; the board is gone. |
+| LATER-03, LATER-04 | Deployment and production signals stay outside the platform (decision 0022). |
+| LATER-05 | Superseded by decision 0022: agents land on main after the platform check and GitHub CI. |
+| CLP-00–04 | The Context Lens pilot is the operator's own use of the platform, not agent work ([status](status.md#environment-and-use)). |
+| RUN-10, RUN-17 | Removed from local acceptance by the operator. |

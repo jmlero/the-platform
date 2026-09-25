@@ -42,8 +42,9 @@ versioned HTTP/JSON API.
 | **CI and deployment** | GitHub. | GitHub. The platform observes CI and never deploys. |
 | **Deck UI** | Project channels, threads, a compact task list and a task drawer. | Three columns: projects, a simple middle column (in progress, to do, recently landed), and the chat. |
 
-The diagnostic analysis workflow reuses the same governance: a pinned LangChain
-worker analyzes a fixed input and an independent validator checks its report.
+The LangChain diagnostic workflow is retired
+([decision 0023](decisions/0023-focus-kagent-cutover.md)) and is removed with
+the old runtime.
 
 ## Tech stack
 
@@ -55,7 +56,6 @@ worker analyzes a fixed input and an independent validator checks its report.
 | API | HTTP/JSON with an OpenAPI v1 contract in [deck/api/openapi.yaml](../deck/api/openapi.yaml) |
 | Runtime | Kubernetes: local Podman + Kind for acceptance, GKE Autopilot for tests; ephemeral Jobs with NetworkPolicy isolation |
 | Agent engine | Codex worker today; kagent with native Codex as the target (A2A protocol, pinned `v1.0.0-alpha1`) |
-| Diagnostic workload | Python LangChain harness with hash-pinned dependencies |
 | Models | OpenRouter, reached only through Marina's model gateway |
 | Git, registry, CI | GitHub, GHCR, GitHub Actions |
 

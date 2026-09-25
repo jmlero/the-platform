@@ -21,7 +21,7 @@ Start here. The documentation has two kinds of files:
 | [status.md](status.md) | What works today, what still needs acceptance proof, and what is not supported. |
 | [backlog.md](backlog.md) | What comes next, in order, with stable IDs and acceptance status. |
 | [decisions/](decisions/) | Why a choice was made. Numbered records; add new ones instead of rewriting old ones. |
-| [plans/](plans/) | Designs for accepted work that is not built yet: [kagent integration](plans/kagent-integration.md) and [work preparation](plans/work-preparation.md). Remove a plan once its work ships. |
+| [plans/](plans/) | Designs for accepted work that is not built yet: [kagent integration](plans/kagent-integration.md). Remove a plan once its work ships. |
 | [validation/](validation/) | Dated, redacted evidence from checks on a named installation. Never edited after the fact. |
 
 ## Next to the code
@@ -63,8 +63,9 @@ One fact lives in one place. Other documents link to it instead of copying it.
 | [0010](decisions/0010-initial-installation-services.md) | Pilot services, storage, environments and budget. |
 | [0014](decisions/0014-project-repository-and-knowledge.md) | Project context and repository ownership. |
 | [0017](decisions/0017-kagent-core-engine.md) | kagent becomes the agent engine. |
-| [0018](decisions/0018-deck-work-preparation.md) | Deck prepares focused tasks from broad outcomes. |
+| [0018](decisions/0018-deck-work-preparation.md) | Deck owns preparing tasks (its PREP breakdown is replaced by PRDs in 0022). |
 | [0019](decisions/0019-channel-first-project-work.md) | Channel-first project work. |
 | [0020](decisions/0020-bounded-repair-policy.md) | Bounded repair after failures. |
 | [0021](decisions/0021-semantic-review-gate.md) | Independent review before every commit. |
 | [0022](decisions/0022-autonomous-software-factory.md) | Autonomous software factory: PRDs from the chat in the repo, agents land on main after two checks. |
+| [0023](decisions/0023-focus-kagent-cutover.md) | kagent cutover gated on core failure cases; the LangChain diagnostic workload is retired. |

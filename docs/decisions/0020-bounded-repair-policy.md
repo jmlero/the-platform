@@ -1,7 +1,7 @@
 # Decision 0020: Bounded repair policy for the repository workflow
 
 - Date: 2026-09-24
-- Status: accepted policy (AUTO-01); implementation planned under AUTO-02–06
+- Status: accepted policy (AUTO-01); implementation planned under AUTO-02–06; under [decision 0022](0022-autonomous-software-factory.md) repairs push to the task branch instead of a PR, and PR-only failure types no longer apply
 - Scope: Marina repository workflow, one repository and one active task
 
 ## Decision

@@ -127,8 +127,7 @@ outline:
    [0021](decisions/0021-semantic-review-gate.md) and
    [0022](decisions/0022-autonomous-software-factory.md); AUTO, LAND).
 4. **PRDs from the chat.** The chat agent drafts a PRD, I approve it, it is
-   committed to the repository, and top-level tasks are derived from it (PRD,
-   PREP).
+   committed to the repository, and top-level tasks are derived from it (PRD).
 5. **The simple three-column Deck** (UI-01).
 6. **Later:** context and knowledge bases for agents, several tasks in parallel,
    and a move to an independent Kubernetes cluster.

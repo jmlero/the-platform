@@ -27,13 +27,7 @@ task and budget -> approved plan -> coding Job -> clean verification Job
 - It ends at a PR for human review or at a blocker. Failed checks, a changed or
   closed PR, and requested changes block. Marina never merges or deploys.
 
-**Diagnostic analysis workflow** ([evidence](validation/agent-11-13-2026-09-22.md))
-
-- A pinned LangChain worker analyzes a fixed, immutable fixture.
-- It may use one governed, read-only context tool.
-- An independent Go validator checks the report. It has no repository authority.
-
-Both workflows share task authorization, immutable profiles and context, leases
+The workflow uses task authorization, immutable profiles and context, leases
 and fences, budgets, cancellation, Kubernetes isolation, the model gateway,
 artifacts and evidence rules. Cancellation completes only after the worker has
 stopped. Without workflow configuration Marina runs in control-only mode.
@@ -84,7 +78,7 @@ Disabling new intake does not pause executions that have already started.
 | Conversational agent with no write authority (CHAT-04) | Deterministic checks pass. | Live engine and model acceptance. |
 | Engine questions answered in the thread (CHAT-05) | Product checks and real-process conformance pass. | Installed engine and browser acceptance. |
 | Conversation delegation, result publication and linked follow-up (CHAT-06–08) | Product checks and real Deck conformance pass. | Installed actor, model and browser acceptance. |
-| kagent as the agent engine (KINT-01–08) | Isolated local trials passed: a native Codex PR, the LangChain workload and a question round-trip. The trials were torn down afterwards. | Failure matrix (KINT-09), upgrade and rollback (KINT-10), cutover and removal (KINT-11–15). It is **not** the installed runtime. |
+| kagent as the agent engine (KINT-01–08) | Isolated local trials passed: a native Codex PR, the LangChain workload and a question round-trip. The trials were torn down afterwards. | Permanent installation (KINT-16), core failure cases (KINT-09), upgrade and rollback (KINT-10), cutover and removal (KINT-11–15), per [decision 0023](decisions/0023-focus-kagent-cutover.md). It is **not** the installed runtime. |
 
 ## Not supported
 
@@ -102,8 +96,11 @@ Disabling new intake does not pause executions that have already started.
 - PRDs drafted in the chat and committed to the project repository, and tasks
   derived from them. Tasks are created by hand or promoted from messages.
 - The three-column Deck layout with a simple middle column.
-- Agent-created notes (LEAN-03) and reviewed/unread result state (INBOX-01–04).
-- Breaking a broad outcome into focused child tasks (PREP).
+- Notes and knowledge bases that agents maintain.
+- The diagnostic analysis workflow (LangChain) is retired
+  ([decision 0023](decisions/0023-focus-kagent-cutover.md)). Its code is still
+  installed until KINT-12 removes it; do not start new work on it
+  ([earlier evidence](validation/agent-11-13-2026-09-22.md)).
 - Deployment, production signals and production remediation.
 - More than one active task, more than one repository per workflow, arbitrary
   tools, and general agent hosting.
