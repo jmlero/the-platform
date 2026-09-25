@@ -1,8 +1,8 @@
 # Backlog to focused agent work
 
 - Status: implementation design; no new runtime capability implemented
-- Decision: [0018](decisions/0018-deck-work-preparation.md)
-- Tracking: PREP-01–08 in [TODO.md](../TODO.md)
+- Decision: [0018](../decisions/0018-deck-work-preparation.md)
+- Tracking: PREP-01–08 in [the backlog](../backlog.md)
 
 ## Outcome and first slice
 

@@ -16,8 +16,9 @@ digest-checked evidence.
 Use the [paired workflow guide](../deploy/kubernetes/first-release/README.md) for
 repository work and the
 [two-workload guide](../deploy/kubernetes/agent-platform/README.md) for the pinned
-diagnostic profile. [VISION.md](../VISION.md) describes the current state and
-product direction; [ARCHITECTURE.md](../ARCHITECTURE.md) defines the Deck–Marina boundary.
+diagnostic profile. [VISION.md](../docs/VISION.md) describes the direction,
+[status.md](../docs/status.md) the current state, and
+[ARCHITECTURE.md](../docs/ARCHITECTURE.md) the Deck–Marina boundary.
 
 ## Current behavior
 

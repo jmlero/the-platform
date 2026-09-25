@@ -9,9 +9,9 @@ This project starts from scratch as a new Kubernetes-based concept. Experience f
 
 It is single-operator first. Deck over HTTP/JSON is the supported work-control provider. Headless and in-process alternatives remain future packaging; work-control surfaces, agent harnesses, runtimes, context sources, policy and verification systems, delivery integrations, and platform services remain replaceable behind governed contracts.
 
-Read the root [VISION.md](../VISION.md), the reference for the current state, the product vision and the dark-factory goal.
+Read the [vision](../docs/VISION.md) for the product direction and the dark-factory goal, and [status.md](../docs/status.md) for what is supported today.
 
-Read [the root architecture](../ARCHITECTURE.md) for the joint Deck–Marina component boundaries, source-of-truth rules, lifecycle protocol, failure semantics, and delivery gates.
+Read [the root architecture](../docs/ARCHITECTURE.md) for the joint Deck–Marina component boundaries, source-of-truth rules, lifecycle protocol, failure semantics, and delivery gates.
 
 ## Current implementation
 
@@ -223,7 +223,7 @@ make manifests
 
 ```text
 cmd/marina/                 CLI and service entry point
-../ARCHITECTURE.md          Joint Deck–Marina target architecture
+../docs/ARCHITECTURE.md     Joint Deck–Marina architecture
 internal/workcontrol/      Provider-neutral work-control contract
 internal/deck/          Deck adapter
 internal/execution/        Durable execution model and recovery decisions
@@ -239,7 +239,7 @@ deploy/kubernetes/         Single-replica always-on deployment baseline
 docs/decisions/            Reversible architecture decisions
 ```
 
-Read the root [AGENTS.md](../AGENTS.md) and Marina [AGENTS.md](AGENTS.md) before making changes, [ARCHITECTURE.md](../ARCHITECTURE.md) for the target system boundaries, and [TODO.md](../TODO.md) for the prioritized build sequence. The initial language choice and its reversal criteria are recorded in [Marina decision 0001](docs/decisions/0001-initial-go-core.md); the single-replica SQLite decision and its PostgreSQL migration triggers are in [Marina decision 0002](docs/decisions/0002-sqlite-execution-journal.md); the initial typed policy representation and local provider-neutral foundations are in [Marina decision 0003](docs/decisions/0003-initial-policy-and-local-foundations.md); the cross-product service identity and rotation model is in [platform decision 0003](../docs/decisions/0003-service-authentication.md); and the lossless handoff, fencing, command, and outbox mechanics are in [platform decision 0004](../docs/decisions/0004-milestone-one-work-control-safety.md).
+Read the root [AGENTS.md](../AGENTS.md) and Marina [AGENTS.md](AGENTS.md) before making changes, [ARCHITECTURE.md](../docs/ARCHITECTURE.md) for the target system boundaries, and [the backlog](../docs/backlog.md) for the prioritized build sequence. The initial language choice and its reversal criteria are recorded in [Marina decision 0001](docs/decisions/0001-initial-go-core.md); the single-replica SQLite decision and its PostgreSQL migration triggers are in [Marina decision 0002](docs/decisions/0002-sqlite-execution-journal.md); the initial typed policy representation and local provider-neutral foundations are in [Marina decision 0003](docs/decisions/0003-initial-policy-and-local-foundations.md); the cross-product service identity and rotation model is in [platform decision 0003](../docs/decisions/0003-service-authentication.md); and the lossless handoff, fencing, command, and outbox mechanics are in [platform decision 0004](../docs/decisions/0004-milestone-one-work-control-safety.md).
 
 ## Explicit project context
 

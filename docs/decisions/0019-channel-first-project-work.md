@@ -1,7 +1,7 @@
 # Decision 0019: Channel-first project work
 
 - Date: 2026-09-23
-- Status: accepted product direction; Deck interaction and manual lifecycle implemented, conversational agent automation pending
+- Status: accepted product direction; Deck interaction and manual lifecycle implemented, conversational agent automation pending; per-task human acceptance and the layout are revised by [decision 0022](0022-autonomous-software-factory.md)
 - Scope: Deck experience, task acceptance, context stewardship, and Marina conversation integration
 
 ## Decision

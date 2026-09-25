@@ -9,9 +9,8 @@ This file applies to `deck/`. Root [AGENTS.md](../AGENTS.md) also applies.
 Before changing Deck, read:
 
 1. [README.md](README.md)
-2. [../VISION.md](../VISION.md): the reference for the current state and the vision
-3. [../ARCHITECTURE.md](../ARCHITECTURE.md)
-4. [api/openapi.yaml](api/openapi.yaml) for agent-facing protocol work
+2. [../docs/INDEX.md](../docs/INDEX.md): the documentation map, then the VISION, ARCHITECTURE and status documents it lists
+3. [api/openapi.yaml](api/openapi.yaml) for agent-facing protocol work
 
 ## Boundary
 
@@ -21,7 +20,7 @@ Keep the OpenAPI document, advertised capabilities, canonical fixtures, handlers
 
 Do not import Marina packages. The HTTP/JSON contract is the only integration boundary.
 
-Deck can record more command types than Marina executes. What is supported today is in [../VISION.md](../VISION.md#current-state).
+Deck can record more command types than Marina executes. What is supported today is in [../docs/status.md](../docs/status.md).
 
 ## Verification
 

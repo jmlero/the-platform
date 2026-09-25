@@ -27,7 +27,7 @@ Each of these counts as one failure:
 ## Failures that escalate immediately
 
 These block the task without a repair attempt and follow the existing
-[failure rules](../../ARCHITECTURE.md#failure-behavior):
+[failure rules](../ARCHITECTURE.md#failure-behavior):
 
 - time, token or cost budget exhausted, or too little budget left for another attempt;
 - authority or policy denial, including changes outside the allowed paths;
@@ -80,5 +80,5 @@ cancel.
 
 This decision completes AUTO-01 only. No repair behavior exists until AUTO-02–06
 pass. The current workflow still makes one attempt. Engine-dependent repair work
-follows KINT-15, as sequenced in [TODO.md](../../TODO.md). Merge and deployment
+follows KINT-15, as sequenced in [the backlog](../backlog.md). Merge and deployment
 remain human authority.

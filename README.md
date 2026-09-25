@@ -1,40 +1,21 @@
 # The Platform
 
-The Platform is an operator-controlled system for running bounded agent work on
-Kubernetes. It has three independently built components:
+An autonomous software factory on Kubernetes you control. You shape the product
+in a chat per project, and PRDs come out of those conversations. Agents turn the
+resulting tasks into tested code on main with minimal supervision, learning from
+failed checks.
 
-- [Deck](deck/README.md) is the human-facing task, decision, command, and evidence
-  ledger.
-- [Marina](marina/README.md) executes authorized work, recovers it across
-  restarts, and publishes results back to Deck.
-- [platformctl](cli/README.md) is a stateless client for Deck's public HTTP/JSON
-  API.
+It has three independently built components:
 
-Deck and Marina use separate binaries, stores, identities, and deployments.
-They integrate only through the versioned contract described in
-[contracts/README.md](contracts/README.md).
+- [Deck](deck/README.md): the web UI (projects, what is happening, chat) and the
+  work ledger.
+- [Marina](marina/README.md): runs authorized work, recovers it across restarts
+  and publishes results back to Deck.
+- [platformctl](cli/README.md): a stateless command-line client for Deck's API.
 
-## Current state and vision
-
-[VISION.md](VISION.md) is the reference for what the platform does today and
-where it is going.
-
-## Start here
-
-- [VISION.md](VISION.md): current state, vision and goal (the reference)
-- [ARCHITECTURE.md](ARCHITECTURE.md): ownership, invariants, lifecycle, and
-  failure behavior
-- [TODO.md](TODO.md): active backlog and completed milestone index
-- [Local Podman/Kind](deploy/kubernetes/local-podman/README.md): development
-  installation
-- [Repository workflow](deploy/kubernetes/first-release/README.md): configuration
-  and acceptance
-- [Two-workload installation](deploy/kubernetes/agent-platform/README.md):
-  diagnostic profile and upgrade path
-
-Consequential choices are recorded under [docs/decisions/](docs/decisions/).
-Those records explain why a choice was made; the documents above describe the
-current system.
+**Documentation starts at [docs/INDEX.md](docs/INDEX.md).** Read
+[VISION](docs/VISION.md) for the what and why, and
+[ARCHITECTURE](docs/ARCHITECTURE.md) for the how.
 
 ## Development
 
@@ -53,16 +34,3 @@ or browser acceptance.
 Other useful commands are `make build`, `make test`, `make vet`, and `make fmt`.
 The root `go.work` joins three independent Go modules; it does not create a root
 module.
-
-## Repository layout
-
-```text
-cli/                          platformctl
-deck/                         work-control service and web UI
-deck/api/                     canonical OpenAPI and wire fixtures
-marina/                       execution service and worker harnesses
-marina/internal/workcontrol/  provider-neutral consumer contract
-deploy/kubernetes/            installation profiles and runbooks
-docs/decisions/               architecture and product decisions
-docs/validation/              redacted acceptance evidence
-```

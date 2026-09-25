@@ -1,6 +1,6 @@
 # Decision 0007: Own the execution system and focus the first usable release
 
-- Status: accepted; the bounded local release gate passed on 2026-09-21
+- Status: accepted; the bounded local release gate passed on 2026-09-21; the stop-at-PR delivery boundary is superseded by [decision 0022](0022-autonomous-software-factory.md)
 - Date: 2026-09-09
 - Scope: Deck and Marina
 

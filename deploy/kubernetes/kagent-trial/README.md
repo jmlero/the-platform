@@ -3,7 +3,7 @@
 This is the KINT-01/02 evaluation profile, not a supported Marina execution
 backend. It uses `kind-marina-local` on `podman-machine-default-root`. Deck and
 Marina keep their own deployments, stores, credentials and disabled intake.
-The [removal inventory](../../../docs/kagent-removal-inventory.md) assigns later
+The [removal inventory](../../../docs/plans/kagent-integration.md#removal-inventory) assigns later
 replacement and deletion gates. See the [acceptance report](../../../docs/validation/kint-01-02-2026-09-22.md).
 
 ## Exact candidate and ownership

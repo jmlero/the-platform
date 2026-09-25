@@ -1,7 +1,7 @@
 # Decision 0021: Independent semantic review before every commit
 
 - Date: 2026-09-25
-- Status: accepted policy (AUTO-07); implementation planned under AUTO-08
+- Status: accepted policy (AUTO-07); implementation planned under AUTO-08; delivery after verification changes from a pull request to landing on main per [decision 0022](0022-autonomous-software-factory.md)
 - Scope: Marina repository workflow; extends [decision 0020](0020-bounded-repair-policy.md)
 
 ## Context
@@ -85,4 +85,4 @@ a passing review.
 This decision completes AUTO-07 only. The diagnostic workflow keeps its
 existing independent validator. No review behavior exists until AUTO-08 passes.
 AUTO-08 builds on the repair loop (AUTO-02–05) and follows KINT-15, as
-sequenced in [TODO.md](../../TODO.md).
+sequenced in [the backlog](../backlog.md).

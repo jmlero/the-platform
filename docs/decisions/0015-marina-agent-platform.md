@@ -94,7 +94,7 @@ The completed AGENT-01 through AGENT-06 gate proved that two workloads and
 different harnesses share the execution foundation. AGENT-07 through AGENT-13
 made that bounded platform usable through a documented API, governed
 tool/context access, inspectable outputs, failure recovery, and a repeatable
-installation. [TODO.md](../../TODO.md#completed-milestones) retains the milestone
+installation. [the backlog](../backlog.md#completed-milestones) retains the milestone
 index; the validation reports keep the detailed evidence.
 
 Start with one operator, one active task, Kubernetes Jobs and the supported Deck

@@ -2,9 +2,9 @@
 
 - Date: 2026-09-22
 - Status: KINT-01–06 passed their scoped gates, including one native repository pilot; two-workload rollout pending
-- Decision: [0017](decisions/0017-kagent-core-engine.md)
-- Tracking: [KINT-01–15 in TODO.md](../TODO.md#kagent-integration-and-marina-simplification)
-- Research: [adoption analysis](kagent-adoption.md)
+- Decision: [0017](../decisions/0017-kagent-core-engine.md)
+- Tracking: [KINT-01–15 in the backlog](../backlog.md#kagent-integration-and-marina-simplification)
+- Research: [adoption analysis](https://github.com/jmlero/the-platform/blob/744204a/docs/kagent-adoption.md)
 
 ## Outcome
 
@@ -21,13 +21,13 @@ The implementation baseline is the researched kagent `v1.0.0-alpha1`, commit
 `850c464726881317997c32515f8b621b949d6ce1`. KINT-01 locks compatible charts,
 images, Substrate and APIs before code depends on them. The analysis distinguishes
 this source from the moving `0.x` docs; do not mix examples or infer compatibility.
-The [KINT-01/02 trial](validation/kint-01-02-2026-09-22.md) locked the candidate
+The [KINT-01/02 trial](../validation/kint-01-02-2026-09-22.md) locked the candidate
 and proved isolated native runtime, persistence, resource feasibility and teardown
-on local Kind. The trial was removed afterward. [KINT-03](validation/kint-03-2026-09-22.md)
+on local Kind. The trial was removed afterward. [KINT-03](../validation/kint-03-2026-09-22.md)
 adds the lifecycle adapter and durable correlation with isolated local recovery
-proof; governed workload dispatch and legacy deletion remain pending. See the [exact lock and installation guide](../deploy/kubernetes/kagent-trial/README.md)
-and [symbol/caller removal inventory](kagent-removal-inventory.md).
-The [KINT-06 local pilot](validation/kint-06-2026-09-23.md) produced one
+proof; governed workload dispatch and legacy deletion remain pending. See the [exact lock and installation guide](../../deploy/kubernetes/kagent-trial/README.md)
+and [symbol/caller removal inventory](kagent-integration.md#removal-inventory).
+The [KINT-06 local pilot](../validation/kint-06-2026-09-23.md) produced one
 verified PR through native Codex, with the trial removed afterward.
 
 ## Responsibility boundary
@@ -87,7 +87,7 @@ test → smallest passing change → relevant checks.
 **KINT-03 — Add the engine adapter and durable correlation. Owner: Marina.
 Depends: 01; live proof also depends on 02.**
 
-Completed within the [documented lifecycle boundary](validation/kint-03-2026-09-22.md).
+Completed within the [documented lifecycle boundary](../validation/kint-03-2026-09-22.md).
 The adapter is not yet selected by installed workflows. Live proof exercised
 lost creation/deletion responses and an interrupted-before-admission message;
 accepted-message recovery and artifact collection have deterministic gRPC proof.
@@ -109,8 +109,8 @@ Completed: deterministic checks and real isolated local Substrate injection,
 credential rotation, cached-credential revocation/expiry, bypass denial and safe
 teardown passed. Deck authority and model responses were synthetic; installed
 workload dispatch and end-to-end failure acceptance remain later gates.
-See [KINT-04 evidence](validation/kint-04-2026-09-22.md) and the
-[gateway contract and installation recipe](../marina/internal/workerapi/README.md).
+See [KINT-04 evidence](../validation/kint-04-2026-09-22.md) and the
+[gateway contract and installation recipe](../../marina/internal/workerapi/README.md).
 Gateway credentials and templates are attempt-exclusive; template names cannot
 be reused after cleanup. Native web-search declarations are removed before
 forwarding without granting provider-hosted tools. Existing profiles remain on
@@ -129,7 +129,7 @@ the supported runtime.
 **KINT-05 — Separate results and independent verification from worker hosting.
 Owner: Marina. Depends: 03–04.**
 
-Completed at the deterministic boundary in [KINT-05 evidence](validation/kint-05-2026-09-23.md).
+Completed at the deterministic boundary in [KINT-05 evidence](../validation/kint-05-2026-09-23.md).
 The installed workload backend remains unchanged; KINT-06/07 must emit and
 prove the selected inline result artifact through their actual harnesses.
 
@@ -146,7 +146,7 @@ prove the selected inline result artifact through their actual harnesses.
 **KINT-06 — Move repository implementation to native kagent Codex. Owner: Marina.
 Depends: 02–05.**
 
-Completed for one bounded local Kind pilot in [KINT-06 evidence](validation/kint-06-2026-09-23.md).
+Completed for one bounded local Kind pilot in [KINT-06 evidence](../validation/kint-06-2026-09-23.md).
 The verified PR remains open and unmerged. The trial was removed after proof;
 two-workload cutover and the broader live failure matrix remain KINT-09/11.
 
@@ -160,7 +160,7 @@ two-workload cutover and the broader live failure matrix remain KINT-09/11.
 **KINT-07 — Move the diagnostic profile to kagent. Owner: Marina.
 Depends: 02–05.**
 
-Completed in the [local KINT-07/08 acceptance](validation/kint-07-08-2026-09-23.md):
+Completed in the [local KINT-07/08 acceptance](../validation/kint-07-08-2026-09-23.md):
 context-enabled report and forced denied-source cases passed through real kagent.
 
 - Package the pinned LangChain workload behind kagent's BYO contract; retain its
@@ -174,7 +174,7 @@ context-enabled report and forced denied-source cases passed through real kagent
 **KINT-08 — Project engine state and bridge pending questions. Owner: Joint.
 Depends: 03–04.**
 
-Completed in the [local KINT-07/08 acceptance](validation/kint-07-08-2026-09-23.md):
+Completed in the [local KINT-07/08 acceptance](../validation/kint-07-08-2026-09-23.md):
 question projection, restart, one correlated answer and validated result passed.
 
 - Map engine progress, blockers, usage and pending question IDs to durable Marina
@@ -193,7 +193,7 @@ question projection, restart, one correlated answer and validated result passed.
 **KINT-09 — Run the shared failure acceptance matrix. Owner: Joint.
 Depends: 06–08.**
 
-- Run every applicable case in the [mandatory matrix](kagent-adoption.md#mandatory-failure-matrix)
+- Run every applicable case in the [mandatory matrix](kagent-integration.md#mandatory-failure-matrix)
   against real Deck/Marina/kagent processes on local Kubernetes, including both
   workloads, isolated restarts, lost responses, cancellation during model/tool
   calls, lease loss, budget exhaustion, source/context changes and stale evidence.
@@ -325,3 +325,62 @@ If a hard compatibility or safety gate fails, keep the current working release,
 record the exact failure and bounded remedy, and stop dependent cutover/deletion.
 That is a blocker to solve or a reason to revisit the direction with evidence;
 it is not permission to conceal a regression or leave an accidental hybrid.
+
+## Mandatory failure matrix
+
+KINT-09 runs every applicable row against real Deck, Marina and kagent
+processes. Carried over from the adoption analysis.
+
+| Test | Passing observation |
+| --- | --- |
+| Duplicate start/send; lose instance-create and send responses separately | Original instance/attempt recovered or safely blocked; no replacement coding work or duplicate billed invocation through blind retry. |
+| Restart Marina, kagent gateway, agent compute and engine database separately during work | Inspect the original identities; resume where proven or block truthfully. No invented completion or uncontrolled second attempt. |
+| Disconnect event stream; duplicate/out-of-order events | Reconstruct committed engine state and publish each logical Deck transition/result once. |
+| Cancel during a model call, tool call, and waiting-for-input state | Admission revoked; termination observed; late responses cannot publish new mutations or revive the run. |
+| Lose Deck/lease ownership; expire or revoke context | Further calls denied and compute stopped under the current fence rules. Credential-cache freshness cannot substitute for revocation. |
+| Exhaust time/tokens/cost; lose final streaming usage | Deny further consumption, keep unresolved reservations, report known and unknown usage separately, including internal retries. |
+| Bypass Marina via model egress, MCP, engine API, or child delegation | No unauthorized provider/tool access or task invocation; no upstream secret, Git write credential, or Kubernetes token available to agent code. |
+| Fail verification; change PR head; fail required CI | Evidence becomes failed/stale and Deck cannot show successful completion. |
+| Lose commit/PR/publication response | Reconcile the original source operation and outbox receipt; no duplicate PR or false failure followed by a new mutation. |
+| Edit template/model/tools while an instance starts or runs | Authorized revision remains pinned, or mismatch blocks before invocation. |
+| Answer a question twice, after expiry, or after cancel | Correct pending operation only; reject stale answers and preserve the original human decision. |
+| Fail artifact storage or cleanup; upgrade and roll back | No completion without retained evidence; cleanup remains visible/retryable and existing history remains readable. |
+
+## Removal inventory
+
+Carried over from the KINT-01 inventory, reviewed against the working tree on
+2026-09-23. This is a removal specification, not authorization to delete before
+KINT-11. The current runtime is unchanged.
+The [dependency lock](../../deploy/kubernetes/kagent-trial/lock.json) and
+[trial guide](../../deploy/kubernetes/kagent-trial/README.md) define the candidate.
+
+Paths below are relative to `marina/`, unless stated otherwise. Test names refer
+to current coverage that must survive the replacement; they are not evidence
+that the future kagent adapter passes. The named KINT gates require new tests
+against the replacement and the live failure matrix.
+
+| File and symbol / configuration | Current callers and replacement | Retained behavior and required proof | Removal task |
+| --- | --- | --- | --- |
+| `internal/flow/runtime.go`: `Controller.worker`, implement/analyze command construction, `worker-input:` checkpoint | Repository and analysis flow call `worker`; dispatch through the KINT-03 adapter instead of constructing `codex exec` / Python commands. | Keep immutable specifications, attempt limits, authority checks, result digest/stage/source binding. `TestRuntimeAttemptLimitSurvivesRestartAndAllowsIdempotentReplay`; KINT-03/05/06/07/09. Verification still needs its own input. | 12–13 |
+| `cmd/marina/workers.go`: `configureWorkers`, `kubernetes.New` and `AdditionalImages` wiring | `serve` wires the runtime/gateway. Select the pinned engine revision for agent attempts; retain a verifier adapter. | Source binding, scoped gateway, TLS/credential validation, artifact store and per-execution configuration remain. `TestConfigurationRequiresExplicitDestinationsAndVerification`; KINT-04/05/09. | 12, 14 |
+| `cmd/marina/main.go`: worker command branch | Worker image invokes the CLI entry; replace agent entry with upstream/native or BYO runtime entry. | Keep a separately usable deterministic verifier command. CLI worker deletion follows image/caller inventory, not the command name alone. | 12 |
+| `internal/worker/runner.go`: agent branch of `Run`, `promptFor`, `harnessFailure`, `parseHarness` | `RunRemote` calls `Run`; native Codex adapter supplies the agent loop and structured result conversion. | KINT-05 moved result/check formats and path validation to `internal/workresult`, shared input to `internal/worker/input.go`, and clean checkout/check execution/process termination to `internal/worker/verification.go`. Retain those independently justified pieces when deleting the agent branch. `TestVerificationChecksThePinnedRevisionInAFreshWorkspace`, `TestChangesCannotEscapeAuthorizedPathsOrModifyControlFiles`, `TestGitReadUsesOneScopedBearerHeader`. | 12 |
+| `internal/worker/analysis.go`: `runAnalysis` | `Run` analysis branch hosts Python; KINT-07 BYO owns hosting. | Keep the chosen LangChain workload and independent `internal/analysis` validator. `TestAnalysisWorkerRunsWithoutGitOrCodingHarness`, `TestAnalysisEvidenceBindsContextForVersionTwo`; repeat scope/invalid-report cases through BYO. | 12 |
+| `internal/worker/remote.go`: `RunRemote`; `authority.go`: `watchAuthority`, `retryGatewayRead` | Legacy worker entry reads inputs, posts results and polls authority. Agent path replaced by engine transport and externally enforced authority. | A verifier may still require scoped input/result transfer and termination watchdog. `TestAuthorityWatchdogStopsImmediatelyOnRevocation`, `TestAuthorityWatchdogNeverOutlivesLastConfirmedLease`, temporary-outage tests; live termination under KINT-09. | 12 |
+| `internal/kubernetes/adapter.go`: `Adapter.Start`, `manifest`, `Inspect`, `InspectByKey`, `Cancel`, `Cleanup`, `jobName` | `configureWorkers` supplies this adapter for all workloads; KINT-03 replaces coding/analysis Job lifecycle. | Keep narrow verifier Job support. Preserve lost-response lookup, cancellation waiting for observed termination, cleanup and pinned image checks. `TestStartReusesExactJobAfterLostResponseAndRejectsChangedSpecification`, `TestCancelIsNotAcknowledgedUntilJobTerminationIsObserved`. | 12–13 |
+| `internal/kubernetes/adapter.go`: `Token` | Worker API and Job creation share attempt credential derivation. Move only if surviving callers need it outside the verifier adapter. | Attempt/fence/expiry binding and constant-time verification must survive. `TestWorkerCredentialCannotOutliveProviderFence`; KINT-04. | 13 |
+| `internal/workerapi/server.go`: `Input`, `input`, `authority`, `result` routes | `RunRemote` consumes the legacy protocol; remove agent-only transport after replacement. | Retain verifier transfer, actual-byte validation and authenticated `artifact` delivery where still used. `authorize`, `admit`, `liveContext` and restricted `source` remain governance requirements. | 12–14 |
+| `internal/workerapi/model.go`: `model`, `forbiddenModelInput`, `localTools`, `analysisTools`, `price`; `tools.go`: `contextTool` | Workers currently call Marina's gateway. Adapt native Responses/BYO requests without bypassing admission. | Retain reservations, terminal-usage accounting, scope, cancellation and context revocation. `TestModelBudgetRequiresCompleteTerminalUsage`, `TestDeniedModelBudgetLeavesOneDurableExplanation`, `TestContextToolEnforcesFrozenAllowlistAndLiveRevocation`, `TestAnalysisGatewayDeniesGitAndBindsReportToFrozenInputs`. | Retain/adapt in 04; remove only dead transport in 14 |
+| `internal/runtime/runtime.go`: `Specification`, `Attempt`, `Observation`, `Adapter`, runtime `PlanRecovery` | Flow and journal use the runtime port. Keep a narrow engine mapping; remove Job-specific assumptions after both workloads move. | Immutable revision/context/profile, recorded key/handle, explicit ambiguity, capability limits and historical decoding remain. `TestSpecificationIsBoundedAndContentAddressed`, `TestPlanRecoveryMakesAmbiguousRuntimeBehaviorExplicit`; KINT-03/09. | 13 |
+| `internal/journal/sqlite/runtime_records.go`: `EnsureRuntimeAttempt`, `MarkRuntimeStarting`, `RecordRuntimeObservation`, cleanup/artifact records | Flow, gateway, diagnostics and retention use these records. Retain correlation and historical readers; identify obsolete fields only after KINT-03 fixes the actual mapping. | Do not delete attempt/usage/evidence history or edit old migrations. `TestRuntimeAttemptsPersistSpecificationObservationArtifactsAndCleanup`, restart/attempt-limit tests. Every proposed column removal requires a caller and migration review. | 13 |
+| `internal/execution/recovery.go`: `PlanRecovery`; `internal/flow/runtime.go`: `stop`, `Command`, `cleanup` | Reconciliation uses these to enforce workflow state, leases and termination. | Retain cross-system recovery and command semantics; simplify only duplicated engine polling. `TestRestartPlannerUsesPersistedActiveStateWithoutClaiming`, cancellation tests, KINT-09 failure matrix. | Retain; narrow in 13 |
+| `internal/flow/config.go`: `Config`, `Validate`, `Digest`, `AnalysisDigest`; `cmd/marina/profile.go`: `runWorkloadProfile` | Installation loader and discovery pin current worker/harness settings. New profiles pin engine revisions. | Keep old profile digests readable and withdrawn selections rejected. No active-attempt backend switch. Config tests plus KINT-10 upgrade/history proof. | 14 |
+| `Dockerfile.worker`, `Dockerfile.analysis-worker`, `harnesses/langchain/run.py`, `requirements.txt` | Installation builds and pins worker images. Native Codex replaces custom coding image; BYO packages the selected diagnostic workload. | Strip Codex/Python agent dependencies from verifier image, retain trusted offline checks and exact LangChain dependency hashes. Do not delete the diagnostic workload merely because its launcher moves. | 14 |
+| Root `deploy/kubernetes/first-release/workers/`, `scripts/prepare-installation.py`, `prepare-agent-installation.py`, acceptance helpers | Installation provisions Job RBAC, quota, network isolation and images. Replace agent provisioning with the pinned engine; preserve verifier needs. | Transfer network/fence/cancel proof, data-preserving rollback, credentials and historical inspection before deleting old setup paths. `make check-installation`, KINT-09/10/15. | 14 |
+| `internal/deck`, `workcontrol`, `policy`, `contextpack`, `sourcecontrol`, `artifacts`, `analysis`, workflow reconciliation and outbox | Deck contract, source publication and evidence acceptance are Marina responsibilities. | Retain. Engine success cannot complete a Deck task. Keep leases, immutable acquisition/context, source-current CI, budget accounting, artifact integrity and idempotent outbox. Run product checks and real-process conformance after joint changes. | No package-wide deletion |
+
+No implementation is removed in KINT-01/02. Remaining-column decisions are
+deliberately deferred to the implemented adapter rather than guessing which
+durable correlation fields it will need. KINT-12–14 must amend this inventory with
+the actual deleted symbols and retained callers; renamed legacy hosting does not
+count as removal.

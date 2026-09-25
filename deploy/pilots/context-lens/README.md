@@ -1,7 +1,7 @@
 # Context Lens pilot preparation
 
 The operator selected Context Lens on 2026-09-22 and confirmed ubahndoku is
-completed. See the [assessment](../../../docs/pilot-project-assessment-2026-09-22.md).
+completed. See the [assessment](https://github.com/jmlero/the-platform/blob/744204a/docs/pilot-project-assessment-2026-09-22.md).
 This directory prepares the first product task, not a new platform capability.
 
 ## Bounded outcome

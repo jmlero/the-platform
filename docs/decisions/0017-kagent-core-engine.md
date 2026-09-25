@@ -7,7 +7,7 @@
 ## Decision
 
 The operator accepted planning the integration of kagent and removal of redundant
-Marina code after reviewing the [adoption analysis](../kagent-adoption.md).
+Marina code after reviewing the [adoption analysis](https://github.com/jmlero/the-platform/blob/744204a/docs/kagent-adoption.md).
 Make kagent the target core agent engine, with Marina retaining the governed
 workflow and interface to Deck. Prefer upstream capabilities wherever they meet
 the required behavior. Delivery includes deleting replaced implementation, not
@@ -19,9 +19,9 @@ source publication, independent verification, evidence admission and durable
 cross-system reconciliation. kagent owns harness execution, engine interactions
 and runtime lifecycle. Integrate through public APIs and keep separate stores.
 
-The [implementation and removal plan](../kagent-integration-plan.md) defines
+The [implementation and removal plan](../plans/kagent-integration.md) defines
 dependencies, file-level removal candidates, acceptance, cutover and rollback.
-Its stable KINT tasks are tracked in [TODO.md](../../TODO.md). Reuse native Codex;
+Its stable KINT tasks are tracked in [the backlog](../backlog.md). Reuse native Codex;
 preserve the chosen LangChain workload through BYO initially. A deterministic
 verification Job may remain without constituting a second agent engine.
 

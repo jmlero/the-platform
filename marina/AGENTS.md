@@ -9,8 +9,7 @@ This file applies to the `marina/` product directory. Root [AGENTS.md](../AGENTS
 Before planning or changing Marina, read these files completely:
 
 1. [README.md](README.md) — concise project orientation.
-2. [../VISION.md](../VISION.md) — the reference for the current state, the vision and the dark-factory goal.
-3. [../ARCHITECTURE.md](../ARCHITECTURE.md) — joint Deck–Marina ownership, protocols, lifecycle, and failure semantics.
+2. [../docs/INDEX.md](../docs/INDEX.md) — the documentation map; then the VISION, ARCHITECTURE and status documents it lists.
 
 Treat these documents as the current product source of truth. A new explicit user decision takes precedence; update the relevant document when that decision changes the product direction.
 
@@ -18,9 +17,7 @@ Treat these documents as the current product source of truth. A new explicit use
 
 ## Mission
 
-Marina is an installable, Kubernetes-native, and extensible autonomous software-factory layer. It should turn bounded human intent or operational signals into verified software outcomes across the SDLC and DevOps lifecycle while humans retain control of intent, architecture, policy, and exceptional decisions.
-
-The goal is not faster typing or more pull requests. The goal is safe, useful, evidence-backed work that continues when the operator's laptop is off.
+Marina is the execution side of the software factory described in [the vision](../docs/VISION.md): it runs the agents' inner loop on Kubernetes: authorized tasks become verified, evidence-backed changes or focused blockers.
 
 ## Current product boundary
 
@@ -30,7 +27,7 @@ The goal is not faster typing or more pull requests. The goal is safe, useful, e
 - Use Kubernetes as Marina's native installation and first execution substrate, but do not expose Kubernetes-specific concepts as Marina's public product model.
 - Use Deck over HTTP/JSON as the supported work-control provider. Keep the core provider-neutral; alternative providers and headless packaging remain future work.
 - Keep work-control surfaces, agent harnesses, models, workflow engines, runtimes, context sources, policy and verification systems, delivery integrations, and platform services replaceable behind explicit governed contracts.
-- Stop at a pull request ready for human review. Merge/deploy authority needs a separately implemented and authorized workflow.
+- Today work stops at a pull request ready for human review. Landing directly on main after the platform check and GitHub CI is the accepted direction ([decision 0022](../docs/decisions/0022-autonomous-software-factory.md), LAND-01) and is not implemented yet. Marina never deploys.
 
 ## Vocabulary and boundaries
 
@@ -193,7 +190,6 @@ The following remain deliberately unresolved. Keep choices local and reversible 
 
 - Which production feedback source will close the first operational loop.
 - Which actions must always require a human decision.
-- Which evidence and operating history permit autonomy beyond a PR ready for human review.
 - When backup/restore work becomes an active operator requirement.
 
 When a task requires one of these decisions, present the concrete trade-off and a recommendation. Do not let a library, framework, or provider selection decide it accidentally.

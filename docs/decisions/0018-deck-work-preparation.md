@@ -52,7 +52,7 @@ products while keeping Deck the authoritative backlog and work-control surface.
   supported human-review PR boundary. Parent completion is not inferred merely
   from successful child runs or agent assertions.
 
-The [implementation design](../work-preparation.md) defines records, lifecycle,
+The [implementation design](../plans/work-preparation.md) defines records, lifecycle,
 context, contract changes, failure behavior, and PREP-01–08 acceptance criteria.
 
 ## Relationship to existing direction

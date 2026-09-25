@@ -3,7 +3,7 @@
 ## Scope and decision
 
 The operator selected Context Lens as the value pilot and confirmed ubahndoku
-is completed. The [assessment](../pilot-project-assessment-2026-09-22.md) records
+is completed. The [assessment](https://github.com/jmlero/the-platform/blob/744204a/docs/pilot-project-assessment-2026-09-22.md) records
 that correction. [Pilot assets](../../deploy/pilots/context-lens/README.md) define
 a three-task report/export/comparison increment.
 

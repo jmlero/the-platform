@@ -6,12 +6,12 @@ This file applies to the complete monorepo. More specific instructions in a prod
 
 ## Read first
 
-Before planning or changing cross-product behavior, read:
+Start with [docs/INDEX.md](docs/INDEX.md): it maps every document, says who it is for, and says where each kind of fact belongs. Before planning or changing cross-product behavior, read:
 
-1. [VISION.md](VISION.md): the reference for the current state and the vision
-2. [README.md](README.md)
-3. [ARCHITECTURE.md](ARCHITECTURE.md)
-4. [TODO.md](TODO.md)
+1. [docs/VISION.md](docs/VISION.md): what we are building and why
+2. [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): components, tech stack and safety rules
+3. [docs/status.md](docs/status.md): what is supported today
+4. [docs/backlog.md](docs/backlog.md): the order of work
 
 Then read the affected component's guidance before changing it:
 
@@ -21,7 +21,7 @@ Then read the affected component's guidance before changing it:
 | Marina | [marina/AGENTS.md](marina/AGENTS.md) and [marina/README.md](marina/README.md) |
 | CLI | [cli/README.md](cli/README.md) and the public Deck API used by the change |
 
-Read relevant records under [docs/decisions/](docs/decisions/) before revisiting an architectural or product choice. Explicit user decisions take precedence; update VISION.md when the current state or direction changes. Check claimed behavior against source and tests.
+Read relevant records under [docs/decisions/](docs/decisions/) before revisiting an architectural or product choice. Explicit user decisions take precedence; update docs/VISION.md when the direction changes and docs/status.md when the current state changes. Check claimed behavior against source and tests.
 
 ## Product boundaries
 
@@ -33,12 +33,21 @@ Read relevant records under [docs/decisions/](docs/decisions/) before revisiting
 - Neither service may read the other's database. Terminal clients must not import product internals or read product databases; they interact through supported public APIs.
 - Deck owns its provider-specific OpenAPI and canonical wire fixtures under `deck/api/`.
 - Marina owns provider-neutral ports and the reusable consumer conformance suite under `marina/internal/workcontrol/`.
-- Keep OpenAPI, capability discovery, fixtures, persistence, handlers, and consumer expectations synchronized. Additive changes must preserve version-1 semantics; breaking semantics require a new protocol major. See the [contract map](contracts/README.md).
+- Keep OpenAPI, capability discovery, fixtures, persistence, handlers, and consumer expectations synchronized. Additive changes must preserve version-1 semantics; breaking semantics require a new protocol major. See the [contract map](docs/ARCHITECTURE.md#contract).
 - Preserve durable intent, idempotency, version checks, lease fencing, bounded budgets, and source-bound evidence. Handle lost responses, restart, cancellation, and partial success without duplicate work or false completion.
+
+## Documentation
+
+Follow the layout in [docs/INDEX.md](docs/INDEX.md). Capitalized documents (INDEX, VISION, ARCHITECTURE) are for the human: keep them short, plain and free of low-level detail. Lowercase documents are working documents that agents keep current.
+
+- One fact lives in one place; link to it instead of restating it.
+- Do not add Markdown files at the root or directly under `docs/` unless the user asks. New material goes into an existing document, `docs/decisions/`, `docs/plans/` or `docs/validation/`.
+- Delete a plan under `docs/plans/` once its work ships and ARCHITECTURE and status describe the result.
+- Do not edit validation reports after the fact, except to repair links.
 
 ## Current state
 
-[VISION.md](VISION.md#current-state) is the only description of what is supported, implemented but not yet accepted, and not supported. Link to it; do not restate it in other documents. Update it in the same change that ships, removes or re-scopes a capability. Ledger records and reusable foundations alone do not establish a supported workflow capability.
+[docs/status.md](docs/status.md) is the only description of what is supported, implemented but not yet accepted, and not supported. Link to it; do not restate it in other documents. Update it in the same change that ships, removes or re-scopes a capability. Ledger records and reusable foundations alone do not establish a supported workflow capability.
 
 For diagnostic workload work, follow the [profile contract](marina/docs/workloads/profiles-v1.md), [API guide](marina/docs/workloads/api-v1.md) and [installation guide](deploy/kubernetes/agent-platform/README.md).
 
@@ -56,7 +65,7 @@ Follow [decision 0014](docs/decisions/0014-project-repository-and-knowledge.md) 
 - Inspect the complete root Git state, including staged, unstaged, and untracked changes, before editing. Preserve unrelated work and stage only changes belonging to the requested task.
 - Make cross-product contract changes together; when committing is authorized, keep mutually dependent changes in one atomic commit.
 - Keep future schemas visibly marked as planned; do not advertise a provider capability before its behavior exists.
-- Keep [TODO.md](TODO.md) IDs stable. Mark an item Done only when its acceptance criteria are satisfied and link the evidence; retain Verify when installation-specific proof is still missing.
+- Keep [backlog](docs/backlog.md) IDs stable. Mark an item Done only when its acceptance criteria are satisfied and link the evidence; retain Verify when installation-specific proof is still missing.
 - Record consequential cross-product decisions under `docs/decisions/`.
 - Continue work within the user's existing authorization. Ask only for missing intent or authority, and report concrete results, verification, and remaining blockers.
 
@@ -125,27 +134,3 @@ appropriate, and run the relevant checks after each change.
 
 This project uses Groma. Before you scan, inspect, or curate architecture, or change files for a Backlog task, run `groma agent-instructions` and read the guide it names for that job. When it reports a first scan, ask the user whether they want you to curate the architecture. Do not edit Groma-owned architecture files directly.
 <!-- groma:end -->
-
-<!-- BACKLOG.MD GUIDELINES START -->
-<!-- backlog.md-instructions-version: 1.53.0 -->
-<CRITICAL_INSTRUCTION>
-
-## Backlog.md Workflow
-
-This project uses Backlog.md for task and project management.
-
-**At the beginning of each conversation in this project, run `backlog instructions overview` before answering or taking action. Re-read it only if you have not read it yet in the current conversation.**
-
-Use the overview to decide whether to search, read, create, or update Backlog tasks.
-
-Before task lifecycle actions, read the matching detailed guide:
-- `backlog instructions task-creation` before creating or splitting tasks
-- `backlog instructions task-execution` before planning, changing status or assignee, adding a plan or implementation notes, or implementing task work
-- `backlog instructions task-finalization` before checking acceptance criteria, writing final summaries, or moving tasks to terminal statuses
-
-Use `backlog <command> --help` before running unfamiliar commands. Help shows options, fields, and examples.
-
-Do not edit Backlog task, draft, document, decision, or milestone markdown files directly. Use the `backlog` CLI so metadata, relationships, and history stay consistent.
-
-</CRITICAL_INSTRUCTION>
-<!-- BACKLOG.MD GUIDELINES END -->
