@@ -22,7 +22,7 @@ describe('workload inspection', () => {
       plan_revisions:[],events:[],decisions:[],artifacts:[],evidence:[{...proof,id:'old',run_id:'old',artifact_digest:'old-proof'},proof],commands:[],operational_states:[],trail:[],display_state:'completed',
       provider_status:{project_id:'project',connectivity:'connected',sync_state:'current',sync_lag_millis:0,lease_state:'none',degraded_dependencies:[],stale_projection_count:0,rejected_projection_count:0}
     };
-    const html=render(TaskDrawer,{props:{detail,onclose:()=>{},onrefresh:async()=>{},onmove:async()=>{},onsave:async()=>{},onanswer:async()=>{}}}).body;
+    const html=render(TaskDrawer,{props:{detail,onclose:()=>{},onrefresh:async()=>{},onmove:async()=>{},onsave:async()=>{},onanswer:async()=>{},onretention:async()=>{}}}).body;
     expect(html).toContain('/artifacts/current-proof');
     expect(html).not.toContain('/artifacts/old-proof');
     expect(html).toContain('Download validated analysis');

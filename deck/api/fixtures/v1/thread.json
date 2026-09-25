@@ -1,0 +1,10 @@
+{
+  "id": "thr_example",
+  "project_id": "prj_default",
+  "channel_id": "chn_example",
+  "root_message_id": "msg_example",
+  "task_ids": [
+    "tsk_example"
+  ],
+  "created_at": 1790121600000
+}

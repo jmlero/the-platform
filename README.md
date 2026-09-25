@@ -14,35 +14,14 @@ Deck and Marina use separate binaries, stores, identities, and deployments.
 They integrate only through the versioned contract described in
 [contracts/README.md](contracts/README.md).
 
-## Supported workflows
+## Current state and vision
 
-The repository workflow turns one authorized task into either a verified pull
-request for human review or a truthful blocker:
-
-```text
-task and budget -> approved plan -> coding Job -> verification Job
-                -> pull request and CI -> evidence in Deck
-```
-
-It supports one repository and one active task, with one implementation attempt
-and one separate deterministic verification attempt. Cancellation waits for
-worker termination. Failed checks, changed pull-request heads, and requested
-changes block. Pause/resume, automatic revision loops, semantic review, merge,
-and deployment authority are outside the supported workflow.
-
-The same installation also supports one pinned diagnostic-analysis profile. It
-runs a LangChain worker against a fixed immutable fixture, permits one governed
-read-only context tool, and independently validates the report. This is a bounded
-second workload, not general agent hosting.
-
-Both workflows passed local Podman/Kind acceptance. See the
-[repository-workflow report](docs/validation/poc-mvp-2026-09-21.md), the
-[two-workload MVP report](docs/validation/agent-11-13-2026-09-22.md), and the
-[validation index](docs/README.md).
+[VISION.md](VISION.md) is the reference for what the platform does today and
+where it is going.
 
 ## Start here
 
-- [VISION.md](VISION.md): product direction and scope
+- [VISION.md](VISION.md): current state, vision and goal (the reference)
 - [ARCHITECTURE.md](ARCHITECTURE.md): ownership, invariants, lifecycle, and
   failure behavior
 - [TODO.md](TODO.md): active backlog and completed milestone index

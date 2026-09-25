@@ -160,6 +160,9 @@ two-workload cutover and the broader live failure matrix remain KINT-09/11.
 **KINT-07 — Move the diagnostic profile to kagent. Owner: Marina.
 Depends: 02–05.**
 
+Completed in the [local KINT-07/08 acceptance](validation/kint-07-08-2026-09-23.md):
+context-enabled report and forced denied-source cases passed through real kagent.
+
 - Package the pinned LangChain workload behind kagent's BYO contract; retain its
   immutable fixture, governed context read and independent Go report validator.
   Remove dependence on Marina launching its Python subprocess as an agent Job.
@@ -170,6 +173,9 @@ Depends: 02–05.**
 
 **KINT-08 — Project engine state and bridge pending questions. Owner: Joint.
 Depends: 03–04.**
+
+Completed in the [local KINT-07/08 acceptance](validation/kint-07-08-2026-09-23.md):
+question projection, restart, one correlated answer and validated result passed.
 
 - Map engine progress, blockers, usage and pending question IDs to durable Marina
   records and Deck's supported surfaces. Correlate answers with exact pending

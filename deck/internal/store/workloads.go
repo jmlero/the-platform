@@ -26,7 +26,7 @@ func (s *Store) PublishWorkloads(ctx context.Context, project, owner string, cat
 		seen[p.ID] = true
 		switch p.ID {
 		case "diagnostic-analysis/v1":
-			if (p.Harness != "langchain-create-agent/v1" && p.Harness != "langchain-create-agent/v2") || !slices.Equal(p.Authority, []string{"analysis.run." + p.Digest}) || p.MinAttempts != 1 {
+			if (p.Harness != "langchain-create-agent/v1" && p.Harness != "langchain-create-agent/v2" && p.Harness != "langchain-create-agent/kagent-byo-v1") || !slices.Equal(p.Authority, []string{"analysis.run." + p.Digest}) || p.MinAttempts != 1 {
 				return domain.ErrInvalidInput
 			}
 		case "repository/v1":

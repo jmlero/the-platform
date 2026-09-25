@@ -16,6 +16,7 @@ import (
 const Kind = "diagnostic-analysis/v1"
 const Harness = "langchain-create-agent/v1"
 const HarnessWithContext = "langchain-create-agent/v2"
+const HarnessBYO = "langchain-create-agent/kagent-byo-v1"
 
 // Profile is an operator-installed immutable definition, never supplied by a
 // worker. Expected findings stay in Marina and are not sent to the harness.
@@ -88,10 +89,10 @@ var imagePin = regexp.MustCompile(`^.+@sha256:[a-f0-9]{64}$`)
 var identifier = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,63}$`)
 
 func (p Profile) Validate() error {
-	if p.Version != 1 || p.Revision < 1 || (p.HarnessVersion != Harness && p.HarnessVersion != HarnessWithContext) || !imagePin.MatchString(p.Image) || p.MaxTokens < 10000 || p.MaxTokens > 1000000 || p.BudgetMinutes < 1 || p.BudgetMinutes > 60 {
+	if p.Version != 1 || p.Revision < 1 || (p.HarnessVersion != Harness && p.HarnessVersion != HarnessWithContext && p.HarnessVersion != HarnessBYO) || !imagePin.MatchString(p.Image) || p.MaxTokens < 10000 || p.MaxTokens > 1000000 || p.BudgetMinutes < 1 || p.BudgetMinutes > 60 {
 		return errors.New("analysis profile requires version 1, the supported harness, a pinned image and bounded limits")
 	}
-	if len(p.Tools) > 1 || len(p.Tools) == 1 && (p.Tools[0] != "read_context_source" || p.HarnessVersion != HarnessWithContext) {
+	if len(p.Tools) > 1 || len(p.Tools) == 1 && (p.Tools[0] != "read_context_source" || p.HarnessVersion == Harness) {
 		return errors.New("unsupported analysis tool")
 	}
 	f := p.Fixture

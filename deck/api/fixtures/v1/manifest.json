@@ -38,6 +38,12 @@
       "implementation_status": "implemented"
     },
     {
+      "kind": "decision",
+      "schema": "Decision",
+      "path": "decision.json",
+      "implementation_status": "implemented"
+    },
+    {
       "kind": "command",
       "schema": "Command",
       "path": "command.json",
@@ -133,6 +139,42 @@
       "kind": "workloads",
       "schema": "WorkloadCatalog",
       "path": "workloads.json",
+      "implementation_status": "implemented"
+    },
+    {
+      "kind": "thread",
+      "schema": "ConversationThread",
+      "path": "thread.json",
+      "implementation_status": "implemented"
+    },
+    {
+      "kind": "conversation_dispatch",
+      "schema": "ConversationDispatch",
+      "path": "conversation-dispatch.json",
+      "implementation_status": "implemented"
+    },
+    {
+      "kind": "conversation_question",
+      "schema": "ConversationQuestion",
+      "path": "conversation-question.json",
+      "implementation_status": "implemented"
+    },
+    {
+      "kind": "conversation_outcome",
+      "schema": "ConversationOutcome",
+      "path": "conversation-outcome.json",
+      "implementation_status": "implemented"
+    },
+    {
+      "kind": "channel_message",
+      "schema": "ChannelMessage",
+      "path": "channel-message.json",
+      "implementation_status": "implemented"
+    },
+    {
+      "kind": "task_review",
+      "schema": "TaskReview",
+      "path": "task-review.json",
       "implementation_status": "implemented"
     }
   ]

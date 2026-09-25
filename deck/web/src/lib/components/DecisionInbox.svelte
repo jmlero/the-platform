@@ -10,6 +10,7 @@
 
   let answering = '';
   let error = '';
+  let answers: Record<string, string> = {};
 
   function taskFor(decision: Decision): Task | undefined {
     return tasks.find((task) => task.id === decision.task_id);
@@ -65,10 +66,10 @@
           </div>
         {/if}
 
-        <div class="recommendation">
+        {#if decision.recommendation}<div class="recommendation">
           <Sparkles size={14} />
           Agent recommends <strong>{decision.recommendation}</strong>
-        </div>
+        </div>{/if}
 
         <div class="decision-facts">
           <span><small>Risk</small><strong>{decision.risk_class}</strong></span>
@@ -84,6 +85,11 @@
         </div>
 
         <footer>
+          {#if decision.answer_mode === 'text'}
+            <label for={'answer-' + decision.id}>Your answer</label>
+            <input id={'answer-' + decision.id} type="text" maxlength="2000" value={answers[decision.id] ?? ''} on:input={(event) => { answers[decision.id] = event.currentTarget.value; }} />
+            <button type="button" disabled={answering === decision.id || !(answers[decision.id] ?? '').trim()} on:click={() => answer(decision, answers[decision.id])}>Send answer</button>
+          {/if}
           {#each decision.options as option, index}
             <button
               type="button"

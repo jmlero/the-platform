@@ -128,7 +128,7 @@ func (c *Controller) checkAnalysisEvidence(s state) error {
 	if json.Unmarshal(b, &proof) != nil || proof.Version != 1 || proof.Validator != "marina:diagnostic-validator/v1" || proof.ProfileDigest != s.ProfileDigest || (proof.ContextDigest != "" && proof.ContextDigest != s.ContextDigest) || proof.InputDigest != s.Base || proof.OutputDigest != s.ImplementationDigest || analysis.Digest(proof.Sources) != s.Base {
 		return invalid
 	}
-	if s.Analysis.HarnessVersion == analysis.HarnessWithContext && (proof.ContextDigest == "" || proof.ContextDigest != s.ContextDigest) {
+	if (s.Analysis.HarnessVersion == analysis.HarnessWithContext || s.Analysis.HarnessVersion == analysis.HarnessBYO) && (proof.ContextDigest == "" || proof.ContextDigest != s.ContextDigest) {
 		return invalid
 	}
 	b, err = c.Artifacts.Get(s.ImplementationDigest)

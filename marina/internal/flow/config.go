@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/jmlero/the-platform/marina/internal/analysis"
+	"github.com/jmlero/the-platform/marina/internal/conversation"
 	"github.com/jmlero/the-platform/marina/internal/kagent"
 	"github.com/jmlero/the-platform/marina/internal/kubernetes"
 	runtimeapi "github.com/jmlero/the-platform/marina/internal/runtime"
@@ -24,6 +25,8 @@ import (
 type Config struct {
 	Version                    int                         `json:"version,omitempty"`
 	Analysis                   *analysis.Profile           `json:"analysis,omitempty"`
+	Conversation               *conversation.Profile       `json:"conversation,omitempty"`
+	AnalysisEngine             *runtimeapi.EngineSelection `json:"analysis_engine,omitempty"`
 	ProjectID                  string                      `json:"project_id"`
 	PublicURL                  string                      `json:"public_url"`
 	TLSCertFile                string                      `json:"tls_cert_file"`
@@ -67,6 +70,32 @@ func (c Config) Validate() error {
 		}
 		if c.Analysis.MaxTokens > c.MaxTokens || c.Analysis.BudgetMinutes > c.BudgetMinutes {
 			return errors.New("analysis limits cannot exceed installation limits")
+		}
+		if c.Analysis.HarnessVersion == analysis.HarnessBYO && c.AnalysisEngine == nil {
+			return errors.New("analysis BYO profile requires the selected kagent engine")
+		}
+	}
+	if c.Conversation != nil {
+		if err := c.Conversation.Validate(c.Model); err != nil {
+			return err
+		}
+		if c.Conversation.MaxTokens > c.MaxTokens || c.Conversation.BudgetMinutes > c.BudgetMinutes {
+			return errors.New("conversation limits cannot exceed installation limits")
+		}
+		if d := c.Conversation.Delegation; d != nil && (!c.RepositoryEnabled() || d.MaxTokens > c.MaxTokens || d.TimeMinutes > c.BudgetMinutes) {
+			return errors.New("conversation delegation must fit the installed repository profile")
+		}
+	}
+	if c.AnalysisEngine != nil {
+		if c.Analysis == nil || c.Analysis.HarnessVersion != analysis.HarnessBYO || c.Analysis.Revision < 3 {
+			return errors.New("analysis engine requires a revisioned LangChain context profile")
+		}
+		if err := c.AnalysisEngine.Validate(); err != nil {
+			return err
+		}
+		if c.AnalysisEngine.Version != kagent.Version || c.AnalysisEngine.Endpoint != "kint-engine-controller.kint-engine.svc:8083" ||
+			c.AnalysisEngine.Namespace != "kint-engine" || c.AnalysisEngine.Harness != "kint-analysis-byo" {
+			return errors.New("analysis engine requires the pinned local LangChain BYO harness")
 		}
 	}
 	if c.RepositoryEngine != nil {
@@ -140,6 +169,14 @@ func (c Config) RepositoryEnabled() bool {
 // The scoped grant in the task budget binds the model and its
 // credential reference as well as the fixture, harness image and all limits.
 func (c Config) AnalysisDigest() string {
+	if c.AnalysisEngine != nil {
+		return analysis.Digest(struct {
+			Profile *analysis.Profile
+			Model   workerapi.Model
+			Policy  string
+			Engine  *runtimeapi.EngineSelection
+		}{c.Analysis, c.Model, c.PolicyVersion, c.AnalysisEngine})
+	}
 	return analysis.Digest(struct {
 		Profile *analysis.Profile
 		Model   workerapi.Model

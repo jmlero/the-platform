@@ -17,7 +17,7 @@ func (c Config) WorkloadProfiles() []workcontrol.WorkloadProfile {
 	}
 	if c.Analysis != nil {
 		analysisKinds := []string{}
-		if c.Analysis.HarnessVersion == analysis.HarnessWithContext {
+		if c.Analysis.HarnessVersion == analysis.HarnessWithContext || c.Analysis.HarnessVersion == analysis.HarnessBYO {
 			analysisKinds = kinds
 		}
 		tools := c.Analysis.Tools

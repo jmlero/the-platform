@@ -68,6 +68,10 @@ type EngineAttempt struct {
 	Route             string `json:"route"`
 	ContextID         string `json:"context_id"`
 	TaskID            string `json:"task_id"`
+	QuestionID        string `json:"question_id,omitempty"`
+	AnswerMessageID   string `json:"answer_message_id,omitempty"`
+	AnswerDigest      string `json:"answer_digest,omitempty"`
+	AnswerPhase       string `json:"answer_phase,omitempty"`
 	Phase             string `json:"phase"`
 	CancelRequested   bool   `json:"cancel_requested"`
 	DeleteRequested   bool   `json:"delete_requested"`
@@ -91,6 +95,14 @@ func (r EngineAttempt) CanUpdate(n EngineAttempt) bool {
 		if pair[0] != "" && pair[0] != pair[1] {
 			return false
 		}
+	}
+	for _, pair := range [][2]string{{r.QuestionID, n.QuestionID}, {r.AnswerMessageID, n.AnswerMessageID}, {r.AnswerDigest, n.AnswerDigest}} {
+		if pair[0] != "" && pair[0] != pair[1] {
+			return false
+		}
+	}
+	if r.AnswerPhase == "sent" && n.AnswerPhase != "sent" || r.AnswerPhase == "sending" && n.AnswerPhase != "sending" && n.AnswerPhase != "sent" {
+		return false
 	}
 	if r.CancelRequested && !n.CancelRequested || r.DeleteRequested && !n.DeleteRequested || r.Deleted && !n.Deleted || r.Collected && !n.Collected {
 		return false

@@ -1,0 +1,20 @@
+{
+  "id": "dec_fixture",
+  "task_id": "tsk_fixture",
+  "run_id": "run_fixture",
+  "interaction_id": "rtm_fixture/question-1",
+  "answer_mode": "options",
+  "question": "Which database?",
+  "options": ["SQLite", "PostgreSQL"],
+  "recommendation": "",
+  "risk_class": "low",
+  "evidence_summary": "",
+  "estimated_cost_minor": 0,
+  "currency": "USD",
+  "waiting_consequence": "The engine waits for this exact answer.",
+  "rejecting_consequence": "Cancel the task to stop work.",
+  "status": "pending",
+  "answer": "",
+  "expires_at": 1784379600000,
+  "created_at": 1784376000000
+}

@@ -102,3 +102,19 @@ func TestWorkloadCatalogRejectsStaleSelectionAndPublisherTakeover(t *testing.T) 
 		t.Fatalf("expired publication: %v", err)
 	}
 }
+
+func TestWorkloadCatalogAcceptsRevisionedLangChainBYOWithAnalysisOnlyAuthority(t *testing.T) {
+	ctx := context.Background()
+	s, err := Open(ctx, filepath.Join(t.TempDir(), "deck.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	p := domain.WorkloadProfile{ID: "diagnostic-analysis/v1", Digest: strings.Repeat("d", 64),
+		Harness: "langchain-create-agent/kagent-byo-v1", Authority: []string{"analysis.run." + strings.Repeat("d", 64)},
+		MaxTokens: 20000, BudgetMinutes: 5, MinAttempts: 1, Tools: []string{"read_context_source"}}
+	catalog := domain.WorkloadCatalog{Profiles: []domain.WorkloadProfile{p}, ExpiresAt: time.Now().Add(time.Minute).UnixMilli()}
+	if err := s.PublishWorkloads(ctx, "prj_default", "marina", catalog); err != nil {
+		t.Fatal(err)
+	}
+}

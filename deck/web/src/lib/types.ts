@@ -43,6 +43,9 @@ export interface WorkloadProfile {
 }
 
 export interface Task {
+ review?: {run_id:string;accepted_by:string;accepted_at:number;task_version:number;source_available:boolean};
+ depends_on?: string[];
+  archived?: boolean;
   workload?: WorkloadProfile;
   context?: TaskContext;
   id: string;
@@ -62,6 +65,7 @@ export interface Task {
 }
 
 export interface CreateTaskInput {
+ project_id?: string;
   context_message_ids?: string[];
   title: string;
   description: string;
@@ -85,6 +89,7 @@ export interface UpdateTaskInput {
 
 export interface Agent {
   id: string;
+  installation_id?: string;
   name: string;
   kind: string;
   status: 'idle' | 'active' | 'waiting' | 'offline';
@@ -131,6 +136,8 @@ export interface Decision {
   task_id: string;
   run_id?: string;
   plan_revision_id?: string;
+  interaction_id?: string;
+  answer_mode?: 'options' | 'text';
   question: string;
   options: string[];
   recommendation: string;
@@ -255,6 +262,9 @@ export interface Channel {
 }
 
 export interface ChannelMessage {
+ thread_id?: string;
+  invoked_agent_id?: string;
+  invocation_request_id?: string;
   id: string;
   channel_id: string;
   project_id: string;
@@ -324,3 +334,8 @@ export interface ContextManifest {
 export interface RepositoryBinding { version: number; repository: string; clone_url: string; base_branch: string; }
 export interface RepositoryRequestInput { expected_revision: number; expected_binding_version: number; repository: string; base_branch: string; }
 export interface RepositoryRequest extends RepositoryRequestInput { revision: number; status: '' | 'pending' | 'connected' | 'rejected'; reason?: string; binding?: RepositoryBinding; }
+
+export interface ProjectChannel { project:{id:string;name:string;slug:string;description:string;created_at:number}; channels:Channel[]; repository:RepositoryRequest }
+export interface ConversationThread {id:string;project_id:string;channel_id:string;root_message_id:string;task_ids:string[];selected_agent_id?:string;created_at:number}
+export interface ConversationInvocation {thread:ConversationThread;message:ChannelMessage}
+export interface ConversationQuestion {id:string;project_id:string;channel_id:string;thread_id:string;invocation_message_id:string;agent_id:string;question_id:string;message_id:string;text:string;choices:string[];status:'pending'|'answered';answer_message_id?:string;answer?:string;answer_request_id?:string;created_at:number;answered_at?:number}

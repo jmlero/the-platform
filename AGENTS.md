@@ -8,19 +8,20 @@ This file applies to the complete monorepo. More specific instructions in a prod
 
 Before planning or changing cross-product behavior, read:
 
-1. [README.md](README.md)
-2. [ARCHITECTURE.md](ARCHITECTURE.md)
-3. [TODO.md](TODO.md)
+1. [VISION.md](VISION.md): the reference for the current state and the vision
+2. [README.md](README.md)
+3. [ARCHITECTURE.md](ARCHITECTURE.md)
+4. [TODO.md](TODO.md)
 
 Then read the affected component's guidance before changing it:
 
 | Component | Required guidance |
 | --- | --- |
-| Deck | [deck/AGENTS.md](deck/AGENTS.md), [deck/README.md](deck/README.md), and [VISION_DECK.md](VISION_DECK.md) |
-| Marina | [marina/AGENTS.md](marina/AGENTS.md), [marina/README.md](marina/README.md), [VISION.md](VISION.md), and [DARK_FACTORY.md](DARK_FACTORY.md) |
+| Deck | [deck/AGENTS.md](deck/AGENTS.md) and [deck/README.md](deck/README.md) |
+| Marina | [marina/AGENTS.md](marina/AGENTS.md) and [marina/README.md](marina/README.md) |
 | CLI | [cli/README.md](cli/README.md) and the public Deck API used by the change |
 
-Read relevant records under [docs/decisions/](docs/decisions/) before revisiting an architectural or product choice. Explicit user decisions take precedence; update the relevant source document when direction changes. Visions include future targets, so check implemented behavior against source, tests, and the current release boundary.
+Read relevant records under [docs/decisions/](docs/decisions/) before revisiting an architectural or product choice. Explicit user decisions take precedence; update VISION.md when the current state or direction changes. Check claimed behavior against source and tests.
 
 ## Product boundaries
 
@@ -35,14 +36,11 @@ Read relevant records under [docs/decisions/](docs/decisions/) before revisiting
 - Keep OpenAPI, capability discovery, fixtures, persistence, handlers, and consumer expectations synchronized. Additive changes must preserve version-1 semantics; breaking semantics require a new protocol major. See the [contract map](contracts/README.md).
 - Preserve durable intent, idempotency, version checks, lease fencing, bounded budgets, and source-bound evidence. Handle lost responses, restart, cancellation, and partial success without duplicate work or false completion.
 
-## Current supported behavior
+## Current state
 
-- The supported Deck–Marina pair uses HTTP/JSON and separate stores. Headless and in-process packaging remain future work.
-- The configured repository workflow supports one repository and one active task, with one implementation and one separate deterministic verification attempt. It ends at a PR ready for human review or a blocker; failed checks and requested changes block.
-- The two-workload agent-platform MVP adds a pinned LangChain diagnostic worker over a fixed immutable fixture with independent validation and no repository authority. AGENT-01 through AGENT-13 are complete within that scope: pinned API invocation, immutable context, one governed context-read tool, usage/result inspection, shared failure checks and local live acceptance. Follow the [profile contract](marina/docs/workloads/profiles-v1.md), [API guide](marina/docs/workloads/api-v1.md), [installation guide](deploy/kubernetes/agent-platform/README.md) and [MVP evidence and limits](docs/validation/agent-11-13-2026-09-22.md). Active worker I/O can block across outages; transparent harness-step recovery is not supported.
-- Cancellation waits for observed worker termination. Pause, resume, replan, retry, and reduce-authority commands are rejected by this workflow. Automatic revision loops, independent semantic review, merge and deploy authority remain future work.
-- Without workflow configuration, Marina remains in control-only mode. Disabling new task intake does not pause already journaled executions.
-- Channel history and explicit task promotion exist. Versioned project knowledge, selected conversation excerpts, repository association, and immutable workflow context are implemented. Conversational agent dispatch and persistent unread-result state remain pending. Ledger records and reusable foundations alone do not establish a supported workflow capability.
+[VISION.md](VISION.md#current-state) is the only description of what is supported, implemented but not yet accepted, and not supported. Link to it; do not restate it in other documents. Update it in the same change that ships, removes or re-scopes a capability. Ledger records and reusable foundations alone do not establish a supported workflow capability.
+
+For diagnostic workload work, follow the [profile contract](marina/docs/workloads/profiles-v1.md), [API guide](marina/docs/workloads/api-v1.md) and [installation guide](deploy/kubernetes/agent-platform/README.md).
 
 ## Project repository and context
 
@@ -121,3 +119,33 @@ For features and bug fixes:
 Keep tests independent, name them by behavior, mock external boundaries when
 appropriate, and run the relevant checks after each change.
 <!-- harness-workshop:end block/tdd -->
+
+<!-- groma:start -->
+## Groma
+
+This project uses Groma. Before you scan, inspect, or curate architecture, or change files for a Backlog task, run `groma agent-instructions` and read the guide it names for that job. When it reports a first scan, ask the user whether they want you to curate the architecture. Do not edit Groma-owned architecture files directly.
+<!-- groma:end -->
+
+<!-- BACKLOG.MD GUIDELINES START -->
+<!-- backlog.md-instructions-version: 1.53.0 -->
+<CRITICAL_INSTRUCTION>
+
+## Backlog.md Workflow
+
+This project uses Backlog.md for task and project management.
+
+**At the beginning of each conversation in this project, run `backlog instructions overview` before answering or taking action. Re-read it only if you have not read it yet in the current conversation.**
+
+Use the overview to decide whether to search, read, create, or update Backlog tasks.
+
+Before task lifecycle actions, read the matching detailed guide:
+- `backlog instructions task-creation` before creating or splitting tasks
+- `backlog instructions task-execution` before planning, changing status or assignee, adding a plan or implementation notes, or implementing task work
+- `backlog instructions task-finalization` before checking acceptance criteria, writing final summaries, or moving tasks to terminal statuses
+
+Use `backlog <command> --help` before running unfamiliar commands. Help shows options, fields, and examples.
+
+Do not edit Backlog task, draft, document, decision, or milestone markdown files directly. Use the `backlog` CLI so metadata, relationships, and history stay consistent.
+
+</CRITICAL_INSTRUCTION>
+<!-- BACKLOG.MD GUIDELINES END -->

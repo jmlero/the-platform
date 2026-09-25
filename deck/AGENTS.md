@@ -9,7 +9,7 @@ This file applies to `deck/`. Root [AGENTS.md](../AGENTS.md) also applies.
 Before changing Deck, read:
 
 1. [README.md](README.md)
-2. [../VISION_DECK.md](../VISION_DECK.md)
+2. [../VISION.md](../VISION.md): the reference for the current state and the vision
 3. [../ARCHITECTURE.md](../ARCHITECTURE.md)
 4. [api/openapi.yaml](api/openapi.yaml) for agent-facing protocol work
 
@@ -21,7 +21,7 @@ Keep the OpenAPI document, advertised capabilities, canonical fixtures, handlers
 
 Do not import Marina packages. The HTTP/JSON contract is the only integration boundary.
 
-The supported Marina repository workflow reaches a PR ready for human review or a blocker. Deck can record more command types than that workflow executes: only cancellation is currently supported. Headless packaging, pause/resume, automatic revisions, semantic review, and merge/deploy authority remain future work.
+Deck can record more command types than Marina executes. What is supported today is in [../VISION.md](../VISION.md#current-state).
 
 ## Verification
 

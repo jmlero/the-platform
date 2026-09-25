@@ -1,8 +1,10 @@
 # Deck and Marina architecture
 
-- Status: current architecture and supported release boundary
+- Status: how the implemented system works
 - Scope: `cli/`, `deck/`, and `marina/`
-- Last reviewed: 2026-09-22
+- Last reviewed: 2026-09-24
+
+What is supported today and what is planned: [VISION.md](VISION.md).
 
 ## System boundary
 
@@ -22,7 +24,7 @@ Neither service imports the other's internals or reads the other's database.
 Each has its own binary, Go module, SQLite store, identity, image, deployment,
 and migration lifecycle.
 
-## Supported behavior
+## Workflows
 
 ### Repository workflow
 
@@ -34,8 +36,7 @@ authorized task -> immutable context -> plan and optional approval
                 -> pull request -> required CI -> evidence -> completion
 ```
 
-The workflow supports one repository, one active task, one implementation
-attempt, and one verification attempt. Cancellation revokes gateway authority
+Cancellation revokes gateway authority
 and completes only after worker termination is observed. Failed verification,
 missing or failed CI, a changed PR head, a closed PR, or requested changes produce
 a blocker. Completion means a PR ready for human review; Marina does not merge or
@@ -174,27 +175,35 @@ VM boundary; nodes and DNS remain trusted.
 Live acceptance and deterministic coverage are indexed in
 [docs/README.md](docs/README.md).
 
-## Planned extensions
+## Human workflow and execution completion
 
-[Decision 0018](docs/decisions/0018-deck-work-preparation.md) adds Deck-owned
-backlog refinement, versioned task breakdowns, dependencies, per-task context
-selections, budget allocations and readiness gates. Marina executes bounded
-planning assistance and eligible children, resolves selected sources, and owns
-the immutable packages actually delivered to agents. The
-[work-preparation design](docs/work-preparation.md) defines the handoff and
-PREP-01–08 delivery gates. These additions are planned; existing run plans do not
-provide a backlog-decomposition workflow.
+[Decision 0019](docs/decisions/0019-channel-first-project-work.md) makes project
+conversation the default Deck workspace. Backlog drafts need no execution
+permission; Ready authorizes eligible work under existing limits. Deck enforces
+same-project, acyclic prerequisites both during ready discovery and atomic claim.
+A code prerequisite needs human acceptance and explicit operator confirmation
+that its code is available on the base branch; this is not merge-provider proof.
 
-The accepted target in [decision 0017](docs/decisions/0017-kagent-core-engine.md)
-moves agent execution and engine interaction state to kagent while retaining
-Marina's governed workflows and Deck integration. The
-[implementation and removal plan](docs/kagent-integration-plan.md) tracks the
-adapter, proof, cutover and deletion of redundant Marina code. This is planned;
-the deployment and ownership descriptions above remain the implemented baseline.
+The optional conversation profile interprets an explicitly invoked turn without
+source authority. Marina journals one terminal publication; Deck atomically
+stores the reply, optional task, and thread origin. Ready delegation requires a
+separate scoped capability and the installed repository profile and budget.
+Selected run events project canonical task, run, artifact, and evidence links
+into the originating thread. Feedback creates a new linked task without
+changing a completed result. The installed actor/browser path remains under
+verification in [CHAT-06–08](docs/validation/chat-06-08-2026-09-25.md).
 
-The active backlog is [TODO.md](TODO.md). The next product increments are
-task-linked web conversations, persistent unread result state, and bounded repair
-loops. Pause/resume, transparent harness-step recovery, independent semantic
-review, arbitrary tools, multiple concurrent tasks, HA, merge/deploy authority,
-and production remediation remain future choices. Their supporting schemas or
-ledger records do not make them supported capabilities.
+Version-1 task `done` and run `completed` continue to mean successful execution.
+Deck records human acceptance separately in versioned `review` metadata bound to
+one completed run. The UI shows Awaiting review under In progress until acceptance,
+then Done. Old results are not automatically accepted. Requeue clears acceptance;
+prior evidence and acceptance events remain historical. Export/import preserves
+acceptance and dependencies.
+
+## Planned changes
+
+The direction, including kagent as the core engine and Deck work preparation, is
+in [VISION.md](VISION.md#direction). The [kagent integration plan](docs/kagent-integration-plan.md)
+and the [work-preparation design](docs/work-preparation.md) describe the intended
+architecture. Until each change is cut over, the sections above describe the
+implemented baseline.

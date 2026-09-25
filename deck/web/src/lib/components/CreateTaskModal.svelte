@@ -9,6 +9,7 @@
   export let initialTitle = '';
   export let initialDescription = '';
   export let requireCriteria = false;
+  export let backlogOnly = false;
 
   let title = initialTitle;
   let description = initialDescription;
@@ -33,7 +34,7 @@
       error = 'Give the task a clear outcome.';
       return;
     }
-    if (requireCriteria && !acceptanceCriteria.trim()) {
+    if (requireCriteria && status === 'ready' && !acceptanceCriteria.trim()) {
       error = 'A promoted task needs observable acceptance criteria.';
       return;
     }
@@ -71,8 +72,8 @@
     <header>
       <div class="header-icon"><ClipboardPlus size={18} /></div>
       <div>
-        <span class="eyebrow">New work item</span>
-        <h2 id="create-title">Shape the outcome</h2>
+
+        <h2 id="create-title">Create a task</h2>
       </div>
       <button class="icon-button" type="button" on:click={onclose} aria-label="Close">
         <X size={17} />
@@ -103,6 +104,7 @@
         ></textarea>
       </label>
 
+      <details class="preparation"><summary>Priority and execution limits</summary>
       <div class="field-row">
         <label class="field">
           <span>Priority</span>
@@ -162,7 +164,8 @@
         </div>
       </details>
 
-      <fieldset>
+      </details>
+      {#if !backlogOnly}<fieldset>
         <legend>Place task in</legend>
         <div class="destination-grid">
           <label class:chosen={status === 'backlog'}>
@@ -184,7 +187,7 @@
             {#if status === 'ready'}<Check class="check" size={15} />{/if}
           </label>
         </div>
-      </fieldset>
+      </fieldset>{:else}<p class="draft-note">Saved to Backlog. Refine the task before moving it to Ready.</p>{/if}
 
       {#if error}<p class="form-error">{error}</p>{/if}
 
@@ -200,6 +203,7 @@
 </dialog>
 
 <style>
+  .preparation > summary {font-size:13px;color:var(--muted);cursor:pointer;padding:8px 0;} .preparation[open] {display:grid;gap:16px;} .preparation > :global(*) {margin-bottom:12px;} .draft-note {font-size:12px;color:var(--subtle);line-height:1.5;}
   .permission { display:flex; gap:12px; align-items:flex-start; padding:14px; border:1px solid var(--line); border-radius:10px; font-size: var(--text-sm); }
   .permission input { width:18px; height:18px; flex-shrink:0; margin-top:3px; }
   .permission small { display:block; margin-top:6px; color:var(--subtle); line-height:1.5; }

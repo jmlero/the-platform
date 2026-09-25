@@ -1,10 +1,9 @@
 # The Platform backlog
 
-Last reviewed: 2026-09-22.
+Last reviewed: 2026-09-25.
 
-The supported release runs one bounded repository task or one pinned diagnostic
-analysis workload on local Kubernetes and returns verified evidence or a blocker.
-Repository work stops at a pull request for human review. The immediate engine
+The current state and the vision are in [VISION.md](VISION.md). This file holds
+the order of work and its acceptance status. The immediate engine
 priority is integrating kagent and removing redundant Marina execution code.
 Conversation and result-return flows should reuse that engine, followed by bounded
 repair loops. The current supported runtime remains in place until migration gates pass.
@@ -14,23 +13,26 @@ means a product choice is required, `Verify` means implementation exists but the
 named acceptance proof is missing, and `Later` means work starts only after its
 stated trigger. A row becomes `Done` only with linked evidence.
 
-## Current priorities
+CLP-00–04 are retired. The Context Lens pilot is the operator's own use of the
+platform, not agent backlog work; see [VISION.md](VISION.md#environment-and-use).
 
-### Selected value pilot: Context Lens
+## Channel-first experience
 
-The operator selected Context Lens and confirmed ubahndoku is completed.
-The [assessment](docs/pilot-project-assessment-2026-09-22.md) and
-[pilot preparation](deploy/pilots/context-lens/README.md) define the bounded
-report/export/comparison increment. It can use the supported repository workflow;
-this does not claim the planned PREP or kagent capabilities are already available.
+[Decision 0019](docs/decisions/0019-channel-first-project-work.md) is the accepted
+human workflow: one GitHub repository/project channel, automatic Backlog drafts,
+Ready authorization, human-accepted Done, and automatic reference notes separated
+from approved instructions. The channel-first shell, manual draft promotion,
+thread UI, human acceptance and basic dependency guards are implemented. This does
+not complete CHAT dispatch or PREP decomposition. Current verification is in
+[the channel-first evidence](docs/validation/deck-channel-first-2026-09-23.md).
 
 | ID | State | Owner | Outcome |
 | --- | --- | --- | --- |
-| CLP-00 | Open | Operator/Ops | Bootstrap Context Lens CI, install/pin its offline worker and trusted checks, connect exact repository/context, and authorize only the selected task. [Offline preparation passed; CI and live setup remain](docs/validation/context-lens-pilot-preparation-2026-09-22.md). |
-| CLP-01 | Open | Pilot | After 00, implement the versioned privacy-safe report serializer/validator through Marina and return an independently verified PR. Deck draft: `tsk_c723190cc08ce495d5d1`. |
-| CLP-02 | Open | Pilot | After reviewed integration of 01, export the explicitly selected snapshot without private transcript/metadata leakage, preserving pause and error behavior. |
-| CLP-03 | Open | Pilot | After reviewed integration of 02, compare two valid reports locally with accurate metrics and explicit accounting limitations. |
-| CLP-04 | Open | Joint | After 01–03, record actual use, accepted results, blockers/rework and context continuity; distinguish product value from successful task execution. |
+| LEAN-01 | Done | Deck | Channel-first project navigation, thread UI, compact task list, manual draft promotion and project-scoped context. [Checks and local browser evidence](docs/validation/deck-channel-first-2026-09-23.md). |
+| LEAN-02 | Done | Deck/Joint | Human acceptance and same-project dependency gates, source-availability confirmation and retained history. [Product checks, real-process conformance and restart proof](docs/validation/deck-channel-first-2026-09-23.md). |
+| LEAN-03 | Open | Joint | After governed conversational dispatch, let agents create idempotent Backlog drafts and maintain provenance-bound reference notes; require human approval for guidance/decision changes. |
+
+## Current priorities
 
 ### Kagent integration and Marina simplification
 
@@ -51,10 +53,10 @@ the two-workload cutover remains planned.
 | KINT-04 | Done | Marina | Governed admission and attempt-scoped model/tool/source access, with real local Substrate HTTPS injection, credential rotation, cached-credential cancellation/expiry, denied bypasses and durable accounting. [Checks, live evidence and safe teardown](docs/validation/kint-04-2026-09-22.md); workload migration remains pending. |
 | KINT-05 | Done | Marina | Shared bounded result validation, digest-bound kagent artifact translation, and agent-free clean verification. [Deterministic checks and real-process conformance](docs/validation/kint-05-2026-09-23.md); installed workload migration remains pending. |
 | KINT-06 | Done | Marina | One Deck-authorized native Codex task produced [verified PR #13](docs/validation/kint-06-2026-09-23.md) on local Kind: separate clean verification and required CI passed at the exact head; the PR remains open and unmerged. The pilot was torn down after proof. |
-| KINT-07 | Open | Marina | After 02–05, run the pinned LangChain diagnostic workload through kagent BYO with unchanged evidence and authority rules. |
-| KINT-08 | Open | Joint | After 03–04, project engine state and bridge exact pending questions/answers without a second conversation runtime or duplicate results. |
-| KINT-09 | Open | Joint | After 06–08, pass both workloads and the mandatory live failure matrix through real Deck/Marina/kagent. |
-| KINT-10 | Open | Ops/Marina | After 02 and 06–07, prove installation upgrade, credential handling, retained history and data-preserving rollback; measure full footprint. |
+| KINT-07 | Done | Marina | Pinned LangChain BYO runs through kagent with frozen context and independent validation. Local live proof passed for selected context reads and denied access with no false report. [Evidence and limits](docs/validation/kint-07-08-2026-09-23.md). |
+| KINT-08 | Done | Joint | Live engine question projected to Deck, survived restart, continued the same task with one answer, rejected a duplicate and published an independently validated result. Contract and recovery checks pass. [Evidence and limits](docs/validation/kint-07-08-2026-09-23.md). |
+| KINT-09 | Open | Joint | After 06–08, pass both workloads and the mandatory live failure matrix through real Deck/Marina/kagent. [Partial local fault evidence](docs/validation/kint-09-10-2026-09-24.md) and [waiting-for-input cancellation follow-up](docs/validation/kint-09-2026-09-25.md); remaining gates still apply. |
+| KINT-10 | Open | Ops/Marina | After 02 and 06–07, prove installation upgrade, credential handling, retained history and data-preserving rollback; measure full footprint. [Partial local upgrade and rollback evidence](docs/validation/kint-09-10-2026-09-24.md). |
 | KINT-11 | Open | Marina/Ops | After 09–10, drain legacy executions and cut over both newly authorized profiles to kagent. |
 | KINT-12 | Open | Marina | After 11, delete replaced Codex/Python launch paths, agent Job support and unused worker entry/protocol branches. |
 | KINT-13 | Open | Marina | After 12, remove duplicated runtime/journal machinery while retaining workflow recovery, accounting and historical inspection. |
@@ -96,14 +98,14 @@ continue while the engine migration is underway.
 
 | ID | State | Owner | Outcome |
 | --- | --- | --- | --- |
-| CHAT-01 | Decide | Joint | Specify when a message is discussion, clarification, delegation, or result feedback, with examples for missing intent and authority. |
-| CHAT-02 | Open | Deck | Persist task-linked conversation threads with stable identity across devices. |
-| CHAT-03 | Open | Deck | Add a thread view and explicit configured-agent invocation. |
-| CHAT-04 | Open | Marina | Run a bounded conversational agent with no source-write authority. |
-| CHAT-05 | Open | Joint | Persist clarification questions and resume the correct conversation from their answers. |
-| CHAT-06 | Open | Joint | Convert one explicit delegation into one idempotent, authorized task. |
-| CHAT-07 | Open | Marina | Return milestones, blockers, results, and evidence to the originating thread once. |
-| CHAT-08 | Open | Joint | Turn result feedback into a linked follow-up task without rewriting completed history. |
+| CHAT-01 | Done | Joint | Agreed message intent, persistent thread agent selection, natural-language delegation without keywords, and a task proposal/start action for unclear intent. Clear requests proceed within existing limits. [Accepted rules and examples](docs/decisions/0009-asynchronous-agent-work.md#chat-01-conversation-intent-and-authorization); implementation remains CHAT-02–08. |
+| CHAT-02 | Done | Deck | Persisted channel threads, canonical replies and task origins with replay-safe creation/linking, migration and export/import. [Store/HTTP checks and two-session real-process restart evidence](docs/validation/chat-02-2026-09-23.md); browser/agent invocation remains CHAT-03 onward. |
+| CHAT-03 | Done | Deck | Thread view and explicit configured-agent invocation with durable selection, idempotent request recording, export/import and isolated local browser proof. [Evidence and limits](docs/validation/chat-03-2026-09-23.md); execution remains CHAT-04. |
+| CHAT-04 | Verify | Marina | Run a bounded conversational agent with no source-write authority. Deterministic dispatch, gateway, artifact and recovery checks pass; local engine/model acceptance remains. [Evidence and limits](docs/validation/chat-04-2026-09-23.md). |
+| CHAT-05 | Verify | Joint | Deck persists engine questions and one answer in the invoked thread; Marina routes that exact answer to the waiting kagent attempt. Product checks and real Deck restart/export conformance pass; installed engine/browser acceptance remains. [Evidence and limits](docs/validation/chat-05-2026-09-23.md). |
+| CHAT-06 | Verify | Joint | Explicit delegation creates one authorized, replay-safe Ready task or Backlog draft. Product and real Deck contract checks pass; installed actor/browser proof remains. [Evidence and limits](docs/validation/chat-06-08-2026-09-25.md). |
+| CHAT-07 | Verify | Marina | Terminal replies and selected run milestones, blockers, results, and evidence reach the originating thread once. Product and real Deck checks pass; installed actor/browser proof remains. [Evidence and limits](docs/validation/chat-06-08-2026-09-25.md). |
+| CHAT-08 | Verify | Joint | Explicit feedback creates a linked follow-up task while preserving completed history. Store and contract checks pass; installed actor/browser proof remains. [Evidence and limits](docs/validation/chat-06-08-2026-09-25.md). |
 | CHAT-09 | Verify | Joint | Pass dispatch, clarification, duplicate-request, restart, and result-publication conformance through real Deck. |
 | CHAT-10 | Verify | Joint | Complete the conversation-to-result workflow across two browser sessions on the selected installation. |
 
@@ -116,23 +118,24 @@ continue while the engine migration is underway.
 | INBOX-03 | Open | Deck | Link board, thread, decision, and result views to the same task and run. |
 | INBOX-04 | Open | Deck | Summarize meaningful changes since the last visit without promoting routine heartbeats. |
 | INBOX-05 | Verify | Deck | Cover login, task creation, approval, cancellation, reconnect, and evidence access in the desktop browser. Add conversation coverage after CHAT-03. |
+| INBOX-06 | Done | Deck/Ops | Open local Deck without token sign-in and remove import/export, owner, and sign-out controls from the header. Preserve this operator preference on local upgrades. [Chrome and local acceptance](docs/validation/deck-local-access-2026-09-23.md). |
 
 ### Bounded repair loops
 
 Preserve human merge and deployment authority. A new revision must receive fresh
 verification and current-head evidence.
-Implement new engine-dependent repair behavior after KINT-15 using kagent;
-AUTO-01 and AUTO-07 policy decisions can be specified earlier.
+Implement new engine-dependent repair and review behavior after KINT-15 using kagent.
 
 | ID | State | Owner | Outcome |
 | --- | --- | --- | --- |
-| AUTO-01 | Decide | Marina | Define retryable failures, limits, budget reuse, and escalation for one repository workflow. |
+| AUTO-01 | Done | Marina | Define retryable failures, limits, budget reuse, and escalation for one repository workflow. [Decision 0020](docs/decisions/0020-bounded-repair-policy.md): at most three failures, each repair grounded in new evidence and a different approach. |
 | AUTO-02 | Open | Marina | Persist revision attempts and remaining budgets across restart. |
 | AUTO-03 | Open | Marina | Feed one failed verification result into a separately verified repair attempt. |
 | AUTO-04 | Open | Marina | Feed current-revision CI or review feedback into a bounded repair attempt as untrusted data. |
 | AUTO-05 | Open | Joint | Keep old evidence as history while requiring fresh evidence for the new head. |
-| AUTO-06 | Verify | Joint | Recover one repair loop across restart without duplicate commits, PRs, or excess budget. |
-| AUTO-07 | Decide | Joint | Define the first independent semantic-review gate and escalation rule. |
+| AUTO-06 | Open | Joint | Recover one repair loop across restart without duplicate commits, PRs, or excess budget. |
+| AUTO-07 | Done | Joint | Define the first independent semantic-review gate and escalation rule. [Decision 0021](docs/decisions/0021-semantic-review-gate.md): an independent review against the acceptance criteria right before every commit. |
+| AUTO-08 | Open | Marina/Joint | After AUTO-02–05, review every candidate change independently right before commit, commit only the exact reviewed patch, store the verdict as evidence, and feed failures into the repair loop per decision 0021. |
 
 ### Operations and measurement
 

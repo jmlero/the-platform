@@ -15,14 +15,14 @@ const taskColumns = `
 	id, project_id, title, description, acceptance_criteria, status, priority,
 	budget_minutes, deadline_at, max_attempts, max_tokens, max_cost_minor,
 	currency, max_concurrency, authority_json,
-	assigned_agent_id, version, created_at, updated_at, context_json, workload_json
+	assigned_agent_id, version, created_at, updated_at, context_json, workload_json, archived, review_json, depends_on_json
 `
 
 func scanTask(scanner interface{ Scan(...any) error }) (domain.Task, error) {
 	var task domain.Task
 	var assignedAgentID sql.NullString
 	var deadlineAt sql.NullInt64
-	var authority, contextJSON, workloadJSON string
+	var authority, contextJSON, workloadJSON, reviewJSON, dependenciesJSON string
 	if err := scanner.Scan(
 		&task.ID,
 		&task.ProjectID,
@@ -45,6 +45,7 @@ func scanTask(scanner interface{ Scan(...any) error }) (domain.Task, error) {
 		&task.UpdatedAt,
 		&contextJSON,
 		&workloadJSON,
+		&task.Archived, &reviewJSON, &dependenciesJSON,
 	); err != nil {
 		return domain.Task{}, err
 	}
@@ -52,6 +53,12 @@ func scanTask(scanner interface{ Scan(...any) error }) (domain.Task, error) {
 		return domain.Task{}, err
 	}
 	if err := json.Unmarshal([]byte(workloadJSON), &task.Workload); err != nil {
+		return domain.Task{}, err
+	}
+	if err := json.Unmarshal([]byte(reviewJSON), &task.Review); err != nil {
+		return domain.Task{}, err
+	}
+	if err := json.Unmarshal([]byte(dependenciesJSON), &task.DependsOn); err != nil {
 		return domain.Task{}, err
 	}
 	task.Budget.TimeMinutes = task.BudgetMinutes
@@ -379,6 +386,12 @@ func (s *Store) UpdateTask(ctx context.Context, id string, input domain.UpdateTa
 	if err != nil {
 		return domain.Task{}, err
 	}
+	if task.Archived {
+		return domain.Task{}, fmt.Errorf("restore this archived task first: %w", domain.ErrConflict)
+	}
+	if task.Status == domain.TaskDone {
+		return domain.Task{}, fmt.Errorf("preserve the completed result; return to Backlog or create a follow-up task to change its scope: %w", domain.ErrConflict)
+	}
 	if input.Version != nil && *input.Version != task.Version {
 		return domain.Task{}, fmt.Errorf("task has changed since it was opened: %w", domain.ErrConflict)
 	}
@@ -501,6 +514,9 @@ func (s *Store) MoveTask(ctx context.Context, id, target string) (domain.Task, e
 	if err != nil {
 		return domain.Task{}, err
 	}
+	if task.Archived {
+		return domain.Task{}, fmt.Errorf("restore this archived task first: %w", domain.ErrConflict)
+	}
 	if task.Status == target {
 		return task, nil
 	}
@@ -527,7 +543,7 @@ func (s *Store) MoveTask(ctx context.Context, id, target string) (domain.Task, e
 	}
 	result, err := tx.ExecContext(ctx, `
 		UPDATE tasks
-		SET status = ?, assigned_agent_id = NULL, version = version + 1, updated_at = ?, context_json = ?
+		SET status = ?, review_json = 'null', assigned_agent_id = NULL, version = version + 1, updated_at = ?, context_json = ?
 		WHERE id = ? AND status = ? AND version = ?
 	`, target, now, marshalJSON(task.Context), id, task.Status, task.Version)
 	if err != nil {
@@ -557,6 +573,7 @@ func (s *Store) MoveTask(ctx context.Context, id, target string) (domain.Task, e
 		return domain.Task{}, fmt.Errorf("commit task move: %w", err)
 	}
 	task.Status = target
+	task.Review = nil
 	task.AssignedAgentID = nil
 	task.Version++
 	task.UpdatedAt = now
@@ -585,7 +602,7 @@ func (s *Store) NextReadyTask(ctx context.Context) (domain.Task, error) {
 	task, err := scanTask(s.db.QueryRowContext(ctx, `
 		SELECT `+taskColumns+`
 		FROM tasks
-		WHERE status = 'ready'
+		WHERE status = 'ready' AND archived = 0 AND `+dependenciesEligibleSQL+`
 		ORDER BY
 			CASE priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
 			created_at ASC

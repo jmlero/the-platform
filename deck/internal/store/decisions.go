@@ -5,15 +5,114 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jmlero/the-platform/deck/internal/domain"
 )
+
+// RequestEngineQuestion records one operator-visible question for an exact
+// pending engine operation. It does not change the run's authority or status.
+func (s *Store) RequestEngineQuestion(ctx context.Context, mutation Mutation, runID string, input domain.EngineQuestion) (domain.Decision, error) {
+	input.OperationID = strings.TrimSpace(input.OperationID)
+	input.Question = strings.TrimSpace(input.Question)
+	if input.OperationID == "" || len(input.OperationID) > 256 || input.Question == "" || len(input.Question) > 2000 ||
+		input.ExpiresAt <= time.Now().UnixMilli() || len(input.Options) > 8 {
+		return domain.Decision{}, fmt.Errorf("bounded engine question and future expiry are required: %w", domain.ErrInvalidInput)
+	}
+	seen := map[string]bool{}
+	for _, option := range input.Options {
+		if option != strings.TrimSpace(option) || option == "" || len(option) > 200 || seen[option] {
+			return domain.Decision{}, fmt.Errorf("engine question options must be distinct and bounded: %w", domain.ErrInvalidInput)
+		}
+		seen[option] = true
+	}
+	projectID, err := s.ProjectIDForRun(ctx, runID)
+	if err != nil {
+		return domain.Decision{}, err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return domain.Decision{}, err
+	}
+	defer tx.Rollback()
+	attempt, replay, replayed, err := beginIdempotentMutation(ctx, tx, mutation, projectID, operationRequestEngineQuestion, runID,
+		struct {
+			RunID string
+			Input domain.EngineQuestion
+			Guard *RunGuard
+		}{runID, input, mutation.Guard})
+	if err != nil {
+		return domain.Decision{}, err
+	}
+	if replayed {
+		var original domain.Decision
+		if err := decodeIdempotencyResult(replay, &original); err != nil {
+			return domain.Decision{}, err
+		}
+		return original, nil
+	}
+	run, err := getRunTx(ctx, tx, runID)
+	if err != nil {
+		return domain.Decision{}, err
+	}
+	if err := validateRunGuard(run, mutation.Guard); err != nil {
+		return domain.Decision{}, err
+	}
+	if run.Status != domain.RunRunning || run.LeaseExpiresAt == nil || *run.LeaseExpiresAt <= nowMillis() {
+		return domain.Decision{}, fmt.Errorf("engine question requires a live running lease: %w", domain.ErrConflict)
+	}
+	var existing string
+	if err := tx.QueryRowContext(ctx, "SELECT id FROM decisions WHERE run_id = ? AND interaction_id = ?", runID, input.OperationID).Scan(&existing); err == nil {
+		return domain.Decision{}, fmt.Errorf("engine operation was already projected: %w", domain.ErrConflict)
+	} else if err != sql.ErrNoRows {
+		return domain.Decision{}, err
+	}
+	mode := "text"
+	if len(input.Options) > 0 {
+		mode = "options"
+	}
+	now := nowMillis()
+	decision := domain.Decision{ID: newID("dec"), TaskID: run.TaskID, RunID: &run.ID, InteractionID: input.OperationID,
+		AnswerMode: mode, Question: input.Question, Options: input.Options, RiskClass: "low", Currency: "USD",
+		WaitingConsequence: "The engine waits for this exact answer.", RejectingConsequence: "Cancel the task to stop work.",
+		Status: "pending", ExpiresAt: &input.ExpiresAt, CreatedAt: now}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO decisions (
+		id, task_id, run_id, question, options_json, recommendation, risk_class,
+		evidence_summary, estimated_cost_minor, currency, waiting_consequence,
+		rejecting_consequence, status, answer, expires_at, created_at, answered_by,
+		interaction_id, answer_mode
+	) VALUES (?, ?, ?, ?, ?, '', 'low', '', 0, 'USD', ?, ?, 'pending', '', ?, ?, '', ?, ?)`,
+		decision.ID, decision.TaskID, run.ID, decision.Question, marshalJSON(decision.Options),
+		decision.WaitingConsequence, decision.RejectingConsequence, input.ExpiresAt, now, input.OperationID, mode); err != nil {
+		return domain.Decision{}, err
+	}
+	event, err := insertEventTx(ctx, tx, &run.TaskID, &run.ID, &run.AgentID,
+		"decision.requested", "Engine needs an answer to continue", map[string]any{"decision_id": decision.ID, "interaction_id": input.OperationID})
+	if err != nil {
+		return domain.Decision{}, err
+	}
+	if err := finishIdempotentMutation(ctx, tx, attempt, decision); err != nil {
+		return domain.Decision{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return domain.Decision{}, err
+	}
+	s.publish(event)
+	return decision, nil
+}
+
+func closeEngineQuestionsTx(ctx context.Context, tx *sql.Tx, runID, status string) error {
+	_, err := tx.ExecContext(ctx, `UPDATE decisions SET status = ?
+		WHERE run_id = ? AND interaction_id <> '' AND status = 'pending'`, status, runID)
+	return err
+}
 
 const decisionColumns = `
 	id, task_id, run_id, plan_revision_id, question, options_json, recommendation,
 	risk_class, evidence_summary, estimated_cost_minor, currency,
 	waiting_consequence, rejecting_consequence,
-	status, answer, expires_at, created_at, answered_at, answered_by
+	status, answer, expires_at, created_at, answered_at, answered_by,
+	interaction_id, answer_mode
 `
 
 func (s *Store) ListDecisions(ctx context.Context, status string) ([]domain.Decision, error) {
@@ -107,6 +206,15 @@ func (s *Store) AnswerDecision(ctx context.Context, id, answer string) (domain.D
 			return domain.Decision{}, fmt.Errorf("decision belongs to a superseded plan revision: %w", domain.ErrConflict)
 		}
 	}
+	if decision.InteractionID != "" && decision.RunID != nil {
+		run, runErr := getRunTx(ctx, tx, *decision.RunID)
+		if runErr != nil {
+			return domain.Decision{}, runErr
+		}
+		if run.Status != domain.RunRunning || run.LeaseExpiresAt == nil || *run.LeaseExpiresAt <= now {
+			return domain.Decision{}, fmt.Errorf("engine question belongs to an inactive run: %w", domain.ErrConflict)
+		}
+	}
 	validAnswer := false
 	for _, option := range decision.Options {
 		if strings.EqualFold(answer, option) {
@@ -114,6 +222,9 @@ func (s *Store) AnswerDecision(ctx context.Context, id, answer string) (domain.D
 			validAnswer = true
 			break
 		}
+	}
+	if decision.AnswerMode == "text" && len(answer) <= 2000 {
+		validAnswer = true
 	}
 	if !validAnswer {
 		return domain.Decision{}, fmt.Errorf("answer is not one of the available options: %w", domain.ErrInvalidInput)
@@ -131,7 +242,7 @@ func (s *Store) AnswerDecision(ctx context.Context, id, answer string) (domain.D
 	}
 	eventType := "decision.answered"
 	eventMessage := "Human answered: " + answer
-	if strings.EqualFold(answer, "Request changes") && decision.RunID != nil {
+	if strings.EqualFold(answer, "Request changes") && decision.RunID != nil && decision.PlanRevisionID != "" {
 		run, runErr := getRunTx(ctx, tx, *decision.RunID)
 		if runErr != nil {
 			return domain.Decision{}, runErr

@@ -371,6 +371,25 @@ func (c *Client) GetDecision(ctx context.Context, decisionID string) (workcontro
 	return response.toDomain(), nil
 }
 
+func (c *Client) RequestEngineQuestion(ctx context.Context, runID string, question workcontrol.EngineQuestion) (workcontrol.Decision, error) {
+	if err := validatePathSegment("run ID", runID); err != nil {
+		return workcontrol.Decision{}, err
+	}
+	request := struct {
+		runGuardRequest
+		OperationID string   `json:"operation_id"`
+		Question    string   `json:"question"`
+		Options     []string `json:"options,omitempty"`
+		ExpiresAt   int64    `json:"expires_at"`
+	}{runGuardRequest{AgentID: question.AgentID, ExpectedVersion: question.ExpectedVersion, FenceToken: question.FenceToken},
+		question.OperationID, question.Question, question.Options, question.ExpiresAt.UnixMilli()}
+	var response decisionDTO
+	if err := c.doIdempotent(ctx, http.MethodPost, "/api/v1/runs/"+runID+"/questions", question.IdempotencyKey, request, &response); err != nil {
+		return workcontrol.Decision{}, err
+	}
+	return response.toDomain(), nil
+}
+
 func (c *Client) ReportRunProgress(
 	ctx context.Context,
 	runID string,
@@ -862,6 +881,8 @@ type decisionDTO struct {
 	TaskID               string   `json:"task_id"`
 	RunID                *string  `json:"run_id"`
 	PlanRevisionID       string   `json:"plan_revision_id"`
+	InteractionID        string   `json:"interaction_id"`
+	AnswerMode           string   `json:"answer_mode"`
 	Question             string   `json:"question"`
 	Options              []string `json:"options"`
 	Recommendation       string   `json:"recommendation"`
@@ -886,6 +907,7 @@ func (decision decisionDTO) toDomain() workcontrol.Decision {
 	}
 	return workcontrol.Decision{
 		ID: decision.ID, TaskID: decision.TaskID, RunID: runID, PlanRevisionID: decision.PlanRevisionID,
+		InteractionID: decision.InteractionID, AnswerMode: decision.AnswerMode,
 		Question: decision.Question, Options: append([]string(nil), decision.Options...), Recommendation: decision.Recommendation,
 		RiskClass: decision.RiskClass, EvidenceSummary: decision.EvidenceSummary, EstimatedCostMinor: decision.EstimatedCostMinor,
 		Currency: decision.Currency, WaitingConsequence: decision.WaitingConsequence, RejectingConsequence: decision.RejectingConsequence,

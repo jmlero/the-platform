@@ -20,6 +20,8 @@ type Subject interface {
 	workcontrol.Planning
 	workcontrol.RunControl
 	workcontrol.EventPublisher
+	workcontrol.QuestionProjection
+	workcontrol.DecisionInspection
 }
 
 type Result struct {
@@ -38,6 +40,7 @@ var lifecycleCapabilities = []string{
 	workcontrol.CapabilityLeaseRenew,
 	workcontrol.CapabilityPlanSubmit,
 	workcontrol.CapabilityProgress,
+	workcontrol.CapabilityDecisionRequest,
 	workcontrol.CapabilityRunBlock,
 }
 
@@ -178,6 +181,30 @@ func Verify(
 	observed, ok = findRun(detail.Runs, run.ID)
 	if !ok {
 		return Result{}, errors.New("progressed run disappeared")
+	}
+	question := workcontrol.EngineQuestion{IdempotencyKey: "conformance-question:" + seededWorkID,
+		AgentID: agent.ID, ExpectedVersion: observed.Version, FenceToken: observed.FenceToken,
+		OperationID: "conformance/ask-1", Question: "Which fixture database?",
+		Options: []string{"SQLite", "PostgreSQL"}, ExpiresAt: time.Now().Add(time.Minute)}
+	requested, err := subject.RequestEngineQuestion(ctx, run.ID, question)
+	if err != nil {
+		return Result{}, fmt.Errorf("request exact engine question: %w", err)
+	}
+	replayed, err := subject.RequestEngineQuestion(ctx, run.ID, question)
+	if err != nil || replayed.ID != requested.ID {
+		return Result{}, fmt.Errorf("replay exact engine question: %w", err)
+	}
+	detail, err = subject.GetWork(ctx, work.ID)
+	if err != nil {
+		return Result{}, fmt.Errorf("inspect projected question: %w", err)
+	}
+	matched := false
+	for _, decision := range detail.Decisions {
+		matched = matched || decision.ID == requested.ID && decision.InteractionID == question.OperationID && decision.Status == workcontrol.DecisionPending
+	}
+	inspected, err := subject.GetDecision(ctx, requested.ID)
+	if err != nil || !matched || inspected.ID != requested.ID || inspected.InteractionID != question.OperationID {
+		return Result{}, fmt.Errorf("projected question identity differs: %v", err)
 	}
 	if err := subject.BlockRun(ctx, run.ID, workcontrol.RunBlock{
 		IdempotencyKey: "conformance-block:" + seededWorkID,

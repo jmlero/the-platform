@@ -9,9 +9,8 @@ This file applies to the `marina/` product directory. Root [AGENTS.md](../AGENTS
 Before planning or changing Marina, read these files completely:
 
 1. [README.md](README.md) — concise project orientation.
-2. [../VISION.md](../VISION.md) — product intent, boundaries, principles, and open decisions.
-3. [../DARK_FACTORY.md](../DARK_FACTORY.md) — the operational definition of a dark software factory.
-4. [../ARCHITECTURE.md](../ARCHITECTURE.md) — joint Deck–Marina ownership, protocols, lifecycle, and failure semantics.
+2. [../VISION.md](../VISION.md) — the reference for the current state, the vision and the dark-factory goal.
+3. [../ARCHITECTURE.md](../ARCHITECTURE.md) — joint Deck–Marina ownership, protocols, lifecycle, and failure semantics.
 
 Treat these documents as the current product source of truth. A new explicit user decision takes precedence; update the relevant document when that decision changes the product direction.
 

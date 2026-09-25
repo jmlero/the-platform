@@ -5,7 +5,10 @@ by Marina. It stores human intent, budgets, runs, plans, decisions, commands,
 events, evidence metadata, project context, and conversation history in SQLite.
 It does not execute workers or own Marina's journal.
 
-The default overview separates work needing attention, active work, and results.
+The default workspace is a project conversation, with Tasks and Context tabs.
+Each new project has one channel and one GitHub repository association request.
+The compact task list shows Backlog, Ready, In progress and Done. Successful
+execution appears as Awaiting review until the operator accepts its result.
 Operators can create and authorize tasks, approve a plan, cancel a run, inspect
 its immutable inputs and usage, open its pull request, and download
 digest-checked evidence.
@@ -13,8 +16,8 @@ digest-checked evidence.
 Use the [paired workflow guide](../deploy/kubernetes/first-release/README.md) for
 repository work and the
 [two-workload guide](../deploy/kubernetes/agent-platform/README.md) for the pinned
-diagnostic profile. [VISION_DECK.md](../VISION_DECK.md) describes product
-direction; [ARCHITECTURE.md](../ARCHITECTURE.md) defines the Deck–Marina boundary.
+diagnostic profile. [VISION.md](../VISION.md) describes the current state and
+product direction; [ARCHITECTURE.md](../ARCHITECTURE.md) defines the Deck–Marina boundary.
 
 ## Current behavior
 
@@ -96,6 +99,9 @@ login/readiness check, and supports overlapping fingerprints during rotation.
 Keep the raw value in a secret file or manager. Use unauthenticated mode only for
 trusted loopback development. See
 [decision 0005](../docs/decisions/0005-operator-authentication.md).
+The local Podman/Kind profile uses this mode at the operator's request and opens
+directly without sign-in. Its browser header has no import/export or session
+controls.
 
 Service authentication uses the same fingerprint pattern plus explicit project
 and capability grants. Deck reloads the policy on every request, rejects
@@ -133,10 +139,99 @@ Repository tasks require acceptance criteria, at least two attempts, and explici
 entering Ready. Drafts can remain in Backlog. This admission check does not
 provide credentials or guarantee cluster/model readiness.
 
-Channels are context, not execution authority. Only explicit promotion with
-acceptance criteria and a structured budget creates a task. Workload invocation
+Channel messages can become Backlog drafts before criteria are complete.
+Readiness remains the authorization point, with acceptance criteria, budgets and
+permissions checked before eligible repository execution. Dependencies must be
+accepted; code prerequisites also require explicit confirmation of base-branch
+availability. The composer can record explicit agent requests for the optional
+conversation profile. Automatic summary maintenance remains planned. Workload invocation
 similarly selects an installed immutable profile and creates one task through an
 idempotent operator request.
+
+## Conversation threads and invocation
+
+Deck stores durable threads within existing channels. A thread references one
+canonical root message and its replies; the channel still contains the same
+messages. One thread can originate multiple tasks, and each linked task retains
+one originating thread. Linking does not authorize work or change the task's
+selected context. Promoting a message creates or reuses its thread and links the
+new task in the same transaction.
+
+Operator-session endpoints provide the persistence boundary for the planned UI:
+
+- `POST /api/v1/operator/channels/{id}/threads` with `root_message_id` creates or
+  recovers the message's thread. A reply resolves to its existing thread.
+- `GET /api/v1/operator/channels/{id}/threads` lists threads.
+- `GET /api/v1/operator/threads/{id}` returns its canonical task links.
+- `GET /api/v1/operator/threads/{id}/messages` pages the root and replies.
+- `POST /api/v1/operator/threads/{id}/tasks` with `task_id` links existing work;
+  repeating the same pair succeeds, and assigning a different origin conflicts.
+- `GET /api/v1/operator/tasks/{id}/thread` recovers a task's origin.
+
+Append a reply through the existing channel message endpoint with `thread_id`.
+It must belong to that channel. Threads, message identities, pagination cursors,
+and task origins persist across operator sessions, restart, archive, and project
+export/import. Upgrade and legacy import recover existing explicit promotion
+links; unrelated channel messages remain unthreaded. Linked drafts must be
+archived rather than deleted. Thread linkage does not automatically select
+additional messages for an execution snapshot.
+
+CHAT-03 adds a focused browser thread view and `POST
+/api/v1/operator/channels/{id}/invocations`. A service registers a logical agent
+with an installation ID and `conversation.invoke.{project_id}` capability before Deck offers
+it in the composer. The first invocation fixes that agent for the thread;
+subsequent Send actions address it without another mention. A leading `@name`
+can select a configured agent. The API records the human message, thread, agent
+selection, and request ID atomically. Retrying the same request ID recovers the
+same message; changing the request conflicts. An existing human message can also
+be explicitly invoked. Thread URLs restore the view after reload, and selected
+agents and invocation records survive project export/import.
+
+Marina reads explicit requests through `GET /api/v1/conversation/invocations`
+with `project_id` and an exclusive `after_id` event cursor. The service identity
+needs `conversation.invocation.list` and that project's grant. Event order also
+covers invoking a message posted earlier in the channel; each item includes the
+canonical message and invocation time.
+
+Invocation is an operator intent record, not a task or model response. An
+optional Marina profile can consume it through a bounded read-only kagent turn
+and retain the result, but that profile is not installed in the regular local
+environment. When its engine asks a typed question, Marina posts it through
+`POST /api/v1/conversation/questions` with the invoked message and engine
+question IDs. Deck records one agent question in the originating thread.
+`GET /api/v1/operator/threads/{id}/questions` restores pending questions;
+`POST /api/v1/operator/conversation/questions/{id}/answer` appends one human
+reply and rejects a changed or second answer. Marina recovers that exact answer
+through its replay-safe question request and sends it to the waiting attempt.
+Answering does not authorize a task. The service needs
+`conversation.question.write` and the project grant. Marina publishes one
+terminal reply and optional task through `POST /api/v1/conversation/outcomes`.
+Ready work uses `POST /api/v1/conversation/delegations` with the separate
+`conversation.task.delegate` capability, installed repository profile and
+explicit budget. Deck links the task to the originating thread and mirrors
+selected run events there with canonical evidence references. A linked follow-up
+creates new work from feedback and leaves the completed task intact. Local
+engine and browser acceptance remains pending; see
+[CHAT-06–08 evidence](../docs/validation/chat-06-08-2026-09-25.md).
+
+Run `make -C deck conformance` from the repository root for the temporary
+real-process, two-session persistence check; root `make conformance` includes it.
+See [CHAT-02 evidence](../docs/validation/chat-02-2026-09-23.md).
+
+## Delete and archive tasks
+
+Task details offer **Delete draft** for unexecuted Backlog tasks, with a permanent
+deletion confirmation. Ready tasks must first return to Backlog. Tasks with runs
+cannot be deleted. Drafts linked to channel promotion or workload invocation must
+be archived instead, preserving their replay identity.
+
+**Archive task** hides inactive work from the overview, board and backlog while
+retaining its status, runs, PR links, evidence and history. Active runs must stop
+before archiving; Ready work must first return to Backlog. The **Archived** view
+supports search, inspection and **Restore task**. Restore preserves the original
+status and does not authorize execution. Both actions check the current task
+version; archived tasks cannot be edited, requeued or claimed until restored.
+Archive state survives restart and project export/import.
 
 ## Project context
 

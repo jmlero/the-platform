@@ -4,13 +4,11 @@ This profile runs Deck and Marina in the dedicated `kind-marina-local` context
 on the `podman-machine-default-root` connection. It preserves the ordinary
 rootless Podman connection and its containers.
 
-Deck is available at **https://localhost:8443**. The operator token is stored at
-`~/.local/share/the-platform/marina-local/installation/operator-token`.
-Copy it without printing it:
-
-```sh
-pbcopy < ~/.local/share/the-platform/marina-local/installation/operator-token
-```
+Deck opens directly at **https://localhost:8443**, without an operator token or
+sign-in step. The local profile disables operator authentication; Marina's
+service authentication remains enabled. Import/export and session controls are
+removed from the browser header. This is the operator's current local preference
+([decision 0005](../../../docs/decisions/0005-operator-authentication.md#local-pilot-update-2026-09-23)).
 
 The installation is localhost-only and uses the Mac as its host, so the Mac must
 remain running. Laptop-off and LAN/second-device acceptance are outside this

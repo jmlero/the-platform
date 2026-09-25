@@ -21,7 +21,8 @@ Do not substitute the moving 0.x website installation examples. This candidate
 uses `kagent.dev/v1alpha3`, `kagent.api.v1alpha1` gRPC lifecycle APIs, A2A with
 `a2a-go/v2 v2.5.0`, and `ate.dev/v1alpha1`. Native Codex embeds CLI `0.148.0`,
 distinct from the existing Marina worker's `0.153.4`. No Marina profile changes
-are made here. LangChain/BYO compatibility remains KINT-07.
+are made here. The separate [KINT-07/08 acceptance](../../../docs/validation/kint-07-08-2026-09-23.md)
+proves pinned LangChain/BYO and the minimal question bridge on this topology.
 
 The minimal active topology is one kagent controller, its PostgreSQL, one
 Substrate API/controller/node agent, ingress and egress routers, credential

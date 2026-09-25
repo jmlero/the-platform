@@ -2,51 +2,35 @@
 
 Deck is the place to steer work; Marina carries it out. Their shared visual
 language borrows the clarity of a harbor: deep navy navigation, ocean teal
-controls, open light surfaces, and restrained wave linework. Keep domain language
+controls, open light surfaces, and restrained branding. Keep domain language
 plain: tasks, decisions, results, and evidence. Maritime decoration belongs in the
-brand and page header, never in operational status or control labels.
+brand, never in operational status or control labels.
 
 ## Master page template
 
-The application shell in `src/routes/+page.svelte` owns the persistent navigation,
-utility bar, workspace scroll area, and overlays. New views use this structure:
+The shell in `src/routes/+page.svelte` opens on a project conversation. Use a quiet
+224 px light sidebar with project names, a compact repository header and three
+tabs: Conversation, Tasks and Context. Needs attention and Archive are secondary
+utilities. Avoid global task-creation controls, dashboard summaries and board
+columns in the primary experience. Existing task details remain in an accessible
+modal drawer; execution diagnostics use progressive disclosure.
 
-1. **Navigation:** 232 px navy sidebar, product mark, workspace identity, grouped
-   navigation, factual provider status, Deck & Marina signature. At 980 px and
-   below it becomes a slide-out menu.
-2. **Utility bar:** 72 px high (64 px on phones), location, task search, project
-   import/export, session controls, and the primary “New task” action. Never show
-   a shortcut or dropdown affordance without working behavior.
-3. **Page heading:** reuse `PageHeading.svelte` with an eyebrow, one clear h1, and
-   one sentence explaining the view. The wave motif is decorative and hidden
-   from assistive technology.
-4. **Content:** 32 px workspace padding, 24 px on tablets, 16 px on phones.
-   Overview has three summary cards followed by attention, active work, and
-   results. The task board scrolls horizontally; other views reflow vertically.
-5. **Detail:** task inspection opens in a right drawer. Creation opens in a
-   centered form, becoming a bottom sheet on phones. Both use native modal
-   dialogs through `src/lib/dialog.ts` for an inert background, keyboard focus
-   containment, Escape dismissal, and focus restoration.
+Conversation is a readable central column, with a persistent composer and focused
+threads. Messages can become Backlog drafts without completed criteria. Task rows
+use Backlog, Ready, In progress and Done; Awaiting review remains In progress until
+human acceptance. Preserve visible blockers and evidence details. Display actual
+agent availability; never suggest that a saved message invoked an absent worker.
 
-```svelte
-<PageHeading
-  eyebrow="Human attention"
-  title="Decision inbox"
-  description="Review the context and choose how work should proceed."
-/>
-<section class="surface">...</section>
-```
-
-Use `BrandMark.svelte` for the Deck mark. `TaskCard.svelte` is shared by overview
-and board; `CreateTaskModal.svelte` is shared by task creation and channel
-promotion. Add to these patterns instead of creating a new visual treatment for
-each screen. This is a Deck implementation and a visual reference for future
-Marina surfaces, not a runtime dependency between the products.
+Use `ProjectTasks.svelte`, `ChannelsView.svelte`, `CreateTaskModal.svelte` and
+`TaskDrawer.svelte`. Native modal dialogs retain focus containment, Escape and
+focus restoration. Repo/model/harness configuration belongs in project context
+or settings, not the message flow. Decision 0019 owns the product rules.
 
 ## Color palette
 
 `src/app.css` is the source of truth. Use semantic CSS variables in components.
-The sidebar overrides foreground and accent tokens for its dark surface.
+The project sidebar uses a quiet light surface; reserve accent color for selection
+and consequential actions.
 
 | Role | Token | Color | Use |
 | --- | --- | --- | --- |
@@ -74,7 +58,7 @@ own explicit labels. Provider status comes from actual data, never branding.
 
 Use the installed system sans-serif stack (Inter if locally available). No remote
 font request is required. Monospace is reserved for record IDs and technical
-values. Page titles are 26–32 px; component titles 15–17 px; body text 14 px;
+values. Page titles are 24 px; component titles 15–17 px; body text 14 px;
 secondary text 13 px; operational metadata 12 px. Compact decorative brand labels
 and priority tags may use 10–11 px. Use sentence case, 500–650 weights, and limited
 uppercase for eyebrows and compact metadata.
@@ -90,9 +74,9 @@ and stronger on overlays. Avoid glowing accents and translucent content panels.
 - Keep ordinary controls at least 36–44 px high; navigation items are 44 px.
 - Preserve contrast on both the light workspace and dark navigation surface.
 - Keep long task titles and evidence readable with wrapping and scrolling.
-- At 760 px, overview columns stack and summaries remain visible. Keep import,
-  export, creation, and session controls available on narrow screens.
-- Empty views explain what will appear there. Search emptiness says “No matching
+- At 760 px, overview columns stack. Keep task
+  creation available on narrow screens.
+- Empty views use one brief, factual line. Search emptiness says “No matching
   work” rather than implying the entire workspace is empty.
 - Respect reduced-motion preferences. Never animate status without real data.
 - Do not hide consequential authority, approval, budget, or verification details

@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
 	a2a "github.com/a2aproject/a2a-go/v2/a2apb/v1"
 	"github.com/jmlero/the-platform/marina/internal/analysis"
+	"github.com/jmlero/the-platform/marina/internal/contextpack"
 	"github.com/jmlero/the-platform/marina/internal/execution"
 	runtimeapi "github.com/jmlero/the-platform/marina/internal/runtime"
 	"github.com/jmlero/the-platform/marina/internal/workcontrol"
@@ -19,6 +21,7 @@ import (
 )
 
 var errInvalidWorkerResult = errors.New("worker completion evidence is missing or invalid")
+var errEngineQuestionStopped = errors.New("engine question cannot continue")
 
 func (c *Controller) runtimeFor(spec runtimeapi.Specification) (runtimeapi.Adapter, error) {
 	if spec.Engine == nil {
@@ -61,6 +64,23 @@ func enginePrompt(input worker.Input) ([]byte, error) {
 		return nil, errors.New("engine task prompt exceeds bounded artifact size")
 	}
 	return []byte(prompt), nil
+}
+
+func analysisEngineMessage(s state, manifest contextpack.Package, model string) ([]byte, error) {
+	if s.Analysis == nil || s.Analysis.HarnessVersion != analysis.HarnessBYO || s.Base != s.Analysis.Fixture.InputDigest() ||
+		s.ProfileDigest == "" || s.ContextDigest == "" || manifest.Digest != s.ContextDigest {
+		return nil, errors.New("analysis engine inputs are not frozen")
+	}
+	input := analysis.Input{Context: &manifest, Tools: s.Analysis.Tools,
+		ToolURL: "https://marina.marina-system.svc/engine/tools/read-context-source",
+		Version: 1, ProfileDigest: s.ProfileDigest, InputDigest: s.Base,
+		Sources: s.Analysis.Fixture.Sources, Model: model,
+		ModelURL: "https://marina.marina-system.svc/engine/model/v1"}
+	message, err := json.Marshal(input)
+	if err != nil || len(message) > workresult.MaxResultBytes {
+		return nil, errors.New("analysis engine message exceeds the bounded contract")
+	}
+	return message, nil
 }
 
 // InspectByKey may resume a journaled kagent attempt all the way through
@@ -135,6 +155,24 @@ func (c *Controller) worker(ctx context.Context, e execution.Execution, task wor
 			spec.HarnessVersion = "kagent-native-codex/0.148.0"
 			spec.CredentialReferences = []runtimeapi.CredentialReference{{Kind: "engine-gateway", Reference: "secret://" + selection.Namespace + "/" + selection.Template + "/gateway", ExpiresAt: spec.DeadlineAt}}
 		}
+		if stage == "analyze" && c.Config.AnalysisEngine != nil {
+			manifest, err := c.Journal.GetContextPackage(ctx, s.ContextDigest)
+			if err != nil {
+				return fail(err)
+			}
+			message, err := analysisEngineMessage(s, manifest, c.Config.Model.Name)
+			if err != nil {
+				return fail(err)
+			}
+			digest, err := c.Artifacts.Put(message)
+			if err != nil {
+				return fail(err)
+			}
+			selection := *c.Config.AnalysisEngine
+			spec.Engine = &selection
+			spec.ContextURI = "artifact://" + digest
+			spec.CredentialReferences = []runtimeapi.CredentialReference{{Kind: "engine-gateway", Reference: "secret://" + selection.Namespace + "/" + selection.Template + "/gateway", ExpiresAt: spec.DeadlineAt}}
+		}
 		_, attempt, _, err = c.Journal.EnsureRuntimeAttempt(ctx, e.ID, e.Version, spec)
 		if err != nil {
 			return fail(err)
@@ -142,7 +180,7 @@ func (c *Controller) worker(ctx context.Context, e execution.Execution, task wor
 	}
 	if attempt.State == runtimeapi.StatePending {
 		input := worker.Input{Stage: stage, SourceURL: strings.TrimRight(c.Config.PublicURL, "/") + "/workers/" + attempt.ID + "/git", SourceRevision: attempt.Specification.SourceRevision, Title: task.Title, Description: task.Description, AcceptanceCriteria: task.AcceptanceCriteria, AllowedPaths: c.Config.AllowedPaths, Checks: c.Config.Checks}
-		if attempt.Specification.Engine != nil {
+		if stage == "implement" && attempt.Specification.Engine != nil {
 			input, err = c.engineInput(ctx, task, s)
 			if err != nil {
 				return fail(err)
@@ -161,8 +199,13 @@ func (c *Controller) worker(ctx context.Context, e execution.Execution, task wor
 		if stage == "analyze" {
 			input.SourceURL, input.SourceRevision = "", ""
 			input.AllowedPaths, input.Checks = nil, nil
-			input.Harness = []string{"python3", "/opt/marina-harness/run.py"}
 			input.Analysis = &analysis.Input{Context: input.Context, Tools: s.Analysis.Tools, ToolURL: strings.TrimRight(c.Config.PublicURL, "/") + "/workers/" + attempt.ID + "/tools/read-context-source", Version: 1, ProfileDigest: s.ProfileDigest, InputDigest: s.Base, Sources: s.Analysis.Fixture.Sources, Model: c.Config.Model.Name, ModelURL: strings.TrimRight(c.Config.PublicURL, "/") + "/workers/" + attempt.ID + "/model/v1"}
+			if attempt.Specification.Engine == nil {
+				input.Harness = []string{"python3", "/opt/marina-harness/run.py"}
+			} else {
+				input.Analysis.ModelURL = "https://marina.marina-system.svc/engine/model/v1"
+				input.Analysis.ToolURL = "https://marina.marina-system.svc/engine/tools/read-context-source"
+			}
 		}
 		encoded, _ := json.Marshal(input)
 		e, err = c.Journal.GetExecution(ctx, e.ID)
@@ -208,9 +251,27 @@ func (c *Controller) worker(ctx context.Context, e execution.Execution, task wor
 		if err != nil {
 			return fail(err)
 		}
+		if attempt.Specification.Engine != nil {
+			totals, totalsErr := c.Journal.ExecutionModelTotals(ctx, e.ID)
+			if totalsErr != nil {
+				return fail(totalsErr)
+			}
+			observation.Usage.Tokens, observation.Usage.CostMicros = totals.Tokens, totals.CostMicros
+		}
 		attempt, err = c.Journal.RecordRuntimeObservation(ctx, attempt.ID, attempt.Version, observation)
 		if err != nil {
 			return fail(err)
+		}
+		if observation.EngineStatus != "" && observation.EngineStatus != s.EngineStatus {
+			s.EngineStatus = observation.EngineStatus
+			if err := c.save(ctx, e, s); err != nil {
+				return fail(err)
+			}
+		}
+		if observation.Question != nil {
+			if err := c.handleEngineQuestion(ctx, e, attempt, s, *observation.Question); err != nil {
+				return fail(err)
+			}
 		}
 	}
 	if !attempt.State.Terminal() {
@@ -256,6 +317,87 @@ func (c *Controller) worker(ctx context.Context, e execution.Execution, task wor
 		return attempt, true, result.Result, result.Digest, nil
 	}
 	return fail(fmt.Errorf("successful worker has no durable result: %w", errInvalidWorkerResult))
+}
+
+func (c *Controller) handleEngineQuestion(ctx context.Context, e execution.Execution, attempt runtimeapi.Attempt, s state, q runtimeapi.Question) error {
+	if s.QuestionID != "" && s.QuestionID != q.ID {
+		return fmt.Errorf("%w: a second pending operation requires new authorization", errEngineQuestionStopped)
+	}
+	provider, ok := c.Provider.(workcontrol.QuestionProjection)
+	if !ok {
+		return fmt.Errorf("%w: work-control provider cannot project questions", errEngineQuestionStopped)
+	}
+	r, err := c.run(ctx, e)
+	if err != nil {
+		return err
+	}
+	if s.QuestionID == "" {
+		s.QuestionID = q.ID
+		s.QuestionRunVersion = r.Version
+		return c.save(ctx, e, s)
+	}
+	interactionID := attempt.ID + "/" + q.ID
+	if s.QuestionDecisionID == "" {
+		// A lost projection response can be recovered by the exact interaction ID
+		// before changing a stale version guard or attempting another mutation.
+		detail, err := c.Provider.GetWork(ctx, e.ExternalWorkID)
+		if err != nil {
+			return err
+		}
+		for _, existing := range detail.Decisions {
+			if existing.InteractionID == interactionID {
+				if existing.RunID != r.ID || existing.TaskID != e.ExternalWorkID || existing.Question != q.Text {
+					return fmt.Errorf("%w: projected decision identity changed", errEngineQuestionStopped)
+				}
+				s.QuestionDecisionID = existing.ID
+				return c.save(ctx, e, s)
+			}
+		}
+		if s.QuestionRunVersion != r.Version {
+			s.QuestionRunVersion = r.Version
+			if err := c.save(ctx, e, s); err != nil {
+				return err
+			}
+			// Submit in this cycle: publishing the checkpoint's progress before
+			// the next cycle changes Deck's version and would starve the question.
+		}
+		decision, err := provider.RequestEngineQuestion(ctx, r.ID, workcontrol.EngineQuestion{
+			IdempotencyKey: e.ID + ":engine-question:" + strconv.FormatInt(s.QuestionRunVersion, 10), AgentID: e.AgentID,
+			ExpectedVersion: s.QuestionRunVersion, FenceToken: r.FenceToken,
+			OperationID: interactionID, Question: q.Text, Options: q.Choices, ExpiresAt: e.DeadlineAt,
+		})
+		if err != nil {
+			return err
+		}
+		if decision.InteractionID != interactionID || decision.RunID != r.ID || decision.TaskID != e.ExternalWorkID {
+			return fmt.Errorf("%w: projected decision identity changed", errEngineQuestionStopped)
+		}
+		s.QuestionID, s.QuestionDecisionID = q.ID, decision.ID
+		return c.save(ctx, e, s)
+	}
+	decision, err := c.Provider.GetDecision(ctx, s.QuestionDecisionID)
+	if err != nil {
+		return err
+	}
+	if decision.InteractionID != interactionID || decision.RunID != r.ID || decision.TaskID != e.ExternalWorkID {
+		return fmt.Errorf("%w: answer does not match the pending operation", errEngineQuestionStopped)
+	}
+	if decision.Status == workcontrol.DecisionPending {
+		return nil
+	}
+	if decision.Status != workcontrol.DecisionAnswered || strings.TrimSpace(decision.Answer) == "" {
+		return fmt.Errorf("%w: question was not answered while authority remained active", errEngineQuestionStopped)
+	}
+	runtime, err := c.runtimeFor(attempt.Specification)
+	if err != nil {
+		return err
+	}
+	answerer, ok := runtime.(runtimeapi.QuestionAnswerer)
+	if !ok {
+		return fmt.Errorf("%w: selected engine cannot correlate answers", errEngineQuestionStopped)
+	}
+	_, err = answerer.AnswerQuestion(ctx, attempt.ProviderHandle, q.ID, decision.Answer)
+	return err
 }
 
 type normalizedResult struct {

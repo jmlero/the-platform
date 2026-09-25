@@ -51,6 +51,7 @@ cat >"${service_auth_file}" <<EOF
         "command.list",
         "context.read", "repository.read", "repository.write", "workload.publish",
         "decision.answer",
+        "decision.request",
         "decision.inspect",
         "decision.list",
         "event.append",

@@ -5,9 +5,11 @@ Use the shortest document that answers the question:
 | Need | Source |
 | --- | --- |
 | Product overview and development commands | [Root README](../README.md) |
-| Product direction | [Marina vision](../VISION.md), [Deck vision](../VISION_DECK.md), and [dark-factory definition](../DARK_FACTORY.md) |
+| Channel-first project workflow | [Decision 0019](decisions/0019-channel-first-project-work.md), [validation](validation/deck-channel-first-2026-09-23.md) |
+| Current state, vision and goal | [VISION.md](../VISION.md) (the reference) |
 | Current ownership and runtime behavior | [Architecture](../ARCHITECTURE.md) |
 | Active work | [Backlog](../TODO.md) |
+| Persistent task-linked conversations and Deck invocation | [CHAT-02 evidence](validation/chat-02-2026-09-23.md), [CHAT-03 evidence](validation/chat-03-2026-09-23.md), [interaction decision](decisions/0009-asynchronous-agent-work.md) |
 | Backlog refinement, focused tasks and per-task context | [Work-preparation design](work-preparation.md), [decision 0018](decisions/0018-deck-work-preparation.md) |
 | Candidate projects for a real value pilot | [Repository assessment, 2026-09-22](pilot-project-assessment-2026-09-22.md) — Context Lens selected; ubahndoku completed |
 | Selected Context Lens pilot | [Task and worker preparation](../deploy/pilots/context-lens/README.md), [offline evidence and live gates](validation/context-lens-pilot-preparation-2026-09-22.md) |
@@ -55,6 +57,12 @@ build and environment; they are not current operating instructions.
 
 | Scope | Evidence |
 | --- | --- |
+| Bounded read-only conversation dispatch and retained result; local engine proof pending | [CHAT-04](validation/chat-04-2026-09-23.md) |
+| Persistent thread clarification and answer routing; installed engine proof pending | [CHAT-05](validation/chat-05-2026-09-23.md) |
+| Idempotent conversation delegation, thread results, and linked follow-up; installed actor proof pending | [CHAT-06–08](validation/chat-06-08-2026-09-25.md) |
+| Thread browser view and explicit configured-agent invocation | [CHAT-03](validation/chat-03-2026-09-23.md) |
+| Channel-first projects, human result acceptance and dependency admission | [Deck channel-first evidence](validation/deck-channel-first-2026-09-23.md) |
+| Draft deletion, reversible task archive and local browser/API verification | [Deck task retention](validation/deck-task-retention-2026-09-23.md) |
 | One Deck-authorized native Codex repository task, verified PR head and safe local teardown | [KINT-06](validation/kint-06-2026-09-23.md) |
 | Shared result validation, digest-bound engine artifact translation and independent verifier boundary | [KINT-05](validation/kint-05-2026-09-23.md) |
 | Governed engine gateway; real local native Codex/Substrate HTTPS injection, rotation, revocation, bypass denial and safe teardown | [KINT-04](validation/kint-04-2026-09-22.md) |

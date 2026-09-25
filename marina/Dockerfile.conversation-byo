@@ -1,0 +1,12 @@
+FROM golang:1.27.1-bookworm AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -buildvcs=false -trimpath -o /out/conversation-byo ./cmd/conversation-byo
+
+FROM gcr.io/distroless/static-debian12:nonroot
+COPY --from=build /out/conversation-byo /conversation-byo
+ENV SSL_CERT_FILE=/run/kagent/egress/trust-bundle.pem
+WORKDIR /work
+ENTRYPOINT ["/conversation-byo"]

@@ -1,0 +1,386 @@
+{
+  "context3": {
+    "execution": {
+      "id": "exec_ebd9f4bd1f0d841a117b4146",
+      "project_id": "prj_default",
+      "work_provider": "deck",
+      "external_work_id": "tsk_5947ea50815d4f6ec88d",
+      "external_run_id": "run_af171fdfd932dd8d253e",
+      "state": "completed",
+      "attempt": 1,
+      "used_tokens": 5894,
+      "used_cost_micros": 652,
+      "pending_model_calls": 0,
+      "reserved_tokens": 0,
+      "reserved_cost_micros": 0,
+      "version": 30,
+      "updated_at_unix_milli": 1790175059844
+    },
+    "attempts": [
+      {
+        "workload": "diagnostic-analysis/v1",
+        "profile_digest": "21d0ee57c56a8f49bbd4a4e8e868bbb46dae52a0244023a61577a2725abda2bf",
+        "context_digest": "sha256:8ecc80bb3142f3780ac570eb498b82767a2c701eeb67c8b044f215d254bfd680",
+        "id": "rtm_60f475e30eb33316cba550c0",
+        "execution_id": "exec_ebd9f4bd1f0d841a117b4146",
+        "attempt_number": 1,
+        "specification_digest": "sha256:0048501a3b32df49277d76b753e37e10f0ee8c3abaa77945e0adfa9b593f6b87",
+        "provider_handle": "sha256:3b1cf1cc0cff680b4baf59ce6857d0b434ad7140007b7f4702daa3916d4ccbe9",
+        "state": "succeeded",
+        "deadline_at_unix_milli": 1790175332768,
+        "cleanup_state": "completed",
+        "outputs_collected": false,
+        "version": 4
+      }
+    ],
+    "tool_decisions": [
+      {
+        "execution_id": "exec_ebd9f4bd1f0d841a117b4146",
+        "attempt_id": "rtm_60f475e30eb33316cba550c0",
+        "tool": "read_context_source",
+        "allowed": true,
+        "reason": "allowed",
+        "argument_digest": "sha256:2d1da8199625771daeece45d0437f36f1f428845eb7e5e611606727c48f8cad8",
+        "context_digest": "sha256:8ecc80bb3142f3780ac570eb498b82767a2c701eeb67c8b044f215d254bfd680"
+      }
+    ],
+    "model_calls": [
+      {
+        "id": "mdl_9c242095525ed14be14d64e7",
+        "execution_id": "exec_ebd9f4bd1f0d841a117b4146",
+        "attempt_id": "rtm_60f475e30eb33316cba550c0",
+        "reserved_tokens": 14728,
+        "reserved_cost_micros": 3112,
+        "used_tokens": 2793,
+        "used_cost_micros": 293,
+        "usage_known": true
+      },
+      {
+        "id": "mdl_493104e1aae1c675a610cbf7",
+        "execution_id": "exec_ebd9f4bd1f0d841a117b4146",
+        "attempt_id": "rtm_60f475e30eb33316cba550c0",
+        "reserved_tokens": 15685,
+        "reserved_cost_micros": 3207,
+        "used_tokens": 3101,
+        "used_cost_micros": 359,
+        "usage_known": true
+      }
+    ],
+    "evidence": [
+      {
+        "id": "exec_ebd9f4bd1f0d841a117b4146:analysis-validation",
+        "task_id": "tsk_5947ea50815d4f6ec88d",
+        "run_id": "run_af171fdfd932dd8d253e",
+        "plan_revision_id": "pln_282b4213e0cf53c8f904",
+        "type": "test",
+        "producer": "rtm_60f475e30eb33316cba550c0",
+        "verifier": "marina:diagnostic-validator/v1",
+        "subject_digest": "sha256:953c07a2d8788caf621d3499176c3426a4810e0d0e03f4a162ba7b7f979b0168",
+        "source_revision": "28b82a3e2af6aae3271f85b5e0cdf8c935a9ad9842cfbb9cb4b3f9606a2a4278",
+        "command": "marina diagnostic-validator/v1",
+        "outcome": "passed",
+        "provenance_uri": "https://marina.marina-system.svc:8090/artifacts/sha256:03b71621a4b691fe97bcdb3b63a7877351bfdca31e0e377c96a0ddba765879a2",
+        "provenance_digest": "sha256:03b71621a4b691fe97bcdb3b63a7877351bfdca31e0e377c96a0ddba765879a2",
+        "observed_at": 1790175054898,
+        "expires_at": 1790261454898,
+        "artifact_uri": "https://marina.marina-system.svc:8090/artifacts/sha256:03b71621a4b691fe97bcdb3b63a7877351bfdca31e0e377c96a0ddba765879a2",
+        "artifact_digest": "sha256:03b71621a4b691fe97bcdb3b63a7877351bfdca31e0e377c96a0ddba765879a2",
+        "policy_version": "repository-fix-v1",
+        "admission_status": "current",
+        "created_at": 1790175056846
+      }
+    ],
+    "validation": {
+      "context_digest": "sha256:8ecc80bb3142f3780ac570eb498b82767a2c701eeb67c8b044f215d254bfd680",
+      "version": 1,
+      "validator": "marina:diagnostic-validator/v1",
+      "profile_digest": "21d0ee57c56a8f49bbd4a4e8e868bbb46dae52a0244023a61577a2725abda2bf",
+      "input_digest": "28b82a3e2af6aae3271f85b5e0cdf8c935a9ad9842cfbb9cb4b3f9606a2a4278",
+      "output_digest": "sha256:953c07a2d8788caf621d3499176c3426a4810e0d0e03f4a162ba7b7f979b0168",
+      "report": {
+        "summary": "Found one provider outage and one token budget denial. Excluded the healthy-worker record.",
+        "findings": [
+          {
+            "code": "provider_unavailable",
+            "source_id": "model-outage",
+            "quote": "upstream HTTP 503",
+            "explanation": "Provider request failed with HTTP 503; provider recovery is required."
+          },
+          {
+            "code": "budget_exhausted",
+            "source_id": "token-limit",
+            "quote": "requested 12000 tokens; remaining budget 4000 tokens",
+            "explanation": "Admission was denied because the requested tokens exceed the remaining budget."
+          }
+        ]
+      },
+      "sources": [
+        {
+          "id": "model-outage",
+          "content": "Synthetic task alpha. Model gateway request failed: upstream HTTP 503; no response usage was received. The run is blocked pending provider recovery. Its unknown usage reservation remains held."
+        },
+        {
+          "id": "token-limit",
+          "content": "Synthetic task beta. Model admission denied: requested 12000 tokens; remaining budget 4000 tokens. No request was forwarded. The operator must authorize a new bounded task to continue."
+        },
+        {
+          "id": "healthy-worker",
+          "content": "Synthetic task gamma. Worker completed successfully. Independent checks passed. The report was downloaded and its digest matched. No operator action is required."
+        }
+      ],
+      "checks": [
+        "required findings",
+        "no duplicate or invented findings",
+        "source IDs and verbatim causal quotes",
+        "immutable input/profile/output binding"
+      ]
+    }
+  },
+  "question2": {
+    "execution": {
+      "id": "exec_1c214aed507dd4bc3519e846",
+      "project_id": "prj_default",
+      "work_provider": "deck",
+      "external_work_id": "tsk_ea0f6e33e1fc69c2fe87",
+      "external_run_id": "run_72ac40a938ba7d3fc69b",
+      "state": "completed",
+      "attempt": 1,
+      "used_tokens": 5924,
+      "used_cost_micros": 685,
+      "pending_model_calls": 0,
+      "reserved_tokens": 0,
+      "reserved_cost_micros": 0,
+      "version": 171,
+      "updated_at_unix_milli": 1790175722191
+    },
+    "attempts": [
+      {
+        "workload": "diagnostic-analysis/v1",
+        "profile_digest": "ac307ebf3feff400cdf934702f93ad64c5ead83171321eaf32453c3b66145f6f",
+        "context_digest": "sha256:0c77374b4450dfc5f98713479ead524a0701933d892cae37e8046a23b3c8bad6",
+        "id": "rtm_59fa4629ffb24340a26af16e",
+        "execution_id": "exec_1c214aed507dd4bc3519e846",
+        "attempt_number": 1,
+        "specification_digest": "sha256:b5aae95e896ea65c9bccdf10a21d40b362c5348e4010c1caa5362e3358561bd7",
+        "provider_handle": "sha256:6ba9241e7bbb40d13ba490bde94ae23174072915f2d918e4cab21ffce982b418",
+        "state": "succeeded",
+        "deadline_at_unix_milli": 1790175755979,
+        "cleanup_state": "completed",
+        "outputs_collected": false,
+        "version": 78
+      }
+    ],
+    "tool_decisions": [
+      {
+        "execution_id": "exec_1c214aed507dd4bc3519e846",
+        "attempt_id": "rtm_59fa4629ffb24340a26af16e",
+        "tool": "read_context_source",
+        "allowed": true,
+        "reason": "allowed",
+        "argument_digest": "sha256:287caaac9b72bca9627d10ec5ddb610f61073b1dbd4620dd98a73dfbad28c68f",
+        "context_digest": "sha256:0c77374b4450dfc5f98713479ead524a0701933d892cae37e8046a23b3c8bad6"
+      }
+    ],
+    "model_calls": [
+      {
+        "id": "mdl_5f14efc109124317bee75647",
+        "execution_id": "exec_1c214aed507dd4bc3519e846",
+        "attempt_id": "rtm_59fa4629ffb24340a26af16e",
+        "reserved_tokens": 14717,
+        "reserved_cost_micros": 3111,
+        "used_tokens": 2776,
+        "used_cost_micros": 296,
+        "usage_known": true
+      },
+      {
+        "id": "mdl_5f47865cdad82e2be0c314ca",
+        "execution_id": "exec_1c214aed507dd4bc3519e846",
+        "attempt_id": "rtm_59fa4629ffb24340a26af16e",
+        "reserved_tokens": 17316,
+        "reserved_cost_micros": 3370,
+        "used_tokens": 3148,
+        "used_cost_micros": 389,
+        "usage_known": true
+      }
+    ],
+    "evidence": [
+      {
+        "id": "exec_1c214aed507dd4bc3519e846:analysis-validation",
+        "task_id": "tsk_ea0f6e33e1fc69c2fe87",
+        "run_id": "run_72ac40a938ba7d3fc69b",
+        "plan_revision_id": "pln_f2748d814165318a4869",
+        "type": "test",
+        "producer": "rtm_59fa4629ffb24340a26af16e",
+        "verifier": "marina:diagnostic-validator/v1",
+        "subject_digest": "sha256:25c93a8c83ee631acbd49bc34a4526f5e448ac7f9fe431705eafff25f672bc98",
+        "source_revision": "28b82a3e2af6aae3271f85b5e0cdf8c935a9ad9842cfbb9cb4b3f9606a2a4278",
+        "command": "marina diagnostic-validator/v1",
+        "outcome": "passed",
+        "provenance_uri": "https://marina.marina-system.svc:8090/artifacts/sha256:b59ee2528a6e85cb231b3451945f1b8db559fda6c957db59a03d8faaf4295537",
+        "provenance_digest": "sha256:b59ee2528a6e85cb231b3451945f1b8db559fda6c957db59a03d8faaf4295537",
+        "observed_at": 1790175716214,
+        "expires_at": 1790262116214,
+        "artifact_uri": "https://marina.marina-system.svc:8090/artifacts/sha256:b59ee2528a6e85cb231b3451945f1b8db559fda6c957db59a03d8faaf4295537",
+        "artifact_digest": "sha256:b59ee2528a6e85cb231b3451945f1b8db559fda6c957db59a03d8faaf4295537",
+        "policy_version": "repository-fix-v1",
+        "admission_status": "current",
+        "created_at": 1790175719195
+      }
+    ],
+    "validation": {
+      "context_digest": "sha256:0c77374b4450dfc5f98713479ead524a0701933d892cae37e8046a23b3c8bad6",
+      "version": 1,
+      "validator": "marina:diagnostic-validator/v1",
+      "profile_digest": "ac307ebf3feff400cdf934702f93ad64c5ead83171321eaf32453c3b66145f6f",
+      "input_digest": "28b82a3e2af6aae3271f85b5e0cdf8c935a9ad9842cfbb9cb4b3f9606a2a4278",
+      "output_digest": "sha256:25c93a8c83ee631acbd49bc34a4526f5e448ac7f9fe431705eafff25f672bc98",
+      "report": {
+        "summary": "Identified one provider outage and one token budget denial. Excluded the healthy-worker record.",
+        "findings": [
+          {
+            "code": "provider_unavailable",
+            "source_id": "model-outage",
+            "quote": "upstream HTTP 503",
+            "explanation": "Provider outage blocked the model gateway request."
+          },
+          {
+            "code": "budget_exhausted",
+            "source_id": "token-limit",
+            "quote": "requested 12000 tokens; remaining budget 4000 tokens",
+            "explanation": "Admission was denied because requested tokens exceeded the remaining budget."
+          }
+        ]
+      },
+      "sources": [
+        {
+          "id": "model-outage",
+          "content": "Synthetic task alpha. Model gateway request failed: upstream HTTP 503; no response usage was received. The run is blocked pending provider recovery. Its unknown usage reservation remains held."
+        },
+        {
+          "id": "token-limit",
+          "content": "Synthetic task beta. Model admission denied: requested 12000 tokens; remaining budget 4000 tokens. No request was forwarded. The operator must authorize a new bounded task to continue."
+        },
+        {
+          "id": "healthy-worker",
+          "content": "Synthetic task gamma. Worker completed successfully. Independent checks passed. The report was downloaded and its digest matched. No operator action is required."
+        }
+      ],
+      "checks": [
+        "required findings",
+        "no duplicate or invented findings",
+        "source IDs and verbatim causal quotes",
+        "immutable input/profile/output binding"
+      ]
+    }
+  },
+  "denied-probe": {
+    "execution": {
+      "id": "exec_b3b99d15cd71162915599a1a",
+      "project_id": "prj_default",
+      "work_provider": "deck",
+      "external_work_id": "tsk_3e76a1aa510f360a3b4f",
+      "external_run_id": "run_184ec08aeea3f574e361",
+      "state": "blocked",
+      "attempt": 1,
+      "used_tokens": 0,
+      "used_cost_micros": 0,
+      "pending_model_calls": 0,
+      "reserved_tokens": 0,
+      "reserved_cost_micros": 0,
+      "failure_class": "external",
+      "failure_message": "[OMITTED]",
+      "version": 17,
+      "updated_at_unix_milli": 1790175955460
+    },
+    "attempts": [
+      {
+        "workload": "diagnostic-analysis/v1",
+        "profile_digest": "7daf1f9e4191b21c76b169cf95838266968fea1746e0102acde58233a5acf149",
+        "context_digest": "sha256:af92a959a3fa36768f33991b680d972c856273b27a4964820d37b5ece7f51fe4",
+        "id": "rtm_4c211e5477309882dddb38ae",
+        "execution_id": "exec_b3b99d15cd71162915599a1a",
+        "attempt_number": 1,
+        "specification_digest": "sha256:b17d256944db5f28ce1a4189f066d5ebf7236c7d7b61dcaf60051ee0766ebe0f",
+        "provider_handle": "sha256:bd78e4d7c6afb6a9efe2dbc4097b8c94029d6945ba6304edd96362fa0400224e",
+        "state": "failed",
+        "deadline_at_unix_milli": 1790176238478,
+        "cleanup_state": "completed",
+        "outputs_collected": false,
+        "version": 4
+      }
+    ],
+    "tool_decisions": [
+      {
+        "execution_id": "exec_b3b99d15cd71162915599a1a",
+        "attempt_id": "rtm_4c211e5477309882dddb38ae",
+        "tool": "read_context_source",
+        "allowed": false,
+        "reason": "source_not_selected",
+        "argument_digest": "sha256:de283423e43182cf1f88f88881db8aa96e8944847882c877b10c9a11b1e0d463",
+        "context_digest": "sha256:af92a959a3fa36768f33991b680d972c856273b27a4964820d37b5ece7f51fe4"
+      }
+    ],
+    "model_calls": [],
+    "evidence": []
+  },
+  "question_history": {
+    "pending": [
+      {
+        "artifact_count": 0,
+        "context": "a5e2603b-45f2-44ca-8cc3-93ebd0111b0f",
+        "history": [
+          {
+            "id": "marina-rtm_59fa4629ffb24340a26af16e",
+            "role": "ROLE_USER"
+          }
+        ],
+        "instance": "01a0cec5-e5f0-782b-abe1-67657e040a37",
+        "revision": "4ebd5f28c2bed9307d8aa22d859148d04df50e875c339aeabadbfc2e9215b08a",
+        "status": "TASK_STATE_INPUT_REQUIRED",
+        "task": "01a0cec5-e5fa-7581-b4c0-dcc59d54b4c3"
+      }
+    ],
+    "projected": [
+      {
+        "artifact_count": 0,
+        "context": "a5e2603b-45f2-44ca-8cc3-93ebd0111b0f",
+        "history": [
+          {
+            "id": "marina-rtm_59fa4629ffb24340a26af16e",
+            "role": "ROLE_USER"
+          }
+        ],
+        "instance": "01a0cec5-e5f0-782b-abe1-67657e040a37",
+        "revision": "4ebd5f28c2bed9307d8aa22d859148d04df50e875c339aeabadbfc2e9215b08a",
+        "status": "TASK_STATE_INPUT_REQUIRED",
+        "task": "01a0cec5-e5fa-7581-b4c0-dcc59d54b4c3"
+      }
+    ],
+    "answered": [
+      {
+        "artifact_count": 0,
+        "context": "a5e2603b-45f2-44ca-8cc3-93ebd0111b0f",
+        "history": [
+          {
+            "id": "marina-rtm_59fa4629ffb24340a26af16e",
+            "role": "ROLE_USER"
+          },
+          {
+            "id": "01a0cec5-e677-7449-a96f-e25d65f169ee",
+            "role": "ROLE_AGENT"
+          },
+          {
+            "id": "marina-answer-rtm_59fa4629ffb24340a26af16e",
+            "role": "ROLE_USER"
+          }
+        ],
+        "instance": "01a0cec5-e5f0-782b-abe1-67657e040a37",
+        "revision": "4ebd5f28c2bed9307d8aa22d859148d04df50e875c339aeabadbfc2e9215b08a",
+        "status": "TASK_STATE_SUBMITTED",
+        "task": "01a0cec5-e5fa-7581-b4c0-dcc59d54b4c3"
+      }
+    ],
+    "continuation": []
+  },
+  "environment": "kind-marina-local on podman-machine-default-root; local Mac running"
+}

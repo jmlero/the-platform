@@ -55,6 +55,9 @@ type Project struct {
 }
 
 type Task struct {
+	Review             *TaskReview      `json:"review,omitempty"`
+	DependsOn          []string         `json:"depends_on,omitempty"`
+	Archived           bool             `json:"archived,omitempty"`
 	Workload           *WorkloadProfile `json:"workload,omitempty"`
 	Context            *TaskContext     `json:"context,omitempty"`
 	ID                 string           `json:"id"`
@@ -215,6 +218,8 @@ type Decision struct {
 	TaskID               string   `json:"task_id"`
 	RunID                *string  `json:"run_id,omitempty"`
 	PlanRevisionID       string   `json:"plan_revision_id,omitempty"`
+	InteractionID        string   `json:"interaction_id,omitempty"`
+	AnswerMode           string   `json:"answer_mode,omitempty"`
 	Question             string   `json:"question"`
 	Options              []string `json:"options"`
 	Recommendation       string   `json:"recommendation"`
@@ -230,6 +235,15 @@ type Decision struct {
 	CreatedAt            int64    `json:"created_at"`
 	AnsweredAt           *int64   `json:"answered_at,omitempty"`
 	AnsweredBy           string   `json:"answered_by,omitempty"`
+}
+
+// EngineQuestion is a bounded, single-question request tied to one pending
+// operation in an already running attempt. It never grants new authority.
+type EngineQuestion struct {
+	OperationID string   `json:"operation_id"`
+	Question    string   `json:"question"`
+	Options     []string `json:"options,omitempty"`
+	ExpiresAt   int64    `json:"expires_at"`
 }
 
 type Artifact struct {
@@ -304,18 +318,22 @@ type Channel struct {
 }
 
 type ChannelMessage struct {
-	ID             string              `json:"id"`
-	ChannelID      string              `json:"channel_id"`
-	ProjectID      string              `json:"project_id"`
-	AuthorType     string              `json:"author_type"`
-	AuthorID       string              `json:"author_id"`
-	Body           string              `json:"body"`
-	References     CanonicalReferences `json:"references"`
-	PromotedTaskID *string             `json:"promoted_task_id,omitempty"`
-	CreatedAt      int64               `json:"created_at"`
+	ThreadID            string              `json:"thread_id,omitempty"`
+	InvokedAgentID      string              `json:"invoked_agent_id,omitempty"`
+	InvocationRequestID string              `json:"invocation_request_id,omitempty"`
+	ID                  string              `json:"id"`
+	ChannelID           string              `json:"channel_id"`
+	ProjectID           string              `json:"project_id"`
+	AuthorType          string              `json:"author_type"`
+	AuthorID            string              `json:"author_id"`
+	Body                string              `json:"body"`
+	References          CanonicalReferences `json:"references"`
+	PromotedTaskID      *string             `json:"promoted_task_id,omitempty"`
+	CreatedAt           int64               `json:"created_at"`
 }
 
 type ChannelMessageInput struct {
+	ThreadID   string              `json:"thread_id,omitempty"`
 	ChannelID  string              `json:"channel_id"`
 	AuthorType string              `json:"author_type"`
 	AuthorID   string              `json:"author_id"`

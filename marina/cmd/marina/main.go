@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/jmlero/the-platform/marina/internal/artifacts"
+	"github.com/jmlero/the-platform/marina/internal/conversation"
 	"github.com/jmlero/the-platform/marina/internal/deck"
 	"github.com/jmlero/the-platform/marina/internal/execution"
 	"github.com/jmlero/the-platform/marina/internal/flow"
@@ -209,6 +210,12 @@ func runServe(arguments []string, stderr io.Writer) int {
 			return 1
 		}
 		requiredCapabilities = workcontrol.WorkerCapabilities()
+		if workflowConfig.Conversation != nil {
+			requiredCapabilities = append(requiredCapabilities, workcontrol.CapabilityConversationList, workcontrol.CapabilityChannelRead, workcontrol.CapabilityConversationQuestion, workcontrol.CapabilityConversationOutcome)
+			if workflowConfig.Conversation.Delegation != nil {
+				requiredCapabilities = append(requiredCapabilities, workcontrol.CapabilityConversationDelegate)
+			}
+		}
 	}
 	if workflowConfig.TLSCertFile != "" {
 		if (*tlsCertFile != "" && *tlsCertFile != workflowConfig.TLSCertFile) ||
@@ -312,6 +319,9 @@ func runServe(arguments []string, stderr io.Writer) int {
 	registration := workcontrol.AgentRegistration{ID: identity.LogicalAgentID,
 		InstallationID: identity.InstallationID, Name: "Marina controller", Kind: "controller",
 		Capabilities: []string{"work-control", "reconciliation"}}
+	if workflowConfig.Conversation != nil {
+		registration.Capabilities = append(registration.Capabilities, "conversation.invoke."+workflowConfig.ProjectID)
+	}
 	if controllerEnabled {
 		if _, err := client.RegisterAgent(startupCtx, registration); err != nil {
 			logger.Error("register stable logical agent", "error", err)
@@ -354,6 +364,8 @@ func runServe(arguments []string, stderr io.Writer) int {
 	}
 	var workflow *flow.Controller
 	var workerHandler http.Handler
+	var conversationController *conversation.Controller
+	var conversationHandler http.Handler
 	if *configPath != "" {
 		workflow, workerHandler, err = configureWorkers(workflowConfig, journal, client)
 		if err != nil {
@@ -361,6 +373,13 @@ func runServe(arguments []string, stderr io.Writer) int {
 			return 1
 		}
 		controlController.WithExecutionLimits(2, workflowConfig.MaxTokens).WithCommandHandler(workflow.Command)
+		var closeConversation func()
+		conversationController, conversationHandler, closeConversation, err = configureConversation(workflowConfig, journal, client, identity.LogicalAgentID)
+		if err != nil {
+			logger.Error("configure conversation workflow", "error", err)
+			return 1
+		}
+		defer closeConversation()
 	}
 	if controllerEnabled {
 		if workflow != nil {
@@ -387,6 +406,9 @@ func runServe(arguments []string, stderr io.Writer) int {
 		mux.Handle("/workers/", workerHandler)
 		mux.Handle("/engine/", workerHandler)
 		mux.Handle("/artifacts/", workerHandler)
+	}
+	if conversationHandler != nil {
+		mux.Handle("/conversation/", conversationHandler)
 	}
 	server := &http.Server{
 		Addr:              *address,
@@ -437,6 +459,11 @@ func runServe(arguments []string, stderr io.Writer) int {
 				if workflow != nil {
 					for _, err := range workflow.Cycle(ctx) {
 						logger.Warn("repository workflow deferred", "error", err)
+					}
+				}
+				if conversationController != nil {
+					for _, err := range conversationController.Cycle(ctx) {
+						logger.Warn("conversation workflow deferred", "error", err)
 					}
 				}
 			}

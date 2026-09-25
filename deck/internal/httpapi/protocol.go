@@ -4,39 +4,44 @@ const (
 	protocolVersion = "1.0"
 	providerName    = "deck"
 
-	capabilityAgentRegister    = "agent.register"
-	capabilityDecisionAnswer   = "decision.answer"
-	capabilityDecisionInspect  = "decision.inspect"
-	capabilityDecisionList     = "decision.list"
-	capabilityCommandAck       = "command.ack"
-	capabilityCommandList      = "command.list"
-	capabilityRepositoryRead   = "repository.read"
-	capabilityRepositoryWrite  = "repository.write"
-	capabilityContextRead      = "context.read"
-	capabilityWorkloadPublish  = "workload.publish"
-	capabilityWorkloadInvoke   = "workload.invoke"
-	capabilityWorkloadDiscover = "workload.discover"
-	capabilityEventList        = "event.list"
-	capabilityEventStream      = "event.stream"
-	capabilityEventAppend      = "event.append"
-	capabilityChannelList      = "channel.list"
-	capabilityChannelMessage   = "channel.message.append"
-	capabilityChannelRead      = "channel.message.list"
-	capabilityEvidenceRecord   = "evidence.record"
-	capabilityOperationReport  = "operation.report"
-	capabilityProviderInfo     = "provider.info"
-	capabilityRunBlock         = "run.block"
-	capabilityRunComplete      = "run.complete"
-	capabilityLeaseRenew       = "run.lease.renew"
-	capabilityPlanSubmit       = "run.plan.submit"
-	capabilityProgressAppend   = "run.progress.append"
-	capabilityRunStart         = "run.start"
-	capabilityRunVerify        = "run.verify"
-	capabilityWorkClaim        = "work.claim.atomic"
-	capabilityClaimLookup      = "work.claim.lookup"
-	capabilityAssignedRuns     = "run.assigned.list"
-	capabilityWorkInspect      = "work.inspect"
-	capabilityWorkReadyList    = "work.ready.list"
+	capabilityAgentRegister        = "agent.register"
+	capabilityDecisionAnswer       = "decision.answer"
+	capabilityDecisionInspect      = "decision.inspect"
+	capabilityDecisionList         = "decision.list"
+	capabilityDecisionRequest      = "decision.request"
+	capabilityCommandAck           = "command.ack"
+	capabilityCommandList          = "command.list"
+	capabilityRepositoryRead       = "repository.read"
+	capabilityRepositoryWrite      = "repository.write"
+	capabilityContextRead          = "context.read"
+	capabilityWorkloadPublish      = "workload.publish"
+	capabilityWorkloadInvoke       = "workload.invoke"
+	capabilityWorkloadDiscover     = "workload.discover"
+	capabilityEventList            = "event.list"
+	capabilityEventStream          = "event.stream"
+	capabilityEventAppend          = "event.append"
+	capabilityChannelList          = "channel.list"
+	capabilityChannelMessage       = "channel.message.append"
+	capabilityChannelRead          = "channel.message.list"
+	capabilityConversationList     = "conversation.invocation.list"
+	capabilityConversationDelegate = "conversation.task.delegate"
+	capabilityConversationOutcome  = "conversation.outcome.publish"
+	capabilityConversationQuestion = "conversation.question.write"
+	capabilityEvidenceRecord       = "evidence.record"
+	capabilityOperationReport      = "operation.report"
+	capabilityProviderInfo         = "provider.info"
+	capabilityRunBlock             = "run.block"
+	capabilityRunComplete          = "run.complete"
+	capabilityLeaseRenew           = "run.lease.renew"
+	capabilityPlanSubmit           = "run.plan.submit"
+	capabilityProgressAppend       = "run.progress.append"
+	capabilityRunStart             = "run.start"
+	capabilityRunVerify            = "run.verify"
+	capabilityWorkClaim            = "work.claim.atomic"
+	capabilityClaimLookup          = "work.claim.lookup"
+	capabilityAssignedRuns         = "run.assigned.list"
+	capabilityWorkInspect          = "work.inspect"
+	capabilityWorkReadyList        = "work.ready.list"
 
 	errorCodeConflict           = "conflict"
 	errorCodeForbidden          = "forbidden"
@@ -59,9 +64,14 @@ var protocolCapabilities = []string{
 	capabilityCommandAck,
 	capabilityCommandList,
 	capabilityContextRead,
+	capabilityConversationList,
+	capabilityConversationOutcome,
+	capabilityConversationQuestion,
+	capabilityConversationDelegate,
 	capabilityDecisionAnswer,
 	capabilityDecisionInspect,
 	capabilityDecisionList,
+	capabilityDecisionRequest,
 	capabilityEventAppend,
 	capabilityEventList,
 	capabilityEventStream,

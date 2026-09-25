@@ -10,12 +10,15 @@ import (
 	"testing"
 	"time"
 
+	a2atype "github.com/a2aproject/a2a-go/v2/a2a"
 	a2a "github.com/a2aproject/a2a-go/v2/a2apb/v1"
+	"github.com/a2aproject/a2a-go/v2/a2apb/v1/pbconv"
 	"github.com/jmlero/the-platform/marina/internal/artifacts"
 	"github.com/jmlero/the-platform/marina/internal/execution"
 	"github.com/jmlero/the-platform/marina/internal/journal/sqlite"
 	"github.com/jmlero/the-platform/marina/internal/kagent"
 	rt "github.com/jmlero/the-platform/marina/internal/runtime"
+	kagenta2a "github.com/kagent-dev/kagent/go/api/a2a"
 	api "github.com/kagent-dev/kagent/go/api/gen/kagent/api/v1alpha1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -27,11 +30,11 @@ import (
 type engine struct {
 	api.UnimplementedAgentInstanceServiceServer
 	a2a.UnimplementedA2AServiceServer
-	instance                                               *api.AgentInstance
-	task                                                   *a2a.Task
-	creates, sends, deletes                                int
-	loseCreate, loseSend, loseDelete, hideTask, failDelete bool
-	revision                                               string
+	instance                                                                       *api.AgentInstance
+	task                                                                           *a2a.Task
+	creates, sends, deletes                                                        int
+	loseCreate, loseSend, loseDelete, hideTask, failDelete, loseAnswer, holdAnswer bool
+	revision                                                                       string
 }
 
 type admission struct {
@@ -96,11 +99,94 @@ func (e *engine) DeleteAgentInstance(context.Context, *api.DeleteAgentInstanceRe
 }
 func (e *engine) SendMessage(_ context.Context, r *a2a.SendMessageRequest) (*a2a.SendMessageResponse, error) {
 	e.sends++
+	if r.Message.TaskId != "" {
+		e.task.History = append(e.task.History, r.Message)
+		if e.holdAnswer {
+			e.task.Status.State = a2a.TaskState_TASK_STATE_WORKING
+		} else {
+			e.task.Status.State = a2a.TaskState_TASK_STATE_COMPLETED
+		}
+		if e.loseAnswer {
+			e.loseAnswer = false
+			return nil, status.Error(codes.Unavailable, "answer response lost")
+		}
+		return &a2a.SendMessageResponse{Payload: &a2a.SendMessageResponse_Task{Task: e.task}}, nil
+	}
 	e.task = &a2a.Task{Id: "task-1", ContextId: r.Message.ContextId, History: []*a2a.Message{r.Message}, Status: &a2a.TaskStatus{State: a2a.TaskState_TASK_STATE_WORKING}}
 	if e.loseSend {
 		return nil, status.Error(codes.Unavailable, "response lost")
 	}
 	return &a2a.SendMessageResponse{Payload: &a2a.SendMessageResponse_Task{Task: e.task}}, nil
+}
+func TestDuplicateAnswerIsRejectedWhileEngineContinues(t *testing.T) {
+	e := &engine{holdAnswer: true}
+	f := setup(t, e)
+	ctx := context.Background()
+	obs, err := f.adapter.Start(ctx, f.spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	statusMessage := a2atype.NewMessage(a2atype.MessageRoleAgent, a2atype.NewTextPart("Answer required"))
+	if err := kagenta2a.AttachHITL(statusMessage, kagenta2a.AskUserRequest{Type: kagenta2a.HITLTypeAskUserRequest,
+		ID: "question-1", Questions: []kagenta2a.HITLQuestion{{Question: "Which database?", Choices: []string{"SQLite", "PostgreSQL"}}}}); err != nil {
+		t.Fatal(err)
+	}
+	converted, err := pbconv.ToProtoSendMessageRequest(&a2atype.SendMessageRequest{Message: statusMessage})
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.task.Status.State = a2a.TaskState_TASK_STATE_INPUT_REQUIRED
+	e.task.Status.Message = converted.Message
+	obs, err = f.adapter.Inspect(ctx, obs.ProviderHandle)
+	if err != nil || obs.Question == nil {
+		t.Fatalf("question = %+v, %v", obs, err)
+	}
+	obs, err = f.adapter.AnswerQuestion(ctx, obs.ProviderHandle, "question-1", "SQLite")
+	if err != nil || obs.State != rt.StateRunning || e.sends != 2 {
+		t.Fatalf("answer = %+v, %v; sends=%d", obs, err, e.sends)
+	}
+	if _, err = f.adapter.AnswerQuestion(ctx, obs.ProviderHandle, "question-1", "SQLite"); !errors.Is(err, rt.ErrConflict) || e.sends != 2 {
+		t.Fatalf("duplicate answer accepted: %v; sends=%d", err, e.sends)
+	}
+}
+
+func TestExactPendingQuestionAnswerRecoversLostResponseWithoutResend(t *testing.T) {
+	e := &engine{loseAnswer: true}
+	f := setup(t, e)
+	ctx := context.Background()
+	obs, err := f.adapter.Start(ctx, f.spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	statusMessage := a2atype.NewMessage(a2atype.MessageRoleAgent, a2atype.NewTextPart("Answer required"))
+	if err := kagenta2a.AttachHITL(statusMessage, kagenta2a.AskUserRequest{Type: kagenta2a.HITLTypeAskUserRequest,
+		ID: "question-1", Questions: []kagenta2a.HITLQuestion{{Question: "Which database?", Choices: []string{"SQLite", "PostgreSQL"}}}}); err != nil {
+		t.Fatal(err)
+	}
+	converted, err := pbconv.ToProtoSendMessageRequest(&a2atype.SendMessageRequest{Message: statusMessage})
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.task.Status.State = a2a.TaskState_TASK_STATE_INPUT_REQUIRED
+	e.task.Status.Message = converted.Message
+	obs, err = f.adapter.Inspect(ctx, obs.ProviderHandle)
+	if err != nil || obs.Question == nil || obs.Question.ID != "question-1" || obs.Question.Text != "Which database?" {
+		t.Fatalf("pending question = %+v, %v", obs, err)
+	}
+	if _, err = f.adapter.AnswerQuestion(ctx, obs.ProviderHandle, "wrong-question", "SQLite"); err == nil || e.sends != 1 {
+		t.Fatal("stale question was sent")
+	}
+	if _, err = f.adapter.AnswerQuestion(ctx, obs.ProviderHandle, "question-1", "SQLite"); err == nil || e.sends != 2 {
+		t.Fatalf("lost answer response = %v sends=%d", err, e.sends)
+	}
+	f.restart(t)
+	if _, err = f.adapter.AnswerQuestion(ctx, obs.ProviderHandle, "question-1", "PostgreSQL"); !errors.Is(err, rt.ErrConflict) || e.sends != 2 {
+		t.Fatalf("changed answer after lost response accepted: %v sends=%d", err, e.sends)
+	}
+	obs, err = f.adapter.Inspect(ctx, obs.ProviderHandle)
+	if err != nil || obs.State != rt.StateSucceeded || e.sends != 2 {
+		t.Fatalf("answer recovery = %+v, %v sends=%d", obs, err, e.sends)
+	}
 }
 func (e *engine) ListTasks(context.Context, *a2a.ListTasksRequest) (*a2a.ListTasksResponse, error) {
 	r := &a2a.ListTasksResponse{}

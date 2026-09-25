@@ -50,6 +50,363 @@ tags:
   - name: Workloads
 
 paths:
+  /operator/projects:
+    get:
+      tags: [Workspace]
+      operationId: listProjectChannels
+      security: [{operatorSession: []}]
+      summary: List projects with their channels and repository association
+      responses:
+        "200":
+          description: Project workspaces, including historical channels
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: "#/components/schemas/ProjectChannel"}}
+        "401": {$ref: "#/components/responses/AuthenticationRequired"}
+    post:
+      tags: [Workspace]
+      operationId: createProjectChannel
+      security: [{operatorSession: []}]
+      summary: Create a project channel and request repository association
+      description: Requires CSRF. Repeating the same repository and branch recovers the workspace. Does not grant credentials or enable execution.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [repository, base_branch]
+              properties:
+                repository: {type: string, description: GitHub owner/repository}
+                base_branch: {type: string}
+      responses:
+        "201":
+          description: Created or existing workspace
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ProjectChannel"}
+        "401": {$ref: "#/components/responses/AuthenticationRequired"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "409": {$ref: "#/components/responses/Conflict"}
+        "422": {$ref: "#/components/responses/InvalidInput"}
+  /operator/tasks/{id}/accept:
+    post:
+      tags: [Tasks]
+      operationId: acceptTaskResult
+      security: [{operatorSession: []}]
+      summary: Accept a verified completed result as human Done
+      description: >-
+        Requires CSRF and the current task version. The actor comes from the operator
+        session. Stores acceptance of the latest completed run without changing v1
+        execution status. Identical retries using the accepted version return the
+        same task. Stale evidence, changed criteria, active work and archived tasks
+        cannot be accepted. source_available is a human attestation that code is on
+        the base branch, not automatic Git merge proof. Requeue clears acceptance.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version]
+              properties:
+                version: {type: integer, minimum: 1}
+                source_available: {type: boolean, default: false}
+      responses:
+        "200":
+          description: Accepted task
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Task"}
+        "401": {$ref: "#/components/responses/AuthenticationRequired"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+        "422": {$ref: "#/components/responses/InvalidInput"}
+  /operator/tasks/{id}/dependencies:
+    put:
+      tags: [Tasks]
+      operationId: setTaskDependencies
+      security: [{operatorSession: []}]
+      summary: Set same-project prerequisites on a current Backlog draft
+      description: >-
+        Requires CSRF and current version. Rejects self references, cycles and
+        cross-project dependencies. Ready discovery and direct claim both wait for
+        accepted prerequisites with current evidence. Code prerequisites additionally
+        need source_available confirmation. Existing active run inputs are unchanged.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version, depends_on]
+              properties:
+                version: {type: integer, minimum: 1}
+                depends_on: {type: array, maxItems: 50, items: {type: string}}
+      responses:
+        "200":
+          description: Updated task
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Task"}
+        "401": {$ref: "#/components/responses/AuthenticationRequired"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+        "422": {$ref: "#/components/responses/InvalidInput"}
+  /operator/channels/{id}/invocations:
+    post:
+      tags: [Channels]
+      operationId: invokeConversationAgent
+      security: [{operatorSession: []}]
+      summary: Record an explicit request to a configured conversation agent
+      description: >-
+        Requires CSRF. The agent must be registered with an installation ID and
+        conversation.invoke.{project_id} capability for the channel project.
+        Exactly one of body or message_id is
+        required. A new body starts a thread or appends to thread_id; message_id
+        requests the agent for an existing human message. The first invocation
+        selects the agent for the thread. Later invocations must use that agent.
+        request_id replays the identical message and invocation without duplicates;
+        using it for different content conflicts. Recording a request does not
+        authorize a task or imply that a conversation worker has executed it.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [agent_id, request_id]
+              properties:
+                agent_id: {type: string, minLength: 1}
+                request_id: {type: string, minLength: 1, maxLength: 128}
+                thread_id: {type: string}
+                message_id: {type: string}
+                body: {type: string}
+      responses:
+        "201":
+          description: Canonical thread and invoked message
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [thread, message]
+                properties:
+                  thread: {$ref: "#/components/schemas/ConversationThread"}
+                  message: {$ref: "#/components/schemas/ChannelMessage"}
+        "401": {$ref: "#/components/responses/AuthenticationRequired"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+        "422": {$ref: "#/components/responses/InvalidInput"}
+
+  /operator/channels/{id}/threads:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [Channels]
+      operationId: listConversationThreads
+      security: [{operatorSession: []}]
+      summary: List durable threads in root-message append order
+      responses:
+        "200":
+          description: Threads with canonical task links; no execution is invoked
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: "#/components/schemas/ConversationThread"}}
+        "401": {$ref: "#/components/responses/AuthenticationRequired"}
+        "404": {$ref: "#/components/responses/NotFound"}
+    post:
+      tags: [Channels]
+      operationId: createConversationThread
+      security: [{operatorSession: []}]
+      summary: Start or recover a thread from an existing channel message
+      description: >-
+        Naturally idempotent by canonical message identity. If the message already
+        belongs to a thread, returns that thread, including when the message is a reply.
+        New threads emit conversation.thread.created with project, channel, thread,
+        and root message IDs. No task or model invocation is created. Requires CSRF.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [root_message_id]
+              properties:
+                root_message_id: {type: string, minLength: 1}
+      responses:
+        "201":
+          description: New or existing durable thread
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ConversationThread"}
+        "401": {$ref: "#/components/responses/AuthenticationRequired"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "422": {$ref: "#/components/responses/InvalidInput"}
+
+  /operator/threads/{id}:
+    get:
+      tags: [Channels]
+      operationId: getConversationThread
+      security: [{operatorSession: []}]
+      summary: Recover a thread by its stable identity from any operator session
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: Canonical thread and task links, including archived tasks
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ConversationThread"}
+        "401": {$ref: "#/components/responses/AuthenticationRequired"}
+        "404": {$ref: "#/components/responses/NotFound"}
+
+  /operator/threads/{id}/messages:
+    get:
+      tags: [Channels]
+      operationId: listConversationThreadMessages
+      security: [{operatorSession: []}]
+      summary: Page the root and replies in durable append order
+      description: >-
+        Use next_cursor as cursor to continue. Cursors are exclusive and must name
+        a message in this thread. Append replies through the existing channel
+        messages endpoint with thread_id; channel history continues to include all
+        messages. Message bodies and IDs are not copied into a second history.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 100}}
+        - {name: cursor, in: query, schema: {type: string}}
+      responses:
+        "200":
+          description: Root and replies
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: "#/components/schemas/ChannelMessage"}}
+                  next_cursor: {type: string}
+        "401": {$ref: "#/components/responses/AuthenticationRequired"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "422": {$ref: "#/components/responses/InvalidInput"}
+
+  /operator/threads/{id}/tasks:
+    post:
+      tags: [Channels]
+      operationId: linkConversationTask
+      security: [{operatorSession: []}]
+      summary: Link an existing same-project task to its originating thread
+      description: >-
+        A thread can originate multiple tasks; a task has one immutable originating
+        thread. Repeating the same pair succeeds without another event. A different
+        origin conflicts. Emits conversation.task.linked with the canonical task
+        and thread IDs. Does not change task status, context, budget, version, or
+        authority. Linked drafts must be archived instead of deleted. Requires CSRF.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [task_id]
+              properties:
+                task_id: {type: string, minLength: 1}
+      responses:
+        "204": {description: Task linked or identical link already present}
+        "401": {$ref: "#/components/responses/AuthenticationRequired"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+        "422": {$ref: "#/components/responses/InvalidInput"}
+
+  /operator/tasks/{id}/thread:
+    get:
+      tags: [Channels]
+      operationId: getTaskConversationThread
+      security: [{operatorSession: []}]
+      summary: Recover the originating thread for a task
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: Task origin retained across restart and archive
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ConversationThread"}
+        "401": {$ref: "#/components/responses/AuthenticationRequired"}
+        "404": {description: Task does not exist or has no originating thread}
+
+  /operator/tasks/{id}:
+    delete:
+      tags: [Tasks]
+      operationId: deleteDraftTask
+      summary: Permanently delete an unexecuted backlog draft
+      description: Requires the current task version. Drafts linked to channel promotion or workload invocation must be archived to preserve replay identity. Deletes draft events and emits a task.deleted event with the removed ID in its payload. Executed, archived, ready and active tasks cannot be deleted.
+      security: [{operatorSession: []}]
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version]
+              properties:
+                version: {type: integer, minimum: 1}
+      responses:
+        "204": {description: Draft deleted}
+        "401": {description: Operator authentication required}
+        "403": {description: CSRF validation failed}
+        "404": {description: Task not found, including a previously deleted draft}
+        "409": {description: Stale version or task cannot be deleted}
+        "422": {description: Invalid request}
+  /operator/tasks/{id}/archive:
+    put:
+      tags: [Tasks]
+      operationId: setTaskArchived
+      summary: Archive or restore inactive work without changing its outcome
+      description: Requires the current task version and no active run. Ready work must first return to backlog. Archive retains task/run identities, PR evidence and history; archived tasks cannot be edited, moved or claimed until restored. Operator bootstrap and task inspection retain archived records. Restoring does not authorize execution.
+      security: [{operatorSession: []}]
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version, archived]
+              properties:
+                version: {type: integer, minimum: 1}
+                archived: {type: boolean}
+      responses:
+        "200":
+          description: Task with updated archive state
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Task"}
+        "401": {description: Operator authentication required}
+        "403": {description: CSRF validation failed}
+        "404": {description: Task not found}
+        "409": {description: Stale version or work is ready or active}
+        "422": {description: Invalid request}
   /operator/provider:
     get:
       tags: [Provider]
@@ -874,6 +1231,45 @@ paths:
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
 
+  /runs/{runId}/questions:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+      - $ref: "#/components/parameters/IdempotencyKey"
+    post:
+      tags: [Decisions]
+      operationId: requestEngineQuestion
+      x-capability: decision.request
+      security:
+        - serviceBearer: []
+      summary: Project one exact pending engine question into the operator ledger
+      description: Requires the current running run guard. It does not grant new execution authority or change the run state.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [agent_id, expected_version, fence_token, operation_id, question, expires_at]
+              properties:
+                agent_id: { type: string }
+                expected_version: { type: integer, format: int64, minimum: 1 }
+                fence_token: { type: integer, format: int64, minimum: 1 }
+                operation_id: { type: string, maxLength: 256 }
+                question: { type: string, maxLength: 2000 }
+                options: { type: array, maxItems: 8, items: { type: string, maxLength: 200 } }
+                expires_at: { type: integer, format: int64 }
+      responses:
+        "200":
+          description: Pending decision bound to the engine operation
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Decision" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/InvalidInput" }
+        "401": { $ref: "#/components/responses/AuthenticationRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
   /runs/{runId}/progress:
     parameters:
       - $ref: "#/components/parameters/RunId"
@@ -1211,6 +1607,214 @@ paths:
         "401": { $ref: "#/components/responses/AuthenticationRequired" }
         "403": { $ref: "#/components/responses/Forbidden" }
 
+  /conversation/invocations:
+    get:
+      tags: [Channels]
+      operationId: listConversationInvocations
+      x-capability: conversation.invocation.list
+      security:
+        - serviceBearer: []
+      summary: List explicit agent invocations in durable event order
+      description: >-
+        after_id is an exclusive event cursor. The feed includes invocations of
+        older channel messages, which retain their original message IDs and
+        timestamps. A service identity must hold this capability and the exact
+        project grant. Every item contains the canonical invoked message.
+      parameters:
+        - { name: project_id, in: query, required: true, schema: { type: string } }
+        - { name: after_id, in: query, required: true, schema: { type: integer, format: int64, minimum: 0 } }
+      responses:
+        "200":
+          description: Invocations in ascending event order, at most 100 per page
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/ConversationDispatch" } }
+        "401": { $ref: "#/components/responses/AuthenticationRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/InvalidInput" }
+
+  /conversation/questions:
+    post:
+      tags: [Channels]
+      operationId: ensureConversationQuestion
+      x-capability: conversation.question.write
+      security: [{serviceBearer: []}]
+      summary: Record or recover one engine question in its invoked thread
+      description: >-
+        Requires the exact project grant for the invoked message. The pair of
+        invocation_message_id and question_id is replay safe. A changed question
+        conflicts. The response includes the canonical answer, if already given.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [invocation_message_id, agent_id, question_id, text]
+              properties:
+                invocation_message_id: {type: string}
+                agent_id: {type: string}
+                question_id: {type: string}
+                text: {type: string}
+                choices: {type: array, items: {type: string}}
+      responses:
+        "200":
+          description: Canonical question and current answer state
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ConversationQuestion"}
+        "401": {$ref: "#/components/responses/AuthenticationRequired"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+        "422": {$ref: "#/components/responses/InvalidInput"}
+
+  /conversation/outcomes:
+    post:
+      tags: [Channels]
+      operationId: publishConversationOutcome
+      x-capability: conversation.outcome.publish
+      security: [{serviceBearer: []}]
+      summary: Publish one terminal conversation result to its originating thread
+      description: >-
+        Requires the exact project grant for the invoked human message and its
+        selected agent. A completed turn may create one linked Backlog draft;
+        this route does not create Ready work. Ready delegation uses the separate
+        conversation.task.delegate route.
+        A follow-up must name a completed task from the same originating thread;
+        it creates a new task without changing the original. Exact retries return
+        the original message and task; changed payloads conflict. The agent
+        cannot grant itself execution authority through its text output.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [invocation_message_id, agent_id, status, body, result_digest]
+              properties:
+                invocation_message_id: {type: string}
+                agent_id: {type: string}
+                status: {type: string, enum: [completed, blocked]}
+                body: {type: string, minLength: 1, maxLength: 8192}
+                result_digest: {type: string}
+                task: {$ref: "#/components/schemas/CreateTask"}
+                followup_task_id: {type: string}
+      responses:
+        "200":
+          description: Canonical published outcome
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ConversationOutcome"}
+        "401": {$ref: "#/components/responses/AuthenticationRequired"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+        "422": {$ref: "#/components/responses/InvalidInput"}
+
+  /conversation/delegations:
+    post:
+      tags: [Channels]
+      operationId: publishReadyConversationDelegation
+      x-capability: conversation.task.delegate
+      security: [{serviceBearer: []}]
+      summary: Publish one explicit delegation as a Ready repository task
+      description: >-
+        Requires a project-scoped service grant, the exact invoked human message,
+        the current installed repository/v1 profile digest, its bounded budget,
+        acceptance criteria and required source/PR authority. Creates one task
+        and one linked thread reply atomically. Exact retries return the same
+        identities; changed requests conflict. A follow-up can target only a
+        completed task originating in the same thread.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [invocation_message_id, agent_id, status, body, result_digest, profile_id, profile_digest, task]
+              properties:
+                invocation_message_id: {type: string}
+                agent_id: {type: string}
+                status: {type: string, enum: [completed]}
+                body: {type: string, minLength: 1, maxLength: 8192}
+                result_digest: {type: string}
+                profile_id: {type: string, enum: [repository/v1]}
+                profile_digest: {type: string}
+                task: {$ref: "#/components/schemas/CreateTask"}
+                followup_task_id: {type: string}
+      responses:
+        "200":
+          description: Canonical published task and thread reply
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ConversationOutcome"}
+        "401": {$ref: "#/components/responses/AuthenticationRequired"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+        "422": {$ref: "#/components/responses/InvalidInput"}
+
+  /operator/threads/{id}/questions:
+    get:
+      tags: [Channels]
+      operationId: listThreadConversationQuestions
+      security: [{operatorSession: []}]
+      summary: List persisted clarification questions for a thread
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: Questions in creation order
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: "#/components/schemas/ConversationQuestion"}}
+        "401": {$ref: "#/components/responses/AuthenticationRequired"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+
+  /operator/conversation/questions/{id}/answer:
+    post:
+      tags: [Channels]
+      operationId: answerConversationQuestion
+      security: [{operatorSession: []}]
+      summary: Attach one operator answer to its exact pending question
+      description: >-
+        Requires CSRF. The answer becomes a human message in the originating
+        thread. Replaying the same request_id and answer returns the same
+        message; another answer conflicts. It does not authorize a task.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [answer, request_id]
+              properties:
+                answer: {type: string, minLength: 1, maxLength: 2000}
+                request_id: {type: string, minLength: 1, maxLength: 128}
+      responses:
+        "200":
+          description: Answered question
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ConversationQuestion"}
+        "401": {$ref: "#/components/responses/AuthenticationRequired"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+        "422": {$ref: "#/components/responses/InvalidInput"}
+
   /channels:
     get:
       tags: [Channels]
@@ -1289,6 +1893,7 @@ paths:
               required: [body]
               properties:
                 body: { type: string }
+                thread_id: {type: string, description: Optional existing thread in this channel. Applies to the operator endpoint too.}
                 references: { $ref: "#/components/schemas/CanonicalReferences" }
       responses:
         "201":
@@ -2011,6 +2616,31 @@ components:
       type: string
       enum: [low, medium, high, urgent]
 
+    ProjectChannel:
+      type: object
+      required: [project, channels, repository]
+      properties:
+        project:
+          type: object
+          required: [id, name, slug, description, created_at]
+          properties:
+            id: {type: string}
+            name: {type: string}
+            slug: {type: string}
+            description: {type: string}
+            created_at: {type: integer, format: int64}
+        channels: {type: array, items: {$ref: "#/components/schemas/Channel"}}
+        repository: {$ref: "#/components/schemas/RepositoryRequest"}
+    TaskReview:
+      type: object
+      x-fixture: ./fixtures/v1/task-review.json
+      required: [run_id, accepted_by, accepted_at, task_version, source_available]
+      properties:
+        run_id: {type: string}
+        accepted_by: {type: string}
+        accepted_at: {type: integer, format: int64}
+        task_version: {type: integer, minimum: 1}
+        source_available: {type: boolean, description: Operator attestation of base-branch code availability}
     Task:
       type: object
       x-fixture: ./fixtures/v1/task.json
@@ -2028,6 +2658,16 @@ components:
         - created_at
         - updated_at
       properties:
+        review:
+          $ref: "#/components/schemas/TaskReview"
+        depends_on:
+          type: array
+          items: {type: string}
+          description: Same-project task prerequisites; omitted means none.
+        archived:
+          type: boolean
+          default: false
+          description: Hidden from normal operator work views; history remains inspectable. Omitted means false. Restore before editing or reauthorizing.
         workload:
           $ref: "#/components/schemas/WorkloadProfile"
         context: {"$ref": "#/components/schemas/TaskContext"}
@@ -2207,6 +2847,7 @@ components:
 
     Decision:
       type: object
+      x-fixture: ./fixtures/v1/decision.json
       required:
         - id
         - task_id
@@ -2225,6 +2866,12 @@ components:
           type: string
         plan_revision_id:
           type: string
+        interaction_id:
+          type: string
+          description: Exact pending engine operation when this is an engine question.
+        answer_mode:
+          type: string
+          enum: [options, text]
         question:
           type: string
         options:
@@ -2646,7 +3293,66 @@ components:
         name: { type: string }
         created_at: { type: integer, format: int64 }
 
+    ConversationThread:
+      type: object
+      description: Durable channel thread with one canonical root, ordered replies, and zero or more task origins. Thread linkage does not change selected execution context or grant authority. created_at retains the root message timestamp.
+      x-canonical-fixture: ./fixtures/v1/thread.json
+      required: [id, project_id, channel_id, root_message_id, task_ids, created_at]
+      properties:
+        id: {type: string}
+        project_id: {type: string}
+        channel_id: {type: string}
+        root_message_id: {type: string}
+        task_ids: {type: array, items: {type: string}}
+        selected_agent_id: {type: string, description: Configured conversation agent selected by the first invocation}
+        created_at: {type: integer, format: int64}
+
+    ConversationDispatch:
+      type: object
+      x-canonical-fixture: ./fixtures/v1/conversation-dispatch.json
+      required: [event_id, invoked_at, message]
+      properties:
+        event_id: {type: integer, format: int64, minimum: 1}
+        invoked_at: {type: integer, format: int64}
+        message: { $ref: "#/components/schemas/ChannelMessage" }
+
+    ConversationQuestion:
+      type: object
+      x-canonical-fixture: ./fixtures/v1/conversation-question.json
+      required: [id, project_id, channel_id, thread_id, invocation_message_id, agent_id, question_id, message_id, text, choices, status, created_at]
+      properties:
+        id: {type: string}
+        project_id: {type: string}
+        channel_id: {type: string}
+        thread_id: {type: string}
+        invocation_message_id: {type: string}
+        agent_id: {type: string}
+        question_id: {type: string}
+        message_id: {type: string}
+        text: {type: string}
+        choices: {type: array, items: {type: string}}
+        status: {type: string, enum: [pending, answered]}
+        answer_message_id: {type: string}
+        answer: {type: string}
+        answer_request_id: {type: string}
+        answered_by: {type: string}
+        created_at: {type: integer, format: int64}
+        answered_at: {type: integer, format: int64}
+
+    ConversationOutcome:
+      type: object
+      x-canonical-fixture: ./fixtures/v1/conversation-outcome.json
+      required: [invocation_message_id, message_id, status, result_digest]
+      properties:
+        invocation_message_id: {type: string}
+        message_id: {type: string}
+        task_id: {type: string}
+        followup_task_id: {type: string}
+        status: {type: string, enum: [completed, blocked]}
+        result_digest: {type: string}
+
     ChannelMessage:
+      x-canonical-fixture: ./fixtures/v1/channel-message.json
       type: object
       required: [id, channel_id, project_id, author_type, author_id, body, references, created_at]
       properties:
@@ -2657,6 +3363,9 @@ components:
         author_id: { type: string }
         body: { type: string }
         references: { $ref: "#/components/schemas/CanonicalReferences" }
+        thread_id: {type: string, description: Stable thread identity when this message belongs to a thread}
+        invoked_agent_id: {type: string, description: Agent explicitly requested by the operator for this message}
+        invocation_request_id: {type: string, description: Stable replay key for the invocation}
         promoted_task_id: { type: string }
         created_at: { type: integer, format: int64 }
 

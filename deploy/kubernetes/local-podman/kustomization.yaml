@@ -5,5 +5,6 @@ resources:
   - marina-egress.yaml
   - deck-host-ingress.yaml
 patches:
+  - path: deck.yaml
   - path: marina.yaml
   - path: deck-service.yaml

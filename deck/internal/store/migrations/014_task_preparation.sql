@@ -1,0 +1,2 @@
+ALTER TABLE tasks ADD COLUMN review_json TEXT NOT NULL DEFAULT 'null';
+ALTER TABLE tasks ADD COLUMN depends_on_json TEXT NOT NULL DEFAULT '[]';

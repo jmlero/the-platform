@@ -49,3 +49,20 @@ Use a file-configured, high-entropy operator token to establish the initial sing
 ## Replacement criteria
 
 Replace the token exchange with OIDC when the deployment has a stable issuer and callback domain, when more than one human needs distinct authorization, or when centralized MFA and revocation materially reduce risk. Preserve stable operator identity, server-side session revocation, CSRF protection, explicit separation from service credentials, and authenticated audit attribution.
+
+## Local pilot update 2026-09-23
+
+The operator explicitly requested removing token sign-in for the current local
+pilot and removing the header's import, export, operator name, and sign-out
+controls. The local Podman/Kind profiles now leave `DECK_OPERATOR_AUTH_FILE`
+unset, using Deck's existing local operator mode. Keep this preference when
+upgrading the local installation. HTTPS remains bound to localhost:8443, and
+Marina's service authentication and grants remain enabled. Token authentication
+is still available for installations that configure it; this local choice does
+not change the service protocol.
+
+The project import/export API remains available, but is no longer part of the
+browser header. The live connection indicator remains visible.
+
+Implementation and local acceptance are recorded in the
+[validation report](../validation/deck-local-access-2026-09-23.md).

@@ -28,23 +28,37 @@ type portableArtifact struct {
 	CreatedAt int64  `json:"created_at"`
 }
 
+type portableConversationOutcome struct {
+	InvocationMessageID string `json:"invocation_message_id"`
+	MessageID           string `json:"message_id"`
+	TaskID              string `json:"task_id,omitempty"`
+	FollowupTaskID      string `json:"followup_task_id,omitempty"`
+	Status              string `json:"status"`
+	ResultDigest        string `json:"result_digest"`
+	RequestDigest       string `json:"request_digest"`
+	CreatedAt           int64  `json:"created_at"`
+}
+
 type portableBundle struct {
-	ContextSources    []domain.ContextSource    `json:"context_sources,omitempty"`
-	RunContexts       []portableRunContext      `json:"run_contexts,omitempty"`
-	SchemaVersion     string                    `json:"schema_version"`
-	Project           domain.Project            `json:"project"`
-	Agents            []domain.Agent            `json:"agents"`
-	Tasks             []portableTask            `json:"tasks"`
-	Runs              []domain.Run              `json:"runs"`
-	PlanRevisions     []domain.PlanRevision     `json:"plan_revisions"`
-	Decisions         []domain.Decision         `json:"decisions"`
-	Commands          []domain.Command          `json:"commands"`
-	Events            []domain.Event            `json:"events"`
-	Artifacts         []portableArtifact        `json:"artifact_metadata"`
-	Evidence          []domain.EvidenceRecord   `json:"evidence"`
-	Channels          []domain.Channel          `json:"channels"`
-	ChannelMessages   []domain.ChannelMessage   `json:"channel_messages"`
-	OperationalStates []domain.OperationalState `json:"operational_states"`
+	Threads               []domain.ConversationThread   `json:"threads,omitempty"`
+	ConversationQuestions []domain.ConversationQuestion `json:"conversation_questions,omitempty"`
+	ConversationOutcomes  []portableConversationOutcome `json:"conversation_outcomes,omitempty"`
+	ContextSources        []domain.ContextSource        `json:"context_sources,omitempty"`
+	RunContexts           []portableRunContext          `json:"run_contexts,omitempty"`
+	SchemaVersion         string                        `json:"schema_version"`
+	Project               domain.Project                `json:"project"`
+	Agents                []domain.Agent                `json:"agents"`
+	Tasks                 []portableTask                `json:"tasks"`
+	Runs                  []domain.Run                  `json:"runs"`
+	PlanRevisions         []domain.PlanRevision         `json:"plan_revisions"`
+	Decisions             []domain.Decision             `json:"decisions"`
+	Commands              []domain.Command              `json:"commands"`
+	Events                []domain.Event                `json:"events"`
+	Artifacts             []portableArtifact            `json:"artifact_metadata"`
+	Evidence              []domain.EvidenceRecord       `json:"evidence"`
+	Channels              []domain.Channel              `json:"channels"`
+	ChannelMessages       []domain.ChannelMessage       `json:"channel_messages"`
+	OperationalStates     []domain.OperationalState     `json:"operational_states"`
 }
 
 func (s *Store) ExportProject(ctx context.Context, projectID string) ([]byte, error) {
@@ -96,6 +110,19 @@ func (s *Store) ExportProject(ctx context.Context, projectID string) ([]byte, er
 	if bundle.ChannelMessages, err = s.exportChannelMessages(ctx, projectID); err != nil {
 		return nil, err
 	}
+	if bundle.Threads, err = s.exportThreads(ctx, projectID); err != nil {
+		return nil, err
+	}
+	for _, thread := range bundle.Threads {
+		questions, err := s.ListConversationQuestions(ctx, thread.ID)
+		if err != nil {
+			return nil, err
+		}
+		bundle.ConversationQuestions = append(bundle.ConversationQuestions, questions...)
+	}
+	if bundle.ConversationOutcomes, err = s.exportConversationOutcomes(ctx, projectID); err != nil {
+		return nil, err
+	}
 	if bundle.OperationalStates, err = s.exportOperationalStates(ctx, projectID); err != nil {
 		return nil, err
 	}
@@ -124,10 +151,10 @@ func (s *Store) exportAgents(ctx context.Context, projectID string) ([]domain.Ag
 		SELECT DISTINCT a.id, a.installation_id, a.name, a.kind, a.status,
 			a.capabilities_json, a.last_seen_at, a.created_at
 		FROM agents a
-		JOIN runs r ON r.agent_id = a.id
-		JOIN tasks t ON t.id = r.task_id
-		WHERE t.project_id = ? ORDER BY a.id
-	`, projectID)
+		WHERE EXISTS (SELECT 1 FROM runs r JOIN tasks t ON t.id = r.task_id WHERE r.agent_id = a.id AND t.project_id = ?)
+		   OR EXISTS (SELECT 1 FROM conversation_threads c WHERE c.selected_agent_id = a.id AND c.project_id = ?)
+		ORDER BY a.id
+	`, projectID, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("export agents: %w", err)
 	}
@@ -147,14 +174,14 @@ func (s *Store) exportTasks(ctx context.Context, projectID string) ([]portableTa
 		var item portableTask
 		var deadlineAt sql.NullInt64
 		var assignedAgentID sql.NullString
-		var authority, contextJSON, workloadJSON string
+		var authority, contextJSON, workloadJSON, reviewJSON, dependenciesJSON string
 		if err := rows.Scan(
 			&item.Task.ID, &item.Task.ProjectID, &item.Task.Title, &item.Task.Description,
 			&item.Task.AcceptanceCriteria, &item.Task.Status, &item.Task.Priority,
 			&item.Task.BudgetMinutes, &deadlineAt, &item.Task.Budget.MaxAttempts,
 			&item.Task.Budget.MaxTokens, &item.Task.Budget.MaxCostMinor, &item.Task.Budget.Currency,
 			&item.Task.Budget.MaxConcurrency, &authority, &assignedAgentID, &item.Task.Version,
-			&item.Task.CreatedAt, &item.Task.UpdatedAt, &contextJSON, &workloadJSON, &item.NextFenceToken,
+			&item.Task.CreatedAt, &item.Task.UpdatedAt, &contextJSON, &workloadJSON, &item.Task.Archived, &reviewJSON, &dependenciesJSON, &item.NextFenceToken,
 		); err != nil {
 			return nil, fmt.Errorf("scan export task: %w", err)
 		}
@@ -162,6 +189,12 @@ func (s *Store) exportTasks(ctx context.Context, projectID string) ([]portableTa
 			return nil, err
 		}
 		if err := json.Unmarshal([]byte(workloadJSON), &item.Task.Workload); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(reviewJSON), &item.Task.Review); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(dependenciesJSON), &item.Task.DependsOn); err != nil {
 			return nil, err
 		}
 		item.Task.Budget.TimeMinutes = item.Task.BudgetMinutes
@@ -213,7 +246,8 @@ func (s *Store) exportDecisions(ctx context.Context, projectID string) ([]domain
 		SELECT d.id, d.task_id, d.run_id, d.plan_revision_id, d.question, d.options_json,
 			d.recommendation, d.risk_class, d.evidence_summary, d.estimated_cost_minor,
 			d.currency, d.waiting_consequence, d.rejecting_consequence, d.status,
-			d.answer, d.expires_at, d.created_at, d.answered_at, d.answered_by
+			d.answer, d.expires_at, d.created_at, d.answered_at, d.answered_by,
+			d.interaction_id, d.answer_mode
 		FROM decisions d JOIN tasks t ON t.id = d.task_id
 		WHERE t.project_id = ? ORDER BY d.id
 	`, projectID)
@@ -240,8 +274,10 @@ func (s *Store) exportEvents(ctx context.Context, projectID string) ([]domain.Ev
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT e.id, e.task_id, e.run_id, e.agent_id, e.type, e.message, e.payload_json, e.created_at
 		FROM events e LEFT JOIN tasks t ON t.id = e.task_id
-		WHERE t.project_id = ? ORDER BY e.id
-	`, projectID)
+		WHERE t.project_id = ?
+		   OR (e.type = 'conversation.agent.invoked' AND json_extract(e.payload_json, '$.project_id') = ?)
+		ORDER BY e.id
+	`, projectID, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("export events: %w", err)
 	}
@@ -288,7 +324,7 @@ func (s *Store) exportEvidence(ctx context.Context, projectID string) ([]domain.
 func (s *Store) exportChannelMessages(ctx context.Context, projectID string) ([]domain.ChannelMessage, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, channel_id, project_id, author_type, author_id, body,
-			references_json, promoted_task_id, created_at
+			references_json, promoted_task_id, created_at, thread_id, invoked_agent_id, invocation_request_id
 		FROM channel_messages WHERE project_id = ? ORDER BY channel_id, rowid
 	`, projectID)
 	if err != nil {
@@ -325,7 +361,7 @@ func (s *Store) ImportProject(ctx context.Context, encoded []byte) error {
 	}
 	defer tx.Rollback()
 	var existing int
-	if err := tx.QueryRowContext(ctx, "SELECT (SELECT COUNT(*) FROM tasks WHERE project_id = ?) + (SELECT COUNT(*) FROM context_sources WHERE project_id = ?)", bundle.Project.ID, bundle.Project.ID).Scan(&existing); err != nil {
+	if err := tx.QueryRowContext(ctx, "SELECT (SELECT COUNT(*) FROM tasks WHERE project_id = ?) + (SELECT COUNT(*) FROM context_sources WHERE project_id = ?) + (SELECT COUNT(*) FROM channels WHERE project_id = ?)", bundle.Project.ID, bundle.Project.ID, bundle.Project.ID).Scan(&existing); err != nil {
 		return fmt.Errorf("inspect import target: %w", err)
 	}
 	if existing != 0 {
@@ -355,14 +391,14 @@ func (s *Store) ImportProject(ctx context.Context, encoded []byte) error {
 				id, project_id, title, description, acceptance_criteria, status, priority,
 				budget_minutes, deadline_at, max_attempts, max_tokens, max_cost_minor,
 				currency, max_concurrency, authority_json, assigned_agent_id, version,
-				next_fence_token, created_at, updated_at, context_json, workload_json
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				next_fence_token, created_at, updated_at, context_json, workload_json, archived, review_json, depends_on_json
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`, task.ID, task.ProjectID, task.Title, task.Description, task.AcceptanceCriteria,
 			task.Status, task.Priority, task.BudgetMinutes, nullableInt64(task.Budget.DeadlineAt),
 			task.Budget.MaxAttempts, task.Budget.MaxTokens, task.Budget.MaxCostMinor,
 			task.Budget.Currency, task.Budget.MaxConcurrency, marshalJSON(task.Budget.Authority),
 			nullableString(task.AssignedAgentID), task.Version, portable.NextFenceToken,
-			task.CreatedAt, task.UpdatedAt, marshalJSON(task.Context), marshalJSON(task.Workload)); err != nil {
+			task.CreatedAt, task.UpdatedAt, marshalJSON(task.Context), marshalJSON(task.Workload), task.Archived, marshalJSON(task.Review), marshalJSON(task.DependsOn)); err != nil {
 			return fmt.Errorf("import task %s: %w", task.ID, err)
 		}
 	}
@@ -393,18 +429,22 @@ func (s *Store) ImportProject(ctx context.Context, encoded []byte) error {
 		}
 	}
 	for _, decision := range bundle.Decisions {
+		if decision.AnswerMode == "" {
+			decision.AnswerMode = "options"
+		}
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO decisions (
 				id, task_id, run_id, plan_revision_id, question, options_json, recommendation,
 				risk_class, evidence_summary, estimated_cost_minor, currency, waiting_consequence,
-				rejecting_consequence, status, answer, expires_at, created_at, answered_at, answered_by
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				rejecting_consequence, status, answer, expires_at, created_at, answered_at, answered_by,
+				interaction_id, answer_mode
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`, decision.ID, decision.TaskID, nullableString(decision.RunID), nullableText(decision.PlanRevisionID),
 			decision.Question, marshalJSON(decision.Options), decision.Recommendation,
 			decision.RiskClass, decision.EvidenceSummary, decision.EstimatedCostMinor, decision.Currency,
 			decision.WaitingConsequence, decision.RejectingConsequence, decision.Status, decision.Answer,
 			nullableInt64(decision.ExpiresAt), decision.CreatedAt, nullableInt64(decision.AnsweredAt),
-			decision.AnsweredBy); err != nil {
+			decision.AnsweredBy, decision.InteractionID, decision.AnswerMode); err != nil {
 			return fmt.Errorf("import decision %s: %w", decision.ID, err)
 		}
 	}
@@ -456,12 +496,72 @@ func (s *Store) ImportProject(ctx context.Context, encoded []byte) error {
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO channel_messages (
 				id, channel_id, project_id, author_type, author_id, body,
-				references_json, promoted_task_id, created_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+				references_json, promoted_task_id, created_at, invoked_agent_id, invocation_request_id
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`, message.ID, message.ChannelID, message.ProjectID, message.AuthorType, message.AuthorID,
 			message.Body, marshalJSON(message.References), nullableString(message.PromotedTaskID),
-			message.CreatedAt); err != nil {
+			message.CreatedAt, message.InvokedAgentID, nullableText(message.InvocationRequestID)); err != nil {
 			return fmt.Errorf("import channel message %s: %w", message.ID, err)
+		}
+	}
+	if err := importThreads(ctx, tx, bundle); err != nil {
+		return fmt.Errorf("import threads: %w", err)
+	}
+	for _, q := range bundle.ConversationQuestions {
+		if q.ID == "" || q.ProjectID != bundle.Project.ID || q.QuestionID == "" || q.Text == "" || q.Status != "pending" && q.Status != "answered" {
+			return fmt.Errorf("invalid imported conversation question: %w", domain.ErrInvalidInput)
+		}
+		if q.Status == "pending" && (q.AnswerMessageID != "" || q.Answer != "" || q.AnswerRequestID != "" || q.AnsweredBy != "" || q.AnsweredAt != 0) {
+			return fmt.Errorf("pending conversation question has an answer: %w", domain.ErrInvalidInput)
+		}
+		var invocation domain.ChannelMessage
+		invocation, err = scanChannelMessage(tx.QueryRowContext(ctx, "SELECT "+channelMessageColumns+" FROM channel_messages WHERE id=?", q.InvocationMessageID))
+		if err != nil || invocation.ProjectID != q.ProjectID || invocation.ChannelID != q.ChannelID || invocation.ThreadID != q.ThreadID || invocation.InvokedAgentID != q.AgentID {
+			return fmt.Errorf("conversation question origin mismatch: %w", domain.ErrInvalidInput)
+		}
+		var questionMessage domain.ChannelMessage
+		questionMessage, err = scanChannelMessage(tx.QueryRowContext(ctx, "SELECT "+channelMessageColumns+" FROM channel_messages WHERE id=?", q.MessageID))
+		if err != nil || questionMessage.ProjectID != q.ProjectID || questionMessage.ThreadID != q.ThreadID || questionMessage.AuthorType != "agent" || questionMessage.AuthorID != q.AgentID || questionMessage.Body != q.Text {
+			return fmt.Errorf("conversation question message mismatch: %w", domain.ErrInvalidInput)
+		}
+		if q.Status == "answered" {
+			answerMessage, err := scanChannelMessage(tx.QueryRowContext(ctx, "SELECT "+channelMessageColumns+" FROM channel_messages WHERE id=?", q.AnswerMessageID))
+			if err != nil || answerMessage.ProjectID != q.ProjectID || answerMessage.ThreadID != q.ThreadID || answerMessage.AuthorType != "human" || answerMessage.AuthorID != q.AnsweredBy || answerMessage.Body != q.Answer || q.AnswerRequestID == "" || q.AnsweredAt <= 0 {
+				return fmt.Errorf("conversation answer message mismatch: %w", domain.ErrInvalidInput)
+			}
+		}
+		var answeredAt any
+		if q.Status == "answered" {
+			answeredAt = q.AnsweredAt
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO conversation_questions ("+conversationQuestionColumns+") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", q.ID, q.ProjectID, q.ChannelID, q.ThreadID, q.InvocationMessageID, q.AgentID, q.QuestionID, q.MessageID, q.Text, marshalJSON(q.Choices), q.Status, nullableText(q.AnswerMessageID), q.Answer, nullableText(q.AnswerRequestID), q.AnsweredBy, q.CreatedAt, answeredAt); err != nil {
+			return fmt.Errorf("import conversation question %s: %w", q.ID, err)
+		}
+	}
+	for _, outcome := range bundle.ConversationOutcomes {
+		var invocation, reply domain.ChannelMessage
+		invocation, err = scanChannelMessage(tx.QueryRowContext(ctx, "SELECT "+channelMessageColumns+" FROM channel_messages WHERE id=?", outcome.InvocationMessageID))
+		if err != nil {
+			return fmt.Errorf("conversation outcome invocation missing: %w", domain.ErrInvalidInput)
+		}
+		reply, err = scanChannelMessage(tx.QueryRowContext(ctx, "SELECT "+channelMessageColumns+" FROM channel_messages WHERE id=?", outcome.MessageID))
+		if err != nil || invocation.ProjectID != bundle.Project.ID || invocation.AuthorType != "human" || invocation.InvokedAgentID == "" || reply.ProjectID != invocation.ProjectID || reply.ThreadID != invocation.ThreadID || reply.AuthorType != "agent" || reply.AuthorID != invocation.InvokedAgentID || outcome.RequestDigest == "" || outcome.ResultDigest == "" {
+			return fmt.Errorf("conversation outcome identity mismatch: %w", domain.ErrInvalidInput)
+		}
+		if outcome.TaskID != "" {
+			var origin string
+			if err := tx.QueryRowContext(ctx, "SELECT thread_id FROM thread_tasks WHERE task_id=?", outcome.TaskID).Scan(&origin); err != nil || origin != invocation.ThreadID || invocation.PromotedTaskID == nil || *invocation.PromotedTaskID != outcome.TaskID {
+				return fmt.Errorf("conversation outcome task mismatch: %w", domain.ErrInvalidInput)
+			}
+		}
+		if outcome.FollowupTaskID != "" {
+			var origin string
+			if err := tx.QueryRowContext(ctx, "SELECT thread_id FROM thread_tasks WHERE task_id=?", outcome.FollowupTaskID).Scan(&origin); err != nil || origin != invocation.ThreadID || outcome.TaskID == "" {
+				return fmt.Errorf("conversation follow-up mismatch: %w", domain.ErrInvalidInput)
+			}
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO conversation_outcomes(invocation_message_id,message_id,task_id,followup_task_id,status,result_digest,request_digest,created_at) VALUES (?,?,?,?,?,?,?,?)", outcome.InvocationMessageID, outcome.MessageID, nullableText(outcome.TaskID), nullableText(outcome.FollowupTaskID), outcome.Status, outcome.ResultDigest, outcome.RequestDigest, outcome.CreatedAt); err != nil {
+			return fmt.Errorf("import conversation outcome: %w", err)
 		}
 	}
 	for _, state := range bundle.OperationalStates {
@@ -485,6 +585,28 @@ func (s *Store) ImportProject(ctx context.Context, encoded []byte) error {
 		`, event.ID, nullableString(event.TaskID), nullableString(event.RunID), nullableString(event.AgentID),
 			event.Type, event.Message, marshalJSON(event.Payload), event.CreatedAt); err != nil {
 			return fmt.Errorf("import event %d: %w", event.ID, err)
+		}
+	}
+	for _, item := range bundle.Tasks {
+		task := item.Task
+		for _, id := range task.DependsOn {
+			dep, err := getTaskTx(ctx, tx, id)
+			if err != nil || dep.ProjectID != task.ProjectID {
+				return fmt.Errorf("invalid imported dependency: %w", domain.ErrInvalidInput)
+			}
+			cycle, err := dependencyReaches(ctx, tx, id, task.ID, map[string]bool{})
+			if err != nil || cycle {
+				return fmt.Errorf("invalid imported dependency graph: %w", domain.ErrInvalidInput)
+			}
+		}
+		if task.Review != nil {
+			var count int
+			if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM runs WHERE id = ? AND task_id = ? AND status = 'completed'", task.Review.RunID, task.ID).Scan(&count); err != nil {
+				return err
+			}
+			if count != 1 || task.Status != domain.TaskDone || task.Review.AcceptedBy == "" || task.Review.AcceptedAt <= 0 {
+				return fmt.Errorf("invalid imported acceptance: %w", domain.ErrInvalidInput)
+			}
 		}
 	}
 	if err := importContext(ctx, tx, bundle); err != nil {

@@ -1,0 +1,12 @@
+{
+  "id": "msg_example",
+  "channel_id": "chn_example",
+  "project_id": "prj_default",
+  "thread_id": "thr_example",
+  "author_type": "human",
+  "author_id": "operator:primary",
+  "body": "Investigate the login failure.",
+  "references": {},
+  "promoted_task_id": "tsk_example",
+  "created_at": 1790121600000
+}

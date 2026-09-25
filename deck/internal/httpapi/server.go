@@ -108,6 +108,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/operator/session", s.createOperatorSession)
 	mux.HandleFunc("GET /api/v1/operator/session", s.requireOperator(s.getOperatorSession))
 	mux.HandleFunc("DELETE /api/v1/operator/session", s.requireOperator(s.deleteOperatorSession))
+	mux.HandleFunc("POST /api/v1/operator/tasks/{id}/accept", s.requireOperator(s.acceptTask))
+	mux.HandleFunc("PUT /api/v1/operator/tasks/{id}/dependencies", s.requireOperator(s.setTaskDependencies))
+	mux.HandleFunc("GET /api/v1/operator/projects", s.requireOperator(s.projectChannels))
+	mux.HandleFunc("POST /api/v1/operator/projects", s.requireOperator(s.createProjectChannel))
 	mux.HandleFunc("GET /api/v1/bootstrap", s.requireOperator(s.bootstrap))
 	mux.HandleFunc("GET /api/v1/tasks", s.requireService(capabilityWorkReadyList, s.listTasks))
 	mux.HandleFunc("POST /api/v1/tasks", s.requireOperator(s.createTask))
@@ -120,6 +124,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/agents", s.requireService(capabilityAgentRegister, s.registerAgent))
 	mux.HandleFunc("POST /api/v1/runs/{id}/heartbeat", s.requireService(capabilityLeaseRenew, s.heartbeatRun))
 	mux.HandleFunc("POST /api/v1/runs/{id}/plan", s.requireService(capabilityPlanSubmit, s.submitPlan))
+	mux.HandleFunc("POST /api/v1/runs/{id}/questions", s.requireService(capabilityDecisionRequest, s.requestEngineQuestion))
 	mux.HandleFunc("POST /api/v1/runs/{id}/start", s.requireService(capabilityRunStart, s.runTransition(s.store.StartRun)))
 	mux.HandleFunc("POST /api/v1/runs/{id}/progress", s.requireService(capabilityProgressAppend, s.reportProgress))
 	mux.HandleFunc("POST /api/v1/runs/{id}/verify", s.requireService(capabilityRunVerify, s.runTransition(s.store.BeginVerification)))
@@ -133,6 +138,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/runs/{id}/operations", s.requireService(capabilityOperationReport, s.reportOperationalState))
 	mux.HandleFunc("GET /api/v1/channels", s.requireService(capabilityChannelList, s.listChannels))
 	mux.HandleFunc("GET /api/v1/channels/{id}/messages", s.requireService(capabilityChannelRead, s.listChannelMessages))
+	mux.HandleFunc("GET /api/v1/conversation/invocations", s.requireService(capabilityConversationList, s.listConversationInvocations))
+	mux.HandleFunc("POST /api/v1/conversation/outcomes", s.requireService(capabilityConversationOutcome, s.publishConversationOutcome))
+	mux.HandleFunc("POST /api/v1/conversation/delegations", s.requireService(capabilityConversationDelegate, s.publishConversationOutcome))
+	mux.HandleFunc("POST /api/v1/conversation/questions", s.requireService(capabilityConversationQuestion, s.ensureConversationQuestion))
+	mux.HandleFunc("GET /api/v1/operator/threads/{id}/questions", s.requireOperator(s.listConversationQuestions))
+	mux.HandleFunc("POST /api/v1/operator/conversation/questions/{id}/answer", s.requireOperator(s.answerConversationQuestion))
 	mux.HandleFunc("POST /api/v1/channels/{id}/messages", s.requireService(capabilityChannelMessage, s.postChannelMessage))
 	mux.HandleFunc("GET /api/v1/decisions", s.requireService(capabilityDecisionList, s.listDecisions))
 	mux.HandleFunc("GET /api/v1/decisions/{id}", s.requireService(capabilityDecisionInspect, s.getDecision))
@@ -140,11 +151,20 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/events", s.requireService(capabilityEventList, s.listEvents))
 	mux.HandleFunc("GET /api/v1/events/stream", s.requireService(capabilityEventStream, s.streamEvents))
 
+	mux.HandleFunc("DELETE /api/v1/operator/tasks/{id}", s.requireOperator(s.deleteDraft))
+	mux.HandleFunc("PUT /api/v1/operator/tasks/{id}/archive", s.requireOperator(s.setTaskArchived))
 	mux.HandleFunc("GET /api/v1/operator/tasks/{id}", s.requireOperator(s.getTask))
 	mux.HandleFunc("GET /api/v1/operator/tasks/{id}/artifacts/{digest}", s.requireOperator(s.downloadArtifact))
 	mux.HandleFunc("POST /api/v1/operator/decisions/{id}/answer", s.requireOperator(s.answerDecision))
 	mux.HandleFunc("POST /api/v1/operator/runs/{id}/commands", s.requireOperator(s.createOperatorCommand))
 	mux.HandleFunc("GET /api/v1/operator/events/stream", s.requireOperator(s.streamEvents))
+	mux.HandleFunc("GET /api/v1/operator/channels/{id}/threads", s.requireOperator(s.listThreads))
+	mux.HandleFunc("POST /api/v1/operator/channels/{id}/threads", s.requireOperator(s.createThread))
+	mux.HandleFunc("POST /api/v1/operator/channels/{id}/invocations", s.requireOperator(s.invokeConversation))
+	mux.HandleFunc("GET /api/v1/operator/threads/{id}", s.requireOperator(s.getThread))
+	mux.HandleFunc("GET /api/v1/operator/threads/{id}/messages", s.requireOperator(s.listThreadMessages))
+	mux.HandleFunc("POST /api/v1/operator/threads/{id}/tasks", s.requireOperator(s.linkThreadTask))
+	mux.HandleFunc("GET /api/v1/operator/tasks/{id}/thread", s.requireOperator(s.getTaskThread))
 	mux.HandleFunc("GET /api/v1/operator/channels", s.requireOperator(s.listChannels))
 	mux.HandleFunc("POST /api/v1/operator/channels", s.requireOperator(s.createChannel))
 	mux.HandleFunc("GET /api/v1/operator/channels/{id}/messages", s.requireOperator(s.listChannelMessages))
@@ -507,6 +527,7 @@ func (s *Server) postChannelMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input struct {
+		ThreadID   string                     `json:"thread_id"`
 		Body       string                     `json:"body"`
 		References domain.CanonicalReferences `json:"references"`
 	}
@@ -519,7 +540,7 @@ func (s *Server) postChannelMessage(w http.ResponseWriter, r *http.Request) {
 		authorType, authorID = "human", "operator:"+operatorID.OperatorID
 	}
 	message, err := s.store.PostChannelMessage(r.Context(), domain.ChannelMessageInput{
-		ChannelID: channel.ID, AuthorType: authorType, AuthorID: authorID,
+		ChannelID: channel.ID, ThreadID: input.ThreadID, AuthorType: authorType, AuthorID: authorID,
 		Body: input.Body, References: input.References,
 	})
 	if err != nil {
@@ -703,6 +724,20 @@ func (s *Server) listTasks(w http.ResponseWriter, r *http.Request) {
 	tasks = filterTasksForServiceIdentity(r, tasks)
 	if status != "" {
 		tasks = slices.DeleteFunc(tasks, func(task domain.Task) bool { return task.Status != status })
+		if status == domain.TaskReady {
+			eligible := make([]domain.Task, 0, len(tasks))
+			for _, task := range tasks {
+				ready, err := s.store.TaskDependenciesSatisfied(r.Context(), task.ID)
+				if err != nil {
+					s.writeError(w, err)
+					return
+				}
+				if ready && !task.Archived {
+					eligible = append(eligible, task)
+				}
+			}
+			tasks = eligible
+		}
 	}
 	writeJSON(w, http.StatusOK, tasks)
 }
@@ -916,6 +951,32 @@ func (s *Server) submitPlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"plan_revision": revision, "decision": decision})
+}
+
+func (s *Server) requestEngineQuestion(w http.ResponseWriter, r *http.Request) {
+	if !s.requireRunProject(w, r, r.PathValue("id")) {
+		return
+	}
+	var input struct {
+		store.RunGuard
+		domain.EngineQuestion
+	}
+	if err := readJSON(r, &input); err != nil {
+		s.writeError(w, err)
+		return
+	}
+	mutation, err := mutationFromRequest(r)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	mutation.Guard = &input.RunGuard
+	decision, err := s.store.RequestEngineQuestion(r.Context(), mutation, r.PathValue("id"), input.EngineQuestion)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, decision)
 }
 
 func (s *Server) reportProgress(w http.ResponseWriter, r *http.Request) {

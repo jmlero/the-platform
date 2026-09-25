@@ -16,6 +16,7 @@ check-installation:
 	python3 -m unittest discover -s scripts -p 'test_*.py'
 
 conformance:
+	$(MAKE) -C deck conformance
 	$(MAKE) -C cli conformance-deck DECK_REPO="$(DECK_REPO)"
 	$(MAKE) -C marina conformance-deck DECK_REPO="$(DECK_REPO)"
 

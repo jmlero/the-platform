@@ -1,5 +1,5 @@
 import type {
-  ContextSource, ContextSourceInput, ResolvedContext, RepositoryRequest, RepositoryRequestInput,
+  ProjectChannel, ConversationThread, ConversationInvocation, ConversationQuestion, ContextSource, ContextSourceInput, ResolvedContext, RepositoryRequest, RepositoryRequestInput,
   AppEvent,
   Bootstrap,
   Channel,
@@ -63,6 +63,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+ projects: () => request<ProjectChannel[]>('/api/v1/operator/projects'),
+ createProject: (repository:string, base_branch:string) => request<ProjectChannel>('/api/v1/operator/projects', {method:'POST',body:JSON.stringify({repository,base_branch})}),
+ acceptTask: (task:Task, source_available:boolean) => request<Task>(`/api/v1/operator/tasks/${task.id}/accept`, {method:'POST',body:JSON.stringify({version:task.version,source_available})}),
+ dependencies: (task:Task, depends_on:string[]) => request<Task>(`/api/v1/operator/tasks/${task.id}/dependencies`,{method:'PUT',body:JSON.stringify({version:task.version,depends_on})}),
+ createThread: (channel:string,message:string) => request<ConversationThread>(`/api/v1/operator/channels/${channel}/threads`,{method:'POST',body:JSON.stringify({root_message_id:message})}),
+ getThread: (id:string) => request<ConversationThread>(`/api/v1/operator/threads/${encodeURIComponent(id)}`),
+ invokeConversation: (channel:string, input:{agent_id:string;request_id:string;body?:string;thread_id?:string;message_id?:string}) => request<ConversationInvocation>(`/api/v1/operator/channels/${encodeURIComponent(channel)}/invocations`,{method:'POST',body:JSON.stringify(input)}),
+ conversationQuestions: (thread:string) => request<{items:ConversationQuestion[]}>(`/api/v1/operator/threads/${encodeURIComponent(thread)}/questions`),
+ answerConversationQuestion: (id:string,answer:string,request_id:string) => request<ConversationQuestion>(`/api/v1/operator/conversation/questions/${encodeURIComponent(id)}/answer`,{method:'POST',body:JSON.stringify({answer,request_id})}),
+
  repository: (projectID = 'prj_default') => request<RepositoryRequest>(`/api/v1/operator/projects/${encodeURIComponent(projectID)}/repository`),
  requestRepository: (input: RepositoryRequestInput, projectID = 'prj_default') => request<RepositoryRequest>(`/api/v1/operator/projects/${encodeURIComponent(projectID)}/repository`, {method: 'PUT', body: JSON.stringify(input)}),
   contextSources: (project = 'prj_default') => request<ContextSource[]>(`/api/v1/operator/projects/${encodeURIComponent(project)}/context/sources`),
@@ -80,6 +90,8 @@ export const api = {
   bootstrap: () => request<Bootstrap>('/api/v1/bootstrap'),
   task: (id: string) => request<TaskDetail>(`/api/v1/operator/tasks/${id}`),
   cancelRun: (id: string) => request<unknown>(`/api/v1/operator/runs/${id}/commands`, {method:'POST', body:JSON.stringify({type:'cancel',reason:'Operator cancelled from task details'})}),
+  deleteDraft: (task: Task) => request<void>(`/api/v1/operator/tasks/${task.id}`, {method: 'DELETE', body: JSON.stringify({version: task.version})}),
+  archiveTask: (task: Task, archived: boolean) => request<Task>(`/api/v1/operator/tasks/${task.id}/archive`, {method: 'PUT', body: JSON.stringify({version: task.version, archived})}),
   createTask: (input: CreateTaskInput) =>
     request<Task>('/api/v1/tasks', { method: 'POST', body: JSON.stringify(input) }),
   updateTask: (id: string, input: UpdateTaskInput) =>
@@ -101,10 +113,10 @@ export const api = {
     }),
   channelMessages: (channelID: string, cursor = '') =>
     request<{ items: ChannelMessage[]; next_cursor?: string }>(`/api/v1/operator/channels/${channelID}/messages${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`),
-  postChannelMessage: (channelID: string, body: string, references: CanonicalReferences = {}) =>
+  postChannelMessage: (channelID: string, body: string, references: CanonicalReferences = {}, thread_id = '') =>
     request<ChannelMessage>(`/api/v1/operator/channels/${channelID}/messages`, {
       method: 'POST',
-      body: JSON.stringify({ body, references })
+      body: JSON.stringify({ body, references, thread_id })
     }),
   promoteMessage: (messageID: string, input: CreateTaskInput) =>
     request<Task>(`/api/v1/operator/messages/${messageID}/promote`, {

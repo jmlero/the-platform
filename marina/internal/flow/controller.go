@@ -53,6 +53,10 @@ type state struct {
 	Branch               string
 	PlanID               string
 	DecisionID           string
+	QuestionID           string `json:",omitempty"`
+	QuestionDecisionID   string `json:",omitempty"`
+	QuestionRunVersion   int64  `json:",omitempty"`
+	EngineStatus         string `json:",omitempty"`
 	Implementer          string
 	Verifier             string
 	ImplementationDigest string
@@ -95,6 +99,9 @@ func (c *Controller) save(ctx context.Context, e execution.Execution, s state) e
 	}
 	if s.Reason != "" {
 		message = s.Reason
+	}
+	if (s.Step == "implement" || s.Step == "analyze") && s.EngineStatus != "" && s.Reason == "" {
+		message = "Engine " + strings.TrimPrefix(strings.ToLower(s.EngineStatus), "task_state_")
 	}
 	if s.Analysis != nil && s.Reason == "" {
 		message = map[string]string{
@@ -415,6 +422,9 @@ func (c *Controller) advance(ctx context.Context, e execution.Execution) error {
 		attempt, done, result, digest, err := c.worker(ctx, e, task, s, stage)
 		if err != nil {
 			if errors.Is(err, errInvalidWorkerResult) {
+				return c.block(ctx, e, r, err.Error())
+			}
+			if errors.Is(err, errEngineQuestionStopped) {
 				return c.block(ctx, e, r, err.Error())
 			}
 			return err

@@ -9,9 +9,7 @@ This project starts from scratch as a new Kubernetes-based concept. Experience f
 
 It is single-operator first. Deck over HTTP/JSON is the supported work-control provider. Headless and in-process alternatives remain future packaging; work-control surfaces, agent harnesses, runtimes, context sources, policy and verification systems, delivery integrations, and platform services remain replaceable behind governed contracts.
 
-Read the root [Marina vision](../VISION.md) for the product vision, its relationship with Deck, the experience brought from `platform-marina`, the Kubernetes-native platform and extensibility thesis, and the questions still to resolve.
-
-Read [DARK_FACTORY.md](../DARK_FACTORY.md) for the precise meaning of a dark software factory in Marina.
+Read the root [VISION.md](../VISION.md), the reference for the current state, the product vision and the dark-factory goal.
 
 Read [the root architecture](../ARCHITECTURE.md) for the joint Deck–Marina component boundaries, source-of-truth rules, lifecycle protocol, failure semantics, and delivery gates.
 
@@ -31,6 +29,22 @@ retains the agent-free clean verifier.
 The [KINT-06 local pilot](../docs/validation/kint-06-2026-09-23.md) selected
 native Codex for one Deck-authorized repository task and reached a verified PR.
 The trial profile was removed afterward; regular intake uses the original image.
+
+An optional pinned conversation profile now consumes Deck's ordered explicit
+agent invocation feed through a read-only kagent BYO actor. It freezes the selected thread
+context, permits one governed model call, and retains a bounded result artifact.
+It requires one prepared, attempt-exclusive template per turn. Engine questions
+are written to the originating Deck thread, and one answer is sent to the same
+waiting attempt. The service identity needs `conversation.question.write` in
+addition to invocation and channel read grants. Terminal turns publish one
+canonical Deck reply and optional bounded task; the exact publication survives
+lost responses and restart. Ready delegation needs a separately configured
+repository budget and `conversation.task.delegate` grant. Replies and drafts
+need `conversation.outcome.publish`. Local engine/model and browser acceptance
+remain pending; see
+[CHAT-04 evidence](../docs/validation/chat-04-2026-09-23.md) and
+[CHAT-05 evidence](../docs/validation/chat-05-2026-09-23.md), and
+[CHAT-06–08 evidence](../docs/validation/chat-06-08-2026-09-25.md).
 
 The following implementations and reusable foundations are present; the configured repository workflow below uses a narrower subset:
 

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { taskLabel } from '$lib/project-work';
   import WorkloadDetails from './WorkloadDetails.svelte';
   import TaskContextPanel from './TaskContextPanel.svelte';
   import { modal } from '$lib/dialog';
@@ -33,16 +34,22 @@
 
   export let detail: TaskDetail;
   export let agents: Agent[] = [];
+  export let projectTasks: Task[] = [];
+  let dependencyIDs: string[] = [];
+  let sourceAvailable = false;
   export let onclose: () => void;
   export let onrefresh: () => Promise<void>;
   export let onmove: (task: Task, status: TaskStatus) => Promise<void>;
   export let onsave: (task: Task, input: UpdateTaskInput) => Promise<void>;
+  export let onretention: (task: Task, action: 'delete' | 'archive' | 'restore') => Promise<void>;
   export let onanswer: (decision: Decision, answer: string) => Promise<void>;
 
   let tab: 'overview' | 'activity' | 'evidence' | 'context' = 'overview';
   let editing = false;
+  let confirmingDelete = false;
   let busy = false;
   let error = '';
+  let questionAnswer = '';
   let loadedID = '';
   let title = '';
   let description = '';
@@ -67,6 +74,15 @@
 
   $: task = detail.task;
   $: run = detail.runs[0];
+  $: canDelete = !task.archived && task.status === 'backlog' && detail.runs.length === 0 && !task.workload;
+  $: canArchive = ['backlog', 'done', 'blocked', 'failed', 'cancelled'].includes(task.status) && !detail.runs.some((item) => ['planning', 'waiting_decision', 'running', 'verifying'].includes(item.status));
+
+  async function retain(action: 'delete' | 'archive' | 'restore') {
+    busy = true; error = '';
+    try { await onretention(task, action); confirmingDelete = false; }
+    catch (caught) { error = caught instanceof Error ? caught.message : 'Could not update the task.'; }
+    finally { busy = false; }
+  }
   $: resultURL = run?.result_summary.match(/https:\/\/[^\s)]+/)?.[0];
   $: analysisWorkload = task.workload?.id === 'diagnostic-analysis/v1' || task.budget.authority.some((grant) => grant.startsWith('analysis.run.'));
   $: analysisEvidence = detail.evidence.find((evidence) => evidence.run_id === run?.id && evidence.outcome === 'passed' && evidence.command === 'marina diagnostic-validator/v1');
@@ -90,12 +106,16 @@
     maxConcurrency = task.budget.max_concurrency;
     authority = task.budget.authority.join(', ');
     deadline = deadlineForInput(task.budget.deadline_at);
+    dependencyIDs = task.depends_on ?? [];
+    sourceAvailable = task.review?.source_available ?? false;
     editing = false;
+    confirmingDelete = false;
     tab = 'overview';
     error = '';
   }
 
   function targetStatus(current: TaskStatus): TaskStatus | null {
+    if (task.archived) return null;
     if (current === 'backlog') return 'ready';
     if (current === 'ready') return 'backlog';
     if (['blocked', 'failed', 'cancelled', 'done'].includes(current)) return 'ready';
@@ -173,6 +193,18 @@
   }
 
 
+  async function acceptResult() {
+    busy=true;error='';
+    try { await api.acceptTask(task,sourceAvailable); await onrefresh(); }
+    catch(caught) { error=caught instanceof Error?caught.message:'Could not accept result.'; }
+    finally {busy=false;}
+  }
+  async function saveDependencies() {
+    busy=true;error='';
+    try { await api.dependencies(task,dependencyIDs); await onrefresh(); }
+    catch(caught) {error=caught instanceof Error?caught.message:'Could not save dependencies.';}
+    finally {busy=false;}
+  }
   function displayLabel(value: string): string {
     return value.split('-').map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(' ');
   }
@@ -185,7 +217,7 @@
         <span>DECK</span><ChevronRight size={12} /><span>{task.id.slice(-6).toUpperCase()}</span>
       </div>
       <div class="header-actions">
-        {#if !editing}
+        {#if !editing && !task.archived && task.status !== 'done'}
           <button type="button" on:click={() => (editing = true)} aria-label="Edit task">
             <Pencil size={15} />
           </button>
@@ -199,7 +231,8 @@
     <div class="drawer-scroll">
       <section class="task-heading">
         <div class="status-line">
-          <span class="status status-{task.status}"><i></i>{displayLabel(detail.display_state)}</span>
+          <span class="status status-{task.status}"><i></i>{taskLabel(task)}</span>
+          {#if task.archived}<span class="status">Archived</span>{/if}
           <span class="priority priority-{task.priority}">{task.priority} priority</span>
         </div>
 
@@ -221,7 +254,7 @@
         </div>
       </section>
 
-      <section class="provider-truth state-{detail.provider_status.connectivity}">
+      <details class="technical"><summary>Execution details</summary><section class="provider-truth state-{detail.provider_status.connectivity}">
         <div><span>Provider</span><strong>{detail.provider_status.connectivity}</strong></div>
         <div><span>Synchronization</span><strong>{detail.provider_status.sync_state}</strong><small>{Math.round(detail.provider_status.sync_lag_millis / 1000)}s lag</small></div>
         <div><span>Lease</span><strong>{detail.provider_status.lease_state}</strong>{#if detail.provider_status.lease_expires_at}<small>{formatDate(detail.provider_status.lease_expires_at)}</small>{/if}</div>
@@ -231,10 +264,27 @@
         {/if}
       </section>
 
+      </details>
+      {#if task.status === 'done' && !task.archived}
+        <section class="review-result">
+          <h2>{task.review ? 'Result accepted' : 'Awaiting your review'}</h2>
+          <p>{task.review ? 'Your acceptance is recorded with this run.' : 'Review the result and evidence, then accept it to mark this task Done.'}</p>
+          {#if task.budget.authority.includes('source.write')}<label><input type="checkbox" bind:checked={sourceAvailable} disabled={Boolean(task.review?.source_available)}/><span>I confirm the accepted code is merged and available on the project base branch.<small>This confirmation releases tasks that depend on this code.</small></span></label>{/if}
+          {#if !task.review || (sourceAvailable && !task.review.source_available)}<button type="button" disabled={busy || detail.display_state === 'stale-evidence'} on:click={acceptResult}>{task.review ? 'Confirm code available' : 'Accept result · Done'}</button>{/if}
+        </section>
+      {/if}
+      <section class="dependencies"><h2>Dependencies</h2>
+        {#each task.depends_on ?? [] as id}<p>{projectTasks.find(t=>t.id===id)?.title ?? id} <small>{projectTasks.find(t=>t.id===id) ? taskLabel(projectTasks.find(t=>t.id===id)!) : 'Archived or unavailable'}</small></p>{/each}
+        {#if task.status === 'backlog' && !task.archived}<details><summary>Edit prerequisites</summary>
+          {#each projectTasks.filter(t=>t.id!==task.id) as candidate}<label><input type="checkbox" bind:group={dependencyIDs} value={candidate.id}/>{candidate.title}</label>{/each}
+          <button type="button" disabled={busy} on:click={saveDependencies}>Save dependencies</button>
+        </details>{:else if !task.depends_on?.length}<p>No prerequisites.</p>{/if}
+        {#if task.status === 'ready'}<p>Ready authorizes automatic execution when prerequisites and configured limits allow it.</p>{/if}
+      </section>
       {#if run && ['running', 'verifying', 'done'].includes(task.status) && (progressEvent || task.status === 'done')}
         <section class="run-progress">
           <div class="progress-copy">
-            <span>{task.status === 'done' ? 'Completed' : task.status === 'verifying' ? 'Verifying' : 'Executing approved plan'}</span>
+            <span>{task.status === 'done' ? taskLabel(task) : task.status === 'verifying' ? 'Verifying' : 'Executing approved plan'}</span>
             <strong>{progress}%</strong>
           </div>
           <div class="progress-track"><span style={`width: ${progress}%`}></span></div>
@@ -250,9 +300,9 @@
               <h2>{pendingDecision.question}</h2>
             </div>
           </div>
-          <div class="recommendation">
+          {#if pendingDecision.recommendation}<div class="recommendation">
             Recommended: <strong>{pendingDecision.recommendation}</strong>
-          </div>
+          </div>{/if}
           <div class="decision-facts">
             <span>Risk <strong>{pendingDecision.risk_class}</strong></span>
             <span>Cost <strong>{(pendingDecision.estimated_cost_minor / 100).toFixed(2)} {pendingDecision.currency}</strong></span>
@@ -262,6 +312,11 @@
           <p class="decision-context"><strong>If waiting:</strong> {pendingDecision.waiting_consequence}</p>
           <p class="decision-context"><strong>If rejected:</strong> {pendingDecision.rejecting_consequence}</p>
           <div class="decision-actions">
+            {#if pendingDecision.answer_mode === 'text'}
+              <label for="engine-answer">Your answer</label>
+              <input id="engine-answer" type="text" maxlength="2000" bind:value={questionAnswer} />
+              <button type="button" disabled={busy || !questionAnswer.trim()} on:click={() => answer(pendingDecision, questionAnswer)}>Send answer</button>
+            {/if}
             {#each pendingDecision.options as option}
               <button
                 type="button"
@@ -280,6 +335,21 @@
       {#if error}<p class="drawer-error">{error}</p>{/if}
       {#if run && ['planning','waiting_decision','running','verifying'].includes(run.status)}
         <button class="cancel-run" type="button" disabled={busy || detail.commands.some((command) => command.type === 'cancel' && ['pending','acknowledged'].includes(command.status))} on:click={cancelRun}>Cancel run</button>
+      {/if}
+      {#if canArchive || task.archived}
+        <section class="retention-actions" aria-label="Task storage">
+          {#if task.archived}
+            <p>Archived. Runs, results and evidence are preserved.</p>
+            <button type="button" disabled={busy} on:click={() => retain('restore')}>Restore task</button>
+          {:else if confirmingDelete}
+            <p>Delete this draft permanently? This cannot be undone.</p>
+            <button class="delete-draft" type="button" disabled={busy} on:click={() => retain('delete')}>Delete permanently</button>
+            <button type="button" disabled={busy} on:click={() => (confirmingDelete = false)}>Keep task</button>
+          {:else}
+            <button type="button" disabled={busy} on:click={() => retain('archive')}>Archive task</button>
+            {#if canDelete}<button class="delete-draft" type="button" disabled={busy} on:click={() => (confirmingDelete = true)}>Delete draft</button>{/if}
+          {/if}
+        </section>
       {/if}
       {#each detail.commands as command (command.id)}
         <p class="command-status">{command.type}: {command.status}{command.result ? ` · ${command.result}` : ''}</p>
@@ -496,6 +566,22 @@
 </dialog>
 
 <style>
+  .technical {margin:16px 24px;font-size:12px;color:var(--muted);} .technical summary {cursor:pointer;padding:10px 0;}
+  .review-result,.dependencies {margin:20px 24px;padding:16px;border:1px solid var(--line);border-radius:8px;}
+  .review-result h2,.dependencies h2 {font-size:14px;margin:0 0 8px;font-weight:600;}
+  .review-result p,.dependencies p {font-size:13px;line-height:1.6;color:var(--muted);}
+  .review-result label,.dependencies label {display:flex;align-items:flex-start;gap:8px;font-size:12px;line-height:1.6;margin:12px 0;}
+  .review-result input,.dependencies input {width:auto;flex-shrink:0;margin-top:4px;}
+  .review-result small {display:block;color:var(--subtle);}.dependencies small {margin-left:8px;color:var(--subtle);}
+  .review-result button,.dependencies button {border:0;border-radius:5px;background:var(--accent);color:white;padding:9px 12px;font-size:12px;cursor:pointer;}
+  .dependencies summary {cursor:pointer;font-size:12px;}
+
+  .retention-actions { margin: 12px 24px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .retention-actions p { flex-basis: 100%; margin: 0 0 4px; font-size: 13px; color: var(--muted); }
+  .retention-actions button { min-height: 38px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 6px; color: var(--text); background: var(--panel); cursor: pointer; }
+  .retention-actions button:disabled { opacity: .6; cursor: default; }
+  .retention-actions .delete-draft { color: var(--danger); }
+
   .cancel-run { margin:12px 24px; padding:8px 12px; border:1px solid var(--line); border-radius:8px; color:var(--text); background:transparent; }
   .command-status { margin:8px 24px; color:var(--subtle); font-size: var(--text-sm); }
   .drawer-backdrop {

@@ -289,6 +289,9 @@ func insertEventTx(
 	if err != nil {
 		return domain.Event{}, err
 	}
+	if err := mirrorTaskEventToThread(ctx, tx, taskID, runID, eventType, message, payload, createdAt); err != nil {
+		return domain.Event{}, err
+	}
 	return domain.Event{
 		ID: id, TaskID: taskID, RunID: runID, AgentID: agentID,
 		Type: eventType, Message: message, Payload: payload, CreatedAt: createdAt,

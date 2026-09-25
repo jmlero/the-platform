@@ -6,6 +6,20 @@ import unittest
 
 
 class LocalPreparationTest(unittest.TestCase):
+    def test_local_deck_opens_without_operator_login_and_keeps_service_auth(self):
+        root = pathlib.Path(__file__).resolve().parents[1]
+        for profile in ("local-podman", "local-podman-workflow"):
+            with self.subTest(profile=profile):
+                result = subprocess.run(
+                    ["kubectl", "kustomize", str(root / "deploy/kubernetes" / profile)],
+                    capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                deck = next(document for document in result.stdout.split("\n---\n")
+                            if "kind: Deployment\n" in document
+                            and re.search(r"^  name: deck$", document, re.MULTILINE))
+                self.assertNotIn("DECK_OPERATOR_AUTH_FILE", deck)
+                self.assertRegex(deck, r"name: DECK_SERVICE_AUTH_FILE\s+value: /run/deck/service-auth.json")
+
     def test_repository_workflow_can_start_without_admitting_tasks(self):
         root = pathlib.Path(__file__).resolve().parents[1]
         result = subprocess.run(

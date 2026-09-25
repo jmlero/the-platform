@@ -139,7 +139,7 @@ func (specification Specification) Validate(now time.Time) error {
 			return fmt.Errorf("engine message must be an immutable artifact: %w", ErrInvalidInput)
 		}
 	}
-	if len(specification.Tools) > 1 || len(specification.Tools) == 1 && (specification.Tools[0] != "read_context_source" || specification.Workload != "diagnostic-analysis/v1" || specification.HarnessVersion != "langchain-create-agent/v2") {
+	if len(specification.Tools) > 1 || len(specification.Tools) == 1 && (specification.Tools[0] != "read_context_source" || specification.Workload != "diagnostic-analysis/v1" || (specification.HarnessVersion != "langchain-create-agent/v2" && specification.HarnessVersion != "langchain-create-agent/kagent-byo-v1")) {
 		return fmt.Errorf("unsupported runtime tool: %w", ErrInvalidInput)
 	}
 	required := []string{
@@ -160,6 +160,16 @@ func (specification Specification) Validate(now time.Time) error {
 		}
 		if specification.RepositoryURI != "" || specification.SourceRevision != "" || specification.WorkerImage == "" {
 			return fmt.Errorf("analysis requires its worker image and no repository fields: %w", ErrInvalidInput)
+		}
+	case "conversation/v1":
+		if specification.Engine == nil || specification.HarnessVersion != "conversation-byo/v1" || specification.WorkerImage != "" ||
+			specification.RepositoryURI != "" || specification.SourceRevision != "" || len(specification.Tools) != 0 ||
+			specification.NetworkPolicy != "gateway-only" || specification.FilesystemPolicy != "ephemeral" ||
+			!validEngineDigest(specification.InputDigest) {
+			return fmt.Errorf("conversation requires a pinned, read-only engine profile: %w", ErrInvalidInput)
+		}
+		if _, err := specification.EngineGatewayReference(); err != nil {
+			return err
 		}
 	default:
 		return fmt.Errorf("unsupported workload: %w", ErrInvalidInput)
@@ -253,6 +263,20 @@ type Observation struct {
 	HeartbeatAt      *time.Time        `json:"heartbeat_at,omitempty"`
 	Usage            Usage             `json:"usage"`
 	OutputReferences []OutputReference `json:"output_references"`
+	Question         *Question         `json:"question,omitempty"`
+	EngineStatus     string            `json:"engine_status,omitempty"`
+}
+
+type Question struct {
+	ID      string   `json:"id"`
+	Text    string   `json:"text"`
+	Choices []string `json:"choices,omitempty"`
+}
+
+// QuestionAnswerer is implemented only by runtimes that can correlate an
+// answer with an already recorded pending operation.
+type QuestionAnswerer interface {
+	AnswerQuestion(context.Context, string, string, string) (Observation, error)
 }
 
 type Artifact struct {

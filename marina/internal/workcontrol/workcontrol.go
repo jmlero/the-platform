@@ -31,6 +31,13 @@ const (
 	CapabilityCommandAck      = "command.ack"
 	CapabilityEventAppend     = "event.append"
 	CapabilityDecisionInspect = "decision.inspect"
+	CapabilityDecisionRequest = "decision.request"
+	CapabilityChannelList     = "channel.list"
+	CapabilityChannelRead     = "channel.message.list"
+	CapabilityConversationList = "conversation.invocation.list"
+	CapabilityConversationQuestion = "conversation.question.write"
+	CapabilityConversationOutcome = "conversation.outcome.publish"
+	CapabilityConversationDelegate = "conversation.task.delegate"
 )
 
 type ProviderInfo struct {
@@ -237,6 +244,8 @@ type Decision struct {
 	TaskID               string
 	RunID                string
 	PlanRevisionID       string
+	InteractionID        string
+	AnswerMode           string
 	Question             string
 	Options              []string
 	Recommendation       string
@@ -252,6 +261,21 @@ type Decision struct {
 	CreatedAt            time.Time
 	AnsweredAt           *time.Time
 	AnsweredBy           string
+}
+
+type EngineQuestion struct {
+	IdempotencyKey  string
+	AgentID         string
+	ExpectedVersion int64
+	FenceToken      int64
+	OperationID     string
+	Question        string
+	Options         []string
+	ExpiresAt       time.Time
+}
+
+type QuestionProjection interface {
+	RequestEngineQuestion(context.Context, string, EngineQuestion) (Decision, error)
 }
 
 type PlanRevisionResult struct {

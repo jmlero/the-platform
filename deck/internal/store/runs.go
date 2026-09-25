@@ -102,6 +102,8 @@ func scanDecision(scanner interface{ Scan(...any) error }) (domain.Decision, err
 		&decision.CreatedAt,
 		&answeredAt,
 		&decision.AnsweredBy,
+		&decision.InteractionID,
+		&decision.AnswerMode,
 	); err != nil {
 		return domain.Decision{}, err
 	}
@@ -289,7 +291,7 @@ func (s *Store) ClaimTaskVersioned(
 		UPDATE tasks
 		SET status = 'planning', assigned_agent_id = ?, version = version + 1,
 			next_fence_token = next_fence_token + 1, updated_at = ?
-		WHERE id = ? AND status = 'ready' AND version = ?
+		WHERE id = ? AND status = 'ready' AND version = ? AND archived = 0 AND `+dependenciesEligibleSQL+`
 	`, agentID, now, taskID, expectedTaskVersion)
 	if err != nil {
 		return domain.Run{}, fmt.Errorf("claim task: %w", err)
@@ -733,6 +735,9 @@ func (s *Store) BeginVerification(ctx context.Context, mutation Mutation, runID 
 	if rows == 0 {
 		return fmt.Errorf("run cannot enter verification: %w", domain.ErrInvalidTransition)
 	}
+	if err := closeEngineQuestionsTx(ctx, tx, runID, "superseded"); err != nil {
+		return err
+	}
 	if _, err := tx.ExecContext(ctx,
 		"UPDATE tasks SET status = 'verifying', version = version + 1, updated_at = ? WHERE id = ?",
 		now, run.TaskID,
@@ -811,6 +816,9 @@ func (s *Store) BlockRun(ctx context.Context, mutation Mutation, runID, reason s
 	}
 	if rows != 1 {
 		return fmt.Errorf("run is no longer active: %w", domain.ErrConflict)
+	}
+	if err := closeEngineQuestionsTx(ctx, tx, runID, "cancelled"); err != nil {
+		return err
 	}
 	if _, err := tx.ExecContext(ctx, `
 		UPDATE tasks SET status = 'blocked', assigned_agent_id = NULL,
@@ -997,6 +1005,9 @@ func (s *Store) failExpiredRun(ctx context.Context, runID string) (bool, error) 
 	count, _ := result.RowsAffected()
 	if count == 0 {
 		return false, nil
+	}
+	if err := closeEngineQuestionsTx(ctx, tx, runID, "expired"); err != nil {
+		return false, err
 	}
 	if _, err := tx.ExecContext(ctx, `
 		UPDATE tasks SET status = 'ready', assigned_agent_id = NULL,

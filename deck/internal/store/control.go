@@ -200,6 +200,9 @@ func (s *Store) AcknowledgeCommand(ctx context.Context, mutation Mutation, runID
 		return domain.ErrConflict
 	}
 	if nextStatus == domain.RunCancelled {
+		if err := closeEngineQuestionsTx(ctx, tx, runID, "cancelled"); err != nil {
+			return err
+		}
 		if _, err := tx.ExecContext(ctx, "UPDATE tasks SET status = 'cancelled', assigned_agent_id = NULL, version = version + 1, updated_at = ? WHERE id = ?", now, run.TaskID); err != nil {
 			return fmt.Errorf("cancel task: %w", err)
 		}

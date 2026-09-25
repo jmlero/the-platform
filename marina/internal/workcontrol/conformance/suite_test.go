@@ -16,6 +16,7 @@ type subjectStub struct {
 	work             workcontrol.WorkItem
 	agent            workcontrol.Agent
 	run              workcontrol.Run
+	decision         workcontrol.Decision
 	plan             string
 	progressMessages []string
 }
@@ -60,7 +61,33 @@ func (subject *subjectStub) GetWork(context.Context, string) (workcontrol.WorkDe
 	if subject.run.ID != "" {
 		runs = append(runs, subject.run)
 	}
-	return workcontrol.WorkDetail{Work: subject.work, Runs: runs}, nil
+	decisions := []workcontrol.Decision{}
+	if subject.decision.ID != "" {
+		decisions = append(decisions, subject.decision)
+	}
+	return workcontrol.WorkDetail{Work: subject.work, Runs: runs, Decisions: decisions}, nil
+}
+
+func (subject *subjectStub) RequestEngineQuestion(_ context.Context, runID string, question workcontrol.EngineQuestion) (workcontrol.Decision, error) {
+	if subject.decision.ID != "" {
+		if subject.decision.InteractionID == question.OperationID {
+			return subject.decision, nil
+		}
+		return workcontrol.Decision{}, errors.New("duplicate question")
+	}
+	if runID != subject.run.ID || question.ExpectedVersion != subject.run.Version || subject.run.Status != workcontrol.RunRunning {
+		return workcontrol.Decision{}, errors.New("stale question")
+	}
+	subject.decision = workcontrol.Decision{ID: "decision-1", TaskID: subject.work.ID, RunID: runID,
+		InteractionID: question.OperationID, Question: question.Question, Options: question.Options, Status: workcontrol.DecisionPending}
+	return subject.decision, nil
+}
+
+func (subject *subjectStub) GetDecision(_ context.Context, id string) (workcontrol.Decision, error) {
+	if subject.decision.ID != id {
+		return workcontrol.Decision{}, errors.New("decision not found")
+	}
+	return subject.decision, nil
 }
 
 func (subject *subjectStub) ClaimWork(

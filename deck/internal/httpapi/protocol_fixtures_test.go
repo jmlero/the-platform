@@ -110,6 +110,43 @@ func TestProtocolFixturesCoverCanonicalContract(t *testing.T) {
 
 		path := filepath.Join(fixtureRoot, filepath.FromSlash(entry.Path))
 		switch entry.Kind {
+		case "task_review":
+			var fixture domain.TaskReview
+			decodeFixture(t, path, &fixture)
+			if fixture.RunID == "" || fixture.AcceptedBy == "" || fixture.AcceptedAt <= 0 || fixture.TaskVersion < 1 {
+				t.Fatal("invalid task review fixture")
+			}
+
+		case "thread":
+			var fixture domain.ConversationThread
+			decodeFixture(t, path, &fixture)
+			if fixture.ID != "thr_example" || fixture.RootMessageID != "msg_example" || len(fixture.TaskIDs) != 1 {
+				t.Fatalf("invalid thread fixture: %#v", fixture)
+			}
+		case "channel_message":
+			var fixture domain.ChannelMessage
+			decodeFixture(t, path, &fixture)
+			if fixture.ID != "msg_example" || fixture.ThreadID != "thr_example" || fixture.PromotedTaskID == nil {
+				t.Fatalf("invalid message fixture: %#v", fixture)
+			}
+		case "conversation_dispatch":
+			var fixture domain.ConversationDispatch
+			decodeFixture(t, path, &fixture)
+			if fixture.EventID < 1 || fixture.InvokedAt < fixture.Message.CreatedAt || fixture.Message.InvokedAgentID == "" || fixture.Message.InvocationRequestID == "" {
+				t.Fatalf("invalid conversation dispatch fixture: %#v", fixture)
+			}
+		case "conversation_question":
+			var fixture domain.ConversationQuestion
+			decodeFixture(t, path, &fixture)
+			if fixture.ID == "" || fixture.ThreadID == "" || fixture.InvocationMessageID == "" || fixture.QuestionID == "" || fixture.Status != "answered" || fixture.AnswerMessageID == "" || fixture.AnswerRequestID == "" {
+				t.Fatalf("invalid conversation question fixture: %#v", fixture)
+			}
+		case "conversation_outcome":
+			var fixture domain.ConversationOutcome
+			decodeFixture(t, path, &fixture)
+			if fixture.InvocationMessageID == "" || fixture.MessageID == "" || fixture.TaskID == "" || fixture.FollowupTaskID == "" || fixture.Status != "completed" {
+				t.Fatalf("invalid conversation outcome fixture: %#v", fixture)
+			}
 		case "workloads":
 			var fixture domain.WorkloadCatalog
 			decodeFixture(t, path, &fixture)
@@ -154,6 +191,12 @@ func TestProtocolFixturesCoverCanonicalContract(t *testing.T) {
 			decodeFixture(t, path, &fixture)
 			if fixture.ID == "" || fixture.TaskID == "" || fixture.AgentID == "" || fixture.Status != domain.RunPlanning {
 				t.Fatalf("run fixture = %#v", fixture)
+			}
+		case "decision":
+			var fixture domain.Decision
+			decodeFixture(t, path, &fixture)
+			if fixture.InteractionID == "" || fixture.AnswerMode != "options" || fixture.Status != "pending" {
+				t.Fatalf("decision fixture = %#v", fixture)
 			}
 		default:
 			if strings.HasPrefix(entry.Kind, "error.") {

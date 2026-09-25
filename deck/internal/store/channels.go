@@ -81,6 +81,7 @@ func (s *Store) ListChannels(ctx context.Context, projectID string) ([]domain.Ch
 
 func (s *Store) PostChannelMessage(ctx context.Context, input domain.ChannelMessageInput) (domain.ChannelMessage, error) {
 	input.ChannelID = strings.TrimSpace(input.ChannelID)
+	input.ThreadID = strings.TrimSpace(input.ThreadID)
 	input.AuthorType = strings.ToLower(strings.TrimSpace(input.AuthorType))
 	input.AuthorID = strings.TrimSpace(input.AuthorID)
 	input.Body = strings.TrimSpace(input.Body)
@@ -99,8 +100,19 @@ func (s *Store) PostChannelMessage(ctx context.Context, input domain.ChannelMess
 	if err := s.validateCanonicalReferences(ctx, channel.ProjectID, input.References); err != nil {
 		return domain.ChannelMessage{}, err
 	}
+	// Thread ownership is immutable; validate before opening the write transaction
+	// to avoid SQLite read-to-write lock upgrades across concurrent replies.
+	if input.ThreadID != "" {
+		var threadChannel string
+		if err := s.db.QueryRowContext(ctx, "SELECT channel_id FROM conversation_threads WHERE id = ?", input.ThreadID).Scan(&threadChannel); err != nil {
+			return domain.ChannelMessage{}, normalizeStoreError(err)
+		}
+		if threadChannel != channel.ID {
+			return domain.ChannelMessage{}, fmt.Errorf("thread does not belong to this channel: %w", domain.ErrInvalidInput)
+		}
+	}
 	message := domain.ChannelMessage{
-		ID: newID("msg"), ChannelID: channel.ID, ProjectID: channel.ProjectID,
+		ID: newID("msg"), ChannelID: channel.ID, ProjectID: channel.ProjectID, ThreadID: input.ThreadID,
 		AuthorType: input.AuthorType, AuthorID: input.AuthorID, Body: input.Body,
 		References: input.References, CreatedAt: nowMillis(),
 	}
@@ -109,15 +121,16 @@ func (s *Store) PostChannelMessage(ctx context.Context, input domain.ChannelMess
 		return domain.ChannelMessage{}, err
 	}
 	defer tx.Rollback()
+
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO channel_messages (
-			id, channel_id, project_id, author_type, author_id, body, references_json, created_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+			id, channel_id, project_id, author_type, author_id, body, references_json, created_at, thread_id
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, message.ID, message.ChannelID, message.ProjectID, message.AuthorType,
-		message.AuthorID, message.Body, marshalJSON(message.References), message.CreatedAt); err != nil {
+		message.AuthorID, message.Body, marshalJSON(message.References), message.CreatedAt, nullableText(message.ThreadID)); err != nil {
 		return domain.ChannelMessage{}, fmt.Errorf("post channel message: %w", err)
 	}
-	event, err := insertEventTx(ctx, tx, nil, nil, nil, "channel.message.created", "Channel message posted", map[string]any{"project_id": channel.ProjectID, "channel_id": channel.ID, "message_id": message.ID})
+	event, err := insertEventTx(ctx, tx, nil, nil, nil, "channel.message.created", "Channel message posted", map[string]any{"project_id": channel.ProjectID, "channel_id": channel.ID, "message_id": message.ID, "thread_id": message.ThreadID})
 	if err != nil {
 		return domain.ChannelMessage{}, err
 	}
@@ -157,13 +170,15 @@ func (s *Store) validateCanonicalReferences(ctx context.Context, projectID strin
 func scanChannelMessage(scanner interface{ Scan(...any) error }) (domain.ChannelMessage, error) {
 	var message domain.ChannelMessage
 	var references string
-	var promotedTaskID sql.NullString
+	var promotedTaskID, threadID, requestID sql.NullString
 	if err := scanner.Scan(
 		&message.ID, &message.ChannelID, &message.ProjectID, &message.AuthorType,
-		&message.AuthorID, &message.Body, &references, &promotedTaskID, &message.CreatedAt,
+		&message.AuthorID, &message.Body, &references, &promotedTaskID, &message.CreatedAt, &threadID, &message.InvokedAgentID, &requestID,
 	); err != nil {
 		return domain.ChannelMessage{}, err
 	}
+	message.ThreadID = threadID.String
+	message.InvocationRequestID = requestID.String
 	if references != "" {
 		if err := json.Unmarshal([]byte(references), &message.References); err != nil {
 			return domain.ChannelMessage{}, fmt.Errorf("decode message references: %w", err)
@@ -176,6 +191,14 @@ func scanChannelMessage(scanner interface{ Scan(...any) error }) (domain.Channel
 	return message, nil
 }
 
+func (s *Store) GetChannelMessage(ctx context.Context, id string) (domain.ChannelMessage, error) {
+	message, err := scanChannelMessage(s.db.QueryRowContext(ctx, "SELECT "+channelMessageColumns+" FROM channel_messages WHERE id=?", id))
+	if err != nil {
+		return domain.ChannelMessage{}, normalizeStoreError(err)
+	}
+	return message, nil
+}
+
 // Channel cursors name a persisted message, never a transient row offset.
 // SQLite insertion order keeps concurrent appends and equal timestamps stable.
 type ChannelMessagePage struct {
@@ -184,6 +207,10 @@ type ChannelMessagePage struct {
 }
 
 func (s *Store) PageChannelMessages(ctx context.Context, channelID string, limit int, cursor string) (ChannelMessagePage, error) {
+	return s.pageChannelMessages(ctx, channelID, "", limit, cursor)
+}
+
+func (s *Store) pageChannelMessages(ctx context.Context, channelID, threadID string, limit int, cursor string) (ChannelMessagePage, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 100
 	}
@@ -193,16 +220,16 @@ func (s *Store) PageChannelMessages(ctx context.Context, channelID string, limit
 		if err != nil {
 			return ChannelMessagePage{}, fmt.Errorf("invalid channel cursor: %w", domain.ErrInvalidInput)
 		}
-		if err = s.db.QueryRowContext(ctx, "SELECT rowid FROM channel_messages WHERE id = ? AND channel_id = ?", string(id), channelID).Scan(&after); err != nil {
+		if err = s.db.QueryRowContext(ctx, "SELECT rowid FROM channel_messages WHERE id = ? AND channel_id = ? AND (? = '' OR thread_id = ?)", string(id), channelID, threadID, threadID).Scan(&after); err != nil {
 			if err == sql.ErrNoRows {
-				return ChannelMessagePage{}, fmt.Errorf("cursor does not belong to this channel: %w", domain.ErrInvalidInput)
+				return ChannelMessagePage{}, fmt.Errorf("cursor does not belong to this conversation: %w", domain.ErrInvalidInput)
 			}
 			return ChannelMessagePage{}, err
 		}
 	}
 	rows, err := s.db.QueryContext(ctx, `
- SELECT id, channel_id, project_id, author_type, author_id, body, references_json, promoted_task_id, created_at
- FROM channel_messages WHERE channel_id = ? AND rowid > ? ORDER BY rowid LIMIT ?`, channelID, after, limit+1)
+ SELECT id, channel_id, project_id, author_type, author_id, body, references_json, promoted_task_id, created_at, thread_id, invoked_agent_id, invocation_request_id
+ FROM channel_messages WHERE channel_id = ? AND (? = '' OR thread_id = ?) AND rowid > ? ORDER BY rowid LIMIT ?`, channelID, threadID, threadID, after, limit+1)
 	if err != nil {
 		return ChannelMessagePage{}, fmt.Errorf("list channel messages: %w", err)
 	}
@@ -228,7 +255,7 @@ func (s *Store) PageChannelMessages(ctx context.Context, channelID string, limit
 func (s *Store) PromoteChannelMessage(ctx context.Context, messageID string, input domain.CreateTaskInput) (domain.Task, error) {
 	message, err := scanChannelMessage(s.db.QueryRowContext(ctx, `
 		SELECT id, channel_id, project_id, author_type, author_id, body,
-			references_json, promoted_task_id, created_at
+			references_json, promoted_task_id, created_at, thread_id, invoked_agent_id, invocation_request_id
 		FROM channel_messages WHERE id = ?
 	`, messageID))
 	if err != nil {
@@ -241,7 +268,7 @@ func (s *Store) PromoteChannelMessage(ctx context.Context, messageID string, inp
 	if strings.TrimSpace(input.Description) == "" {
 		input.Description = message.Body
 	}
-	if strings.TrimSpace(input.AcceptanceCriteria) == "" || input.Budget == nil {
+	if input.Status == domain.TaskReady && (strings.TrimSpace(input.AcceptanceCriteria) == "" || input.Budget == nil) {
 		return domain.Task{}, fmt.Errorf("promoted work requires acceptance criteria and a structured budget: %w", domain.ErrInvalidInput)
 	}
 	validated, err := validateTaskInput(input)
@@ -293,9 +320,16 @@ func (s *Store) PromoteChannelMessage(ctx context.Context, messageID string, inp
 	if rows, _ := result.RowsAffected(); rows != 1 {
 		return domain.Task{}, fmt.Errorf("message was promoted concurrently: %w", domain.ErrConflict)
 	}
+	thread, _, err := ensureThreadTx(ctx, tx, message.ChannelID, message.ID)
+	if err != nil {
+		return domain.Task{}, err
+	}
+	if _, err := linkThreadTaskTx(ctx, tx, thread.ID, task.ID); err != nil {
+		return domain.Task{}, err
+	}
 	event, err := insertEventTx(ctx, tx, &task.ID, nil, nil,
 		"task.promoted_from_channel", "Channel message promoted into bounded work",
-		map[string]any{"channel_id": message.ChannelID, "message_id": message.ID},
+		map[string]any{"channel_id": message.ChannelID, "message_id": message.ID, "thread_id": thread.ID},
 	)
 	if err != nil {
 		return domain.Task{}, fmt.Errorf("create promotion event: %w", err)

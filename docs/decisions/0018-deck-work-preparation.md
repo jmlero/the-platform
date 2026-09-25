@@ -4,6 +4,14 @@
 - Status: accepted product direction; implementation planned
 - Scope: Deck backlog, task decomposition, context selection, and Marina handoff
 
+## Channel-first clarification, 2026-09-23
+
+[Decision 0019](0019-channel-first-project-work.md) supersedes the board-first
+presentation: one repository/project channel is the workspace. Agents may create
+Backlog drafts and maintain reference notes; Ready is the authorization point;
+Done requires human acceptance. Standing instructions and accepted decisions
+still require human approval. Existing ownership and execution safeguards remain.
+
 ## Context
 
 The operator explicitly wants Deck to own the flow from a backlog outcome to

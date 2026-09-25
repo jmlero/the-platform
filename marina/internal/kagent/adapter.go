@@ -4,15 +4,19 @@ package kagent
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	a2atype "github.com/a2aproject/a2a-go/v2/a2a"
 	a2a "github.com/a2aproject/a2a-go/v2/a2apb/v1"
+	"github.com/a2aproject/a2a-go/v2/a2apb/v1/pbconv"
 	"github.com/jmlero/the-platform/marina/internal/artifacts"
 	"github.com/jmlero/the-platform/marina/internal/execution"
 	rt "github.com/jmlero/the-platform/marina/internal/runtime"
+	kagenta2a "github.com/kagent-dev/kagent/go/api/a2a"
 	api "github.com/kagent-dev/kagent/go/api/gen/kagent/api/v1alpha1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -247,7 +251,8 @@ func matchesRecord(i *api.AgentInstance, r rt.EngineAttempt) bool {
 	return i.GetId() == r.InstanceID && i.GetContextId() == r.ContextID && i.GetPreparedRevision() == r.Revision && i.GetA2AAuthority() == r.Route
 }
 func route(ctx context.Context, r rt.EngineAttempt) context.Context {
-	return metadata.AppendToOutgoingContext(ctx, "x-kagent-agent-instance-id", r.InstanceID, "a2a-version", "1.0")
+	return metadata.AppendToOutgoingContext(ctx, "x-kagent-agent-instance-id", r.InstanceID, "a2a-version", "1.0",
+		strings.ToLower(a2atype.SvcParamExtensions), kagenta2a.HITLExtensionURI)
 }
 func rpcError(action string, err error) error {
 	return fmt.Errorf("kagent %s: %s", action, status.Code(err))
@@ -301,6 +306,22 @@ func (a *Adapter) bindTask(ctx context.Context, r rt.EngineAttempt, t *a2a.Task)
 			return observation(r), ErrDeliveryUnknown
 		}
 	}
+	if r.AnswerPhase == "sending" {
+		found := false
+		for _, message := range t.History {
+			if message.GetMessageId() != r.AnswerMessageID {
+				continue
+			}
+			if message.GetRole() != a2a.Role_ROLE_USER || len(message.GetParts()) != 1 ||
+				fmt.Sprintf("%x", sha256.Sum256([]byte(message.GetParts()[0].GetText()))) != r.AnswerDigest {
+				return observation(r), ErrIdentity
+			}
+			found = true
+		}
+		if !found {
+			return observation(r), ErrDeliveryUnknown
+		}
+	}
 	state, stateErr := taskState(t.GetStatus().GetState())
 	if stateErr != nil && !errors.Is(stateErr, ErrInteractionRequired) {
 		return observation(r), stateErr
@@ -308,6 +329,24 @@ func (a *Adapter) bindTask(ctx context.Context, r rt.EngineAttempt, t *a2a.Task)
 	r.TaskID = t.Id
 	r.Phase = "active"
 	r.State = state
+	var question *rt.Question
+	if t.GetStatus().GetState() == a2a.TaskState_TASK_STATE_INPUT_REQUIRED {
+		question, stateErr = pendingQuestion(t.GetStatus().GetMessage())
+		if stateErr == nil {
+			if r.QuestionID != "" && r.QuestionID != question.ID {
+				return observation(r), ErrInteractionRequired
+			}
+			r.QuestionID = question.ID
+		}
+	}
+	if r.AnswerPhase == "sending" {
+		for _, message := range t.History {
+			if message.GetMessageId() == r.AnswerMessageID && message.GetRole() == a2a.Role_ROLE_USER {
+				r.AnswerPhase = "sent"
+				break
+			}
+		}
+	}
 	if t.GetStatus().GetState() == a2a.TaskState_TASK_STATE_CANCELED {
 		r.CancelRequested = true
 	}
@@ -318,7 +357,111 @@ func (a *Adapter) bindTask(ctx context.Context, r rt.EngineAttempt, t *a2a.Task)
 		}
 		r, err = a.journal.GetEngineAttempt(ctx, r.AttemptID)
 	}
-	return observation(r), errors.Join(err, stateErr)
+	result := observation(r)
+	result.EngineStatus = t.GetStatus().GetState().String()
+	if r.AnswerPhase == "" {
+		result.Question = question
+	}
+	return result, errors.Join(err, stateErr)
+}
+
+func pendingQuestion(message *a2a.Message) (*rt.Question, error) {
+	if message == nil {
+		return nil, ErrInteractionRequired
+	}
+	decoded, err := pbconv.FromProtoMessage(message)
+	if err != nil {
+		return nil, ErrInteractionRequired
+	}
+	request, err := kagenta2a.ParseAskUserRequest(decoded)
+	if err != nil || request == nil || len(request.Questions) != 1 || request.Nested != nil ||
+		request.ID == "" || len(request.ID) > 160 || len(request.Questions[0].Question) == 0 || len(request.Questions[0].Question) > 2000 ||
+		request.Questions[0].Multiple {
+		return nil, ErrInteractionRequired
+	}
+	return &rt.Question{ID: request.ID, Text: request.Questions[0].Question, Choices: request.Questions[0].Choices}, nil
+}
+
+// AnswerQuestion sends one exact answer after durable send intent. An unknown
+// response is inspected by its message ID and never retried as a new send.
+func (a *Adapter) AnswerQuestion(ctx context.Context, handle, questionID, answer string) (rt.Observation, error) {
+	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+	s, r, err := a.load(ctx, handle)
+	if err != nil {
+		return rt.Observation{}, err
+	}
+	answer = strings.TrimSpace(answer)
+	if r.TaskID == "" || r.QuestionID == "" || r.QuestionID != questionID || r.CancelRequested || r.DeleteRequested ||
+		r.Deleted || r.State.Terminal() || answer == "" || len(answer) > 2000 {
+		return observation(r), rt.ErrConflict
+	}
+	if r.AnswerPhase == "sent" {
+		return observation(r), rt.ErrConflict
+	}
+	answerDigest := fmt.Sprintf("%x", sha256.Sum256([]byte(answer)))
+	if r.AnswerPhase == "sending" && r.AnswerDigest != answerDigest {
+		return observation(r), rt.ErrConflict
+	}
+	task, err := a.tasks.GetTask(route(ctx, r), &a2a.GetTaskRequest{Id: r.TaskID}, grpc.MaxCallRecvMsgSize(artifacts.MaxBytes))
+	if err != nil {
+		return observation(r), rpcError("inspect pending question", err)
+	}
+	if task.GetId() != r.TaskID || task.GetContextId() != r.ContextID {
+		return observation(r), ErrIdentity
+	}
+	if r.AnswerPhase != "" {
+		return a.bindTask(ctx, r, task)
+	}
+	if task.GetStatus().GetState() != a2a.TaskState_TASK_STATE_INPUT_REQUIRED {
+		return observation(r), rt.ErrConflict
+	}
+	question, err := pendingQuestion(task.GetStatus().GetMessage())
+	if err != nil || question.ID != questionID {
+		return observation(r), rt.ErrConflict
+	}
+	if len(question.Choices) > 0 {
+		found := false
+		for _, choice := range question.Choices {
+			found = found || answer == choice
+		}
+		if !found {
+			return observation(r), rt.ErrInvalidInput
+		}
+	}
+	if err := a.admit(ctx, s); err != nil {
+		return observation(r), err
+	}
+	r.AnswerMessageID = "marina-answer-" + r.AttemptID
+	r.AnswerDigest = answerDigest
+	r.AnswerPhase = "sending"
+	r, err = a.save(ctx, r)
+	if err != nil {
+		return observation(r), err
+	}
+	message := a2atype.NewMessage(a2atype.MessageRoleUser, a2atype.NewTextPart(answer))
+	message.ID, message.TaskID, message.ContextID = r.AnswerMessageID, a2atype.TaskID(r.TaskID), r.ContextID
+	if err := kagenta2a.AttachHITL(message, kagenta2a.AskUserResponse{Type: kagenta2a.HITLTypeAskUserResponse,
+		ID: questionID, Answers: []kagenta2a.AskUserAnswer{{Answer: []string{answer}}}}); err != nil {
+		return observation(r), err
+	}
+	request, err := pbconv.ToProtoSendMessageRequest(&a2atype.SendMessageRequest{Message: message})
+	if err != nil {
+		return observation(r), err
+	}
+	response, err := a.tasks.SendMessage(route(ctx, r), request, grpc.MaxCallRecvMsgSize(artifacts.MaxBytes))
+	if err != nil {
+		return observation(r), rpcError("answer question (delivery uncertain)", err)
+	}
+	r.AnswerPhase = "sent"
+	r, err = a.save(ctx, r)
+	if err != nil {
+		return observation(r), err
+	}
+	if task := response.GetTask(); task != nil {
+		return a.bindTask(ctx, r, task)
+	}
+	return observation(r), nil
 }
 func taskState(s a2a.TaskState) (rt.State, error) {
 	switch s {

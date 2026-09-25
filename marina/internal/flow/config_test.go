@@ -1,6 +1,7 @@
 package flow
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -64,5 +65,30 @@ func TestAnalysisConfigurationDoesNotRequireRepositorySettings(t *testing.T) {
 	c.Analysis.Version = 2
 	if c.Validate() == nil {
 		t.Fatal("unsupported profile version accepted")
+	}
+}
+
+func TestAnalysisEnginePinsBYOProfileWithoutChangingLegacyGrant(t *testing.T) {
+	c := Config{ProjectID: "project", PublicURL: "http://localhost:8090", SigningKeyFile: "/secrets/signing", ArtifactTokenFile: "/secrets/artifacts", ArtifactDirectory: "/artifacts", PolicyVersion: "v1", MaxTokens: 20000, BudgetMinutes: 5}
+	c.Model = workerapi.Model{Endpoint: "https://openrouter.ai/api/v1", Name: "fixture", MaxOutputTokens: 2000, Currency: "USD", InputMicrosPerMillion: 100, OutputMicrosPerMillion: 100}
+	c.Analysis = &analysis.Profile{Version: 1, Revision: 3, Image: "analysis@sha256:" + strings.Repeat("a", 64), HarnessVersion: analysis.HarnessBYO, MaxTokens: 20000, BudgetMinutes: 5, Fixture: analysis.DiagnosticFixture(), Tools: []string{"read_context_source"}}
+	if err := c.Validate(); err == nil {
+		t.Fatal("BYO profile without a selected engine was accepted")
+	}
+	legacy := c.AnalysisDigest()
+	c.AnalysisEngine = &runtimeapi.EngineSelection{Backend: "kagent", Version: kagent.Version, Endpoint: "kint-engine-controller.kint-engine.svc:8083", Namespace: "kint-engine", Harness: "kint-analysis-byo", Template: "kint-analysis-task", Revision: strings.Repeat("b", 64)}
+	if err := c.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	profiles := c.WorkloadProfiles()
+	if len(profiles) != 1 || !slices.Contains(profiles[0].ContextKinds, "document") {
+		t.Fatalf("BYO context was not discoverable: %#v", profiles)
+	}
+	if c.AnalysisDigest() == legacy {
+		t.Fatal("BYO engine selection did not change the exact analysis grant")
+	}
+	c.AnalysisEngine.Harness = "kint-codex"
+	if err := c.Validate(); err == nil {
+		t.Fatal("native Codex harness accepted for analysis")
 	}
 }

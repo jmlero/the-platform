@@ -1,6 +1,6 @@
 IMAGE ?= deck:dev
 
-.PHONY: setup web build run dev-api dev-web check test image manifests clean
+.PHONY: setup web build run dev-api dev-web check test conformance image manifests clean
 
 setup:
 	npm --prefix web install
@@ -28,6 +28,10 @@ check:
 test:
 	go test ./...
 	npm --prefix web test
+
+conformance:
+	python3 scripts/test-threads.py
+	python3 scripts/test-project-work.py
 
 image:
 	docker build --tag $(IMAGE) .
