@@ -77,6 +77,16 @@ type HeadRequest struct {
 	Ref        string
 }
 
+// FastForwardRequest pins both refs so a retry cannot land a different commit.
+type FastForwardRequest struct {
+	Repository     string
+	BaseRef        string
+	ExpectedBase   string
+	HeadRef        string
+	ExpectedHead   string
+	AuthorityFence int64
+}
+
 type ObservationRequest struct {
 	Repository    string
 	PullRequestID string
@@ -117,4 +127,11 @@ type Port interface {
 	CurrentHead(context.Context, HeadRequest) (Revision, error)
 	ObserveReviews(context.Context, ObservationRequest) ([]ReviewObservation, error)
 	ObserveChecks(context.Context, ObservationRequest) ([]CheckObservation, error)
+}
+
+// LandingPort is used only by the main-landing workload. Legacy PR sources
+// continue to implement Port without acquiring main-update authority.
+type LandingPort interface {
+	Port
+	FastForward(context.Context, FastForwardRequest) (Revision, error)
 }

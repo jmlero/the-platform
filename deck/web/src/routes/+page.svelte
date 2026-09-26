@@ -1,9 +1,9 @@
 <script lang="ts">
  import { onMount } from 'svelte';
- import { Hash, Plus, Search, X, Menu, Inbox, Archive, ArrowUpRight, ChevronDown } from '@lucide/svelte';
+ import { Hash, Plus, X, Menu, Inbox, Archive, ArrowUpRight } from '@lucide/svelte';
  import BrandMark from '$lib/components/BrandMark.svelte';
  import ChannelsView from '$lib/components/ChannelsView.svelte';
- import ProjectTasks from '$lib/components/ProjectTasks.svelte';
+ import ProjectOverview from '$lib/components/ProjectOverview.svelte';
  import ProjectContext from '$lib/components/ProjectContext.svelte';
  import DecisionInbox from '$lib/components/DecisionInbox.svelte';
  import TaskDrawer from '$lib/components/TaskDrawer.svelte';
@@ -15,10 +15,10 @@
 
  let session:OperatorSession|null=null;
  let sessionChecking=true, authenticating=false, loading=true, connected=false, sidebarOpen=false;
- let loginToken='',loginError='',error='',search='';
+ let loginToken='',loginError='',error='';
  let projects:ProjectChannel[]=[], allTasks:Task[]=[], agents:Agent[]=[], decisions:Decision[]=[];
  let selectedProjectID='', activeView:'project'|'inbox'|'archive'='project';
- let tab:'conversation'|'tasks'|'context'='conversation';
+ let tab:'conversation'|'context'='conversation';
  let selectedDetail:TaskDetail|null=null;
  let createOpen=false,projectOpen=false,projectBusy=false,projectError='',repository='',baseBranch='main';
  let channelRefreshVersion=0;
@@ -28,7 +28,7 @@
  $: tasks=projectTasks(allTasks,project?.project.id??'');
  $: projectDecisions=decisions.filter(d=>tasks.some(t=>t.id===d.task_id));
  $: attention=tasks.filter(t=>['blocked','failed','waiting_decision'].includes(t.status)||(t.status==='done'&&!t.review));
- $: archive=allTasks.filter(t=>t.archived&&t.project_id===project?.project.id&&t.title.toLowerCase().includes(search.toLowerCase()));
+ $: archive=allTasks.filter(t=>t.archived&&t.project_id===project?.project.id);
  $: repo=project?.repository.binding?.repository||project?.repository.repository;
 
  onMount(()=>{
@@ -56,7 +56,7 @@
   if(timer)clearTimeout(timer);
   timer=setTimeout(async()=>{await load();if(selectedDetail&&event.task_id===selectedDetail.task.id)await refreshSelected();},150);
  }
- function selectProject(id:string){selectedProjectID=id;activeView='project';tab='conversation';search='';sidebarOpen=false;localStorage.setItem('deck.project',id);}
+ function selectProject(id:string){selectedProjectID=id;activeView='project';tab='conversation';sidebarOpen=false;localStorage.setItem('deck.project',id);}
  async function openTask(task:Task){try{selectedDetail=await api.task(task.id);}catch(caught){error=caught instanceof Error?caught.message:'Could not open task.';}}
  async function refreshSelected(){if(selectedDetail)selectedDetail=await api.task(selectedDetail.task.id);await load();}
  async function createTask(input:CreateTaskInput){const task=await api.createTask({...input,project_id:project?.project.id});createOpen=false;await load();await openTask(task);}
@@ -92,7 +92,7 @@
   <main>
    <header class="project-header">
     <div class="project-title"><button class="menu-button" type="button" on:click={()=>sidebarOpen=true} aria-label="Open navigation" aria-controls="project-navigation"><Menu size={18}/></button><Hash size={21}/><h1>{repo?.split('/').pop()||project?.project.name||'Projects'}</h1>{#if repo}<a href={`https://github.com/${repo}`} target="_blank" rel="noreferrer">{repo}<ArrowUpRight size={12}/></a>{/if}</div>
-    {#if activeView==='project'}<nav class="tabs" aria-label="Project views"><button class:active={tab==='conversation'} aria-current={tab==='conversation'?'page':undefined} on:click={()=>{tab='conversation';search='';}}>Conversation</button><button class:active={tab==='tasks'} aria-current={tab==='tasks'?'page':undefined} on:click={()=>tab='tasks'}>Tasks{#if tasks.length}<span>{tasks.length}</span>{/if}</button><button class:active={tab==='context'} aria-current={tab==='context'?'page':undefined} on:click={()=>tab='context'}>Context</button></nav>{/if}
+    {#if activeView==='project'}<nav class="tabs" aria-label="Project views"><button class:active={tab==='conversation'} aria-current={tab==='conversation'?'page':undefined} on:click={()=>tab='conversation'}>Work and chat</button><button class:active={tab==='context'} aria-current={tab==='context'?'page':undefined} on:click={()=>tab='context'}>Context</button></nav>{/if}
    </header>
    {#if error}<div class="error" role="alert">{error}<button on:click={()=>load()}>Retry</button></div>{/if}
    <div class:conversation-space={activeView==='project'&&tab==='conversation'} class="workspace">
@@ -101,11 +101,13 @@
     {:else if activeView==='archive'}<section class="secondary-view"><h2>Archive</h2><p>Retained tasks and their history.</p>{#each archive as task}<button class="result-row" on:click={()=>openTask(task)}><strong>{task.title}</strong><span>{taskLabel(task)}</span></button>{:else}<p class="empty">No archived tasks in this project.</p>{/each}</section>
     {:else if activeView==='inbox'}<section class="secondary-view"><h2>Needs attention</h2><DecisionInbox decisions={projectDecisions} {tasks} onanswer={answerDecision} onselect={openTask}/>{#each attention.filter(t=>t.status!=='waiting_decision') as task}<button class="result-row" on:click={()=>openTask(task)}><strong>{task.title}</strong><span>{taskLabel(task)}</span></button>{/each}{#if !attention.length}<p class="empty">Nothing needs your attention.</p>{/if}</section>
     {:else if tab==='conversation'}
-     {#key project.project.id}
-      {#if project.channels.length}<ChannelsView channels={project.channels} refreshVersion={channelRefreshVersion} onpromoted={promoted} onopen={openTask} {tasks} {agents}/>
-      {:else}<div class="welcome"><Hash size={32}/><h2>Start the conversation</h2><p>Keep discussions, decisions, and ideas together for this project.</p><button class="primary" on:click={ensureChannel}>Open project channel</button></div>{/if}
-     {/key}
-    {:else if tab==='tasks'}<div class="task-search"><label><Search size={15}/><input bind:value={search} placeholder="Find a task…" aria-label="Search project tasks"/>{#if search}<button aria-label="Clear search" on:click={()=>search=''}><X size={14}/></button>{/if}</label></div><ProjectTasks {tasks} {search} onselect={openTask} oncreate={()=>createOpen=true}/>
+     <div class="work-columns">
+      <ProjectOverview {tasks} onselect={openTask} oncreate={()=>createOpen=true}/>
+      <div class="chat-column">{#key project.project.id}
+       {#if project.channels.length}<ChannelsView channels={project.channels} refreshVersion={channelRefreshVersion} onpromoted={promoted} onopen={openTask} {tasks} {agents}/>
+       {:else}<div class="welcome"><Hash size={32}/><h2>Start the conversation</h2><p>Keep discussions, decisions, and ideas together for this project.</p><button class="primary" on:click={ensureChannel}>Open project channel</button></div>{/if}
+      {/key}</div>
+     </div>
     {:else}<div class="context-space">{#key project.project.id}<ProjectContext projectID={project.project.id}/>{/key}</div>{/if}
    </div>
   </main>
@@ -125,13 +127,14 @@
  .sidebar nav{display:grid;gap:3px;}.sidebar nav button,.sidebar-bottom>button{display:flex;align-items:center;gap:10px;width:100%;min-height:42px;padding:10px 12px;border:0;border-radius:6px;background:transparent;color:var(--muted);text-align:left;font-size:14px;}
  .sidebar nav button span,.sidebar-bottom>button span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.sidebar nav button:hover,.sidebar-bottom>button:hover{background:#e9edef;}.sidebar button.active{background:#e3eaee;color:#163c4c;font-weight:600;}.sidebar small{font-size:11px;color:var(--warning);}
  .sidebar-bottom{margin-top:auto;padding-top:24px;}.connection{display:flex;align-items:center;gap:7px;padding:22px 12px 0;font-size:11px;color:var(--subtle);}.connection i{width:6px;height:6px;background:var(--warning);border-radius:50%;}.connection i.connected{background:var(--success);}.nav-empty{font-size:13px;padding:0 12px;color:var(--subtle);}
- main{display:flex;flex-direction:column;flex:1;min-width:0;}.project-header{padding:24px 32px 0;border-bottom:1px solid var(--line);flex-shrink:0;}.project-title{display:flex;align-items:center;gap:10px;color:var(--subtle);min-height:30px;}.project-title h1{font-size:19px;font-weight:600;letter-spacing:-.4px;margin:0;color:var(--text);}.project-title a{display:flex;align-items:center;gap:5px;margin-left:auto;text-decoration:none;color:var(--subtle);font-size:12px;}.project-title a:hover{color:var(--accent);}.tabs{display:flex;gap:28px;margin-top:18px;}.tabs button{display:flex;gap:8px;align-items:center;position:relative;padding:12px 0;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--muted);font-size:13px;}.tabs button.active{color:var(--text);border-bottom-color:var(--accent);font-weight:600;}.tabs span{font-size:11px;color:var(--subtle);font-weight:400;}
- .workspace{display:flex;flex-direction:column;flex:1;min-height:0;overflow:auto;}.conversation-space{overflow:hidden;}.context-space{padding:28px 32px;}.task-search{padding:24px 32px 0;max-width:1100px;width:100%;margin:auto;}.task-search label{display:flex;align-items:center;gap:8px;color:var(--subtle);max-width:320px;}.task-search input{border:0;background:transparent;padding:8px 0;color:var(--text);font-size:13px;min-width:0;width:100%;}.task-search button{border:0;background:transparent;color:var(--subtle);}
+ main{display:flex;flex-direction:column;flex:1;min-width:0;}.project-header{padding:24px 32px 0;border-bottom:1px solid var(--line);flex-shrink:0;}.project-title{display:flex;align-items:center;gap:10px;color:var(--subtle);min-height:30px;}.project-title h1{font-size:19px;font-weight:600;letter-spacing:-.4px;margin:0;color:var(--text);}.project-title a{display:flex;align-items:center;gap:5px;margin-left:auto;text-decoration:none;color:var(--subtle);font-size:12px;}.project-title a:hover{color:var(--accent);}.tabs{display:flex;gap:28px;margin-top:18px;}.tabs button{display:flex;gap:8px;align-items:center;position:relative;padding:12px 0;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--muted);font-size:13px;}.tabs button.active{color:var(--text);border-bottom-color:var(--accent);font-weight:600;}
+ .workspace{display:flex;flex-direction:column;flex:1;min-height:0;overflow:auto;}.conversation-space{overflow:hidden;}.work-columns{display:flex;flex:1;min-height:0;}.chat-column{display:flex;flex:1;min-width:0;min-height:0;}.context-space{padding:28px 32px;}
  .welcome{display:grid;flex:1;place-content:center;justify-items:center;padding:40px;text-align:center;color:var(--subtle);}.welcome h2{font-size:21px;letter-spacing:-.5px;color:var(--text);font-weight:500;}.welcome p{max-width:400px;font-size:14px;line-height:1.7;margin:0 0 24px;}.empty{color:var(--subtle);font-size:13px;padding:24px;}.primary{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:10px 16px;border:0;border-radius:6px;background:var(--accent);color:white;font-size:13px;font-weight:500;}
  .secondary-view{padding:28px 32px;}.secondary-view h2{font-size:20px;font-weight:600;}.secondary-view>p{font-size:13px;color:var(--subtle);}.result-row{display:flex;align-items:center;justify-content:space-between;gap:20px;width:100%;padding:18px 0;border:0;border-bottom:1px solid var(--line);background:transparent;text-align:left;color:var(--text);}.result-row strong{font-size:14px;font-weight:500;}.result-row span{font-size:12px;color:var(--muted);}
  .error{display:flex;align-items:center;justify-content:space-between;margin:12px 24px;padding:12px;color:var(--danger);background:var(--danger-soft);font-size:13px;border-radius:6px;}.error button{color:inherit;background:transparent;border:0;}
  .project-dialog{width:min(460px,calc(100% - 32px));padding:28px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--text);box-shadow:var(--shadow);}.project-dialog::backdrop{background:var(--scrim);}.project-dialog header{display:flex;justify-content:space-between;align-items:center;}.project-dialog h2{font-size:19px;margin:0;}.project-dialog>p,.form-note{color:var(--subtle);font-size:13px;line-height:1.6;}.project-dialog form,.auth-card form{display:grid;gap:18px;margin-top:22px;}.project-dialog label,.auth-card label{display:grid;gap:8px;font-size:13px;}.project-dialog input,.auth-card input{width:100%;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--text);padding:10px;font:inherit;}.project-dialog .error{margin:0;}.auth-shell{display:grid;min-height:100dvh;place-items:center;background:var(--bg);}.auth-card{width:380px;max-width:calc(100vw - 32px);padding:32px;background:var(--panel);border:1px solid var(--line);border-radius:12px;}.auth-card h1{font-size:22px;}.auth-card p{font-size:13px;color:var(--muted);}
  .project-title .menu-button,.scrim{display:none;}
  @media(max-width:980px){.sidebar{position:fixed;inset:0 auto 0 0;z-index:40;transform:translateX(-100%);visibility:hidden;}.sidebar.mobile-open{transform:none;visibility:visible;}.scrim{display:block;position:fixed;inset:0;z-index:39;border:0;background:var(--scrim);}.project-title .menu-button{display:grid;}.project-header{padding:16px 20px 0;}.context-space,.secondary-view{padding:20px;}}
- @media(max-width:600px){.project-title a{display:none;}.task-search{padding:16px 16px 0;}.tabs{gap:24px;}}
+ @media(max-width:760px){.work-columns{flex-direction:column;overflow-y:auto;}.chat-column{min-height:500px;}}
+ @media(max-width:600px){.project-title a{display:none;}.tabs{gap:24px;}}
 </style>

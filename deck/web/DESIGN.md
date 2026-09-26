@@ -8,20 +8,21 @@ brand, never in operational status or control labels.
 
 ## Master page template
 
-The shell in `src/routes/+page.svelte` opens on a project conversation. Use a quiet
-224 px light sidebar with project names, a compact repository header and three
-tabs: Conversation, Tasks and Context. Needs attention and Archive are secondary
-utilities. Avoid global task-creation controls, dashboard summaries and board
-columns in the primary experience. Existing task details remain in an accessible
+The shell in `src/routes/+page.svelte` opens on three columns: a quiet 224 px
+project sidebar, a short work overview, and the project conversation. The middle
+column has In progress, To do, and Recently completed until landing on main is
+available; then the last group becomes Recently landed. Needs attention, Archive,
+and Context remain secondary views. Existing task details remain in an accessible
 modal drawer; execution diagnostics use progressive disclosure.
 
-Conversation is a readable central column, with a persistent composer and focused
-threads. Messages can become Backlog drafts without completed criteria. Task rows
-use Backlog, Ready, In progress and Done; Awaiting review remains In progress until
-human acceptance. Preserve visible blockers and evidence details. Display actual
-agent availability; never suggest that a saved message invoked an absent worker.
+Conversation is a readable right column, with a persistent composer and focused
+threads. Messages can become Backlog drafts without completed criteria. The work
+overview puts Ready before Backlog in To do; Awaiting review and stale evidence
+remain In progress until accepted and current. Preserve visible blockers and
+evidence details. Display actual agent availability; never suggest that a saved
+message invoked an absent worker.
 
-Use `ProjectTasks.svelte`, `ChannelsView.svelte`, `CreateTaskModal.svelte` and
+Use `ProjectOverview.svelte`, `ChannelsView.svelte`, `CreateTaskModal.svelte` and
 `TaskDrawer.svelte`. Native modal dialogs retain focus containment, Escape and
 focus restoration. Repo/model/harness configuration belongs in project context
 or settings, not the message flow. Decision 0019 owns the product rules.

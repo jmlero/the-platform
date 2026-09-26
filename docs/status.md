@@ -35,10 +35,12 @@ Disabling new intake does not pause executions that have already started.
 
 **Deck**: operator surface and ledger
 
-- A project workspace that opens on the conversation: one channel per project,
-  threads, a compact Backlog / Ready / In progress / Done list, a task drawer,
-  project context and an archive
-  ([evidence](validation/deck-channel-first-2026-09-23.md)).
+- A three-column project workspace with projects, a middle work overview
+  (In progress, To do, Recently completed), and conversation with threads and
+  a persistent composer. Task details, project context, needs-attention work,
+  and the archive remain accessible
+  ([channel evidence](validation/deck-channel-first-2026-09-23.md),
+  [local UI-01 evidence](validation/ui-01-2026-09-26.md)).
 - Promote a message to a Backlog draft, or save it as a reference note (manual).
 - Versioned project knowledge and selected conversation excerpts, frozen for
   active runs. The repository association is validated by Marina
@@ -77,10 +79,10 @@ Disabling new intake does not pause executions that have already started.
   repository runtime. A prepared, bounded conversation turn produced a real
   model reply in its Deck thread, and that thread survived a Deck restart.
 - Each chat turn needs a fresh prepared template, ModelConfig and Secret. The
-  local installation has one unused turn ready; the operator prepares the next
-  slot with the [local helper](../deploy/kubernetes/local-podman-kagent/README.md)
-  after the current turn finishes. Repository tasks still use the existing
-  runtime.
+  operator prepares the next slot with the
+  [local helper](../deploy/kubernetes/local-podman-kagent/README.md) after the
+  current turn finishes. The next slot is currently waiting for its golden
+  snapshot; repository tasks still use the existing runtime.
 - The pinned local Marina release pair passed an image upgrade during an active
   kagent model call and a previous-image, retained-data-copy rollback while
   preserving the exact Deck reply and usage
@@ -90,7 +92,7 @@ Disabling new intake does not pause executions that have already started.
 
 | Capability | Where it stands | Still missing |
 | --- | --- | --- |
-| Conversational agent with no write authority (CHAT-04) | Deterministic checks and one installed model reply pass. | Browser acceptance and the remaining negative/restart cases. |
+| Conversational agent with no write authority (CHAT-04) | Deterministic checks and one earlier installed model reply pass. The [latest browser probe](validation/chat-04-10-local-2026-09-26.md) blocked after model accounting, and the next actor template is pending its golden snapshot. | Restore a ready single-use slot, then pass browser and negative/restart cases. |
 | Engine questions answered in the thread (CHAT-05) | Product checks and real-process conformance pass. | Installed engine and browser acceptance. |
 | Conversation delegation, result publication and linked follow-up (CHAT-06–08) | Product checks and real Deck conformance pass. | Installed actor, model and browser acceptance. |
 | kagent for repository work (KINT-01–11) | Isolated local trials passed a native Codex PR and a question round-trip. KINT-16 installed the engine permanently for chat; KINT-10 accepted the pinned local image transition. | Core repository failure cases (KINT-09), cutover (KINT-11), and legacy removal (KINT-12–15), per [decision 0023](decisions/0023-focus-kagent-cutover.md). New repository work still uses the existing runtime. |
@@ -110,7 +112,6 @@ Disabling new intake does not pause executions that have already started.
   ends at a pull request.
 - PRDs drafted in the chat and committed to the project repository, and tasks
   derived from them. Tasks are created by hand or promoted from messages.
-- The three-column Deck layout with a simple middle column.
 - Notes and knowledge bases that agents maintain.
 - The diagnostic analysis workflow (LangChain) is retired
   ([decision 0023](decisions/0023-focus-kagent-cutover.md)). Its code is still

@@ -39,6 +39,7 @@ type Client struct {
 }
 
 var _ sourcecontrol.Port = (*Client)(nil)
+var _ sourcecontrol.LandingPort = (*Client)(nil)
 
 func New(config Config, client *http.Client) (*Client, error) {
 	u, err := url.Parse(config.APIURL)
@@ -94,6 +95,48 @@ func (client *Client) CurrentHead(ctx context.Context, request sourcecontrol.Hea
 		return sourcecontrol.Revision{}, errors.New("Git provider omitted branch head")
 	}
 	return sourcecontrol.Revision{Commit: result.Object.SHA, Ref: request.Ref}, nil
+}
+
+func (client *Client) FastForward(ctx context.Context, request sourcecontrol.FastForwardRequest) (sourcecontrol.Revision, error) {
+	if err := client.repository(request.Repository); err != nil {
+		return sourcecontrol.Revision{}, err
+	}
+	if !validBranch(request.BaseRef) || !strings.HasPrefix(request.HeadRef, "marina/") || !validBranch(request.HeadRef) ||
+		request.BaseRef == request.HeadRef || request.ExpectedBase == "" || request.ExpectedHead == "" || request.ExpectedBase == request.ExpectedHead ||
+		request.AuthorityFence < 1 || client.config.BaseBranch == "" || request.BaseRef != client.config.BaseBranch {
+		return sourcecontrol.Revision{}, sourcecontrol.ErrInvalidInput
+	}
+	head, err := client.CurrentHead(ctx, sourcecontrol.HeadRequest{Repository: request.Repository, Ref: request.HeadRef})
+	if err != nil {
+		return sourcecontrol.Revision{}, err
+	}
+	if head.Commit != request.ExpectedHead {
+		return sourcecontrol.Revision{}, errors.New("task branch changed after verification")
+	}
+	base, err := client.CurrentHead(ctx, sourcecontrol.HeadRequest{Repository: request.Repository, Ref: request.BaseRef})
+	if err != nil {
+		return sourcecontrol.Revision{}, err
+	}
+	if base.Commit == request.ExpectedHead {
+		return base, nil
+	}
+	if base.Commit != request.ExpectedBase {
+		return sourcecontrol.Revision{}, errors.New("base branch moved before landing")
+	}
+	status, updateErr := client.request(ctx, http.MethodPatch, "/git/refs/heads/"+url.PathEscape(request.BaseRef), map[string]any{"sha": request.ExpectedHead, "force": false}, nil, request.AuthorityFence)
+	if updateErr == nil && status == 200 {
+		return sourcecontrol.Revision{Commit: request.ExpectedHead, Ref: request.BaseRef}, nil
+	}
+	// GitHub may have applied the update and lost its response. Read the ref
+	// before any retry; an exact match is the same successful operation.
+	current, readErr := client.CurrentHead(ctx, sourcecontrol.HeadRequest{Repository: request.Repository, Ref: request.BaseRef})
+	if readErr == nil && current.Commit == request.ExpectedHead {
+		return current, nil
+	}
+	if updateErr != nil {
+		return sourcecontrol.Revision{}, updateErr
+	}
+	return sourcecontrol.Revision{}, httpError("fast-forward base", status)
 }
 
 func validBranch(value string) bool {

@@ -11,6 +11,7 @@ import (
 	"errors"
 	"io"
 	"iter"
+	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -200,6 +201,7 @@ func (executor) Execute(ctx context.Context, request *a2asrv.ExecutorContext) it
 		}
 		result, err := run(ctx, []byte(body), os.Getenv("OPENAI_API_KEY"), callModel)
 		if err != nil {
+			log.Printf("conversation actor failed: %v", err)
 			yield(a2a.NewStatusUpdateEvent(request, a2a.TaskStateFailed, nil), nil)
 			return
 		}

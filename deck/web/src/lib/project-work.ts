@@ -22,3 +22,23 @@ export function taskLabel(task:Task):string {
 export function projectTasks(tasks:Task[],projectID:string):Task[] {
  return tasks.filter(task=>task.project_id === projectID && !task.archived);
 }
+
+export function workspaceQueues(tasks:Task[]) {
+ const inProgress:Task[] = [];
+ const ready:Task[] = [];
+ const backlog:Task[] = [];
+ const completed:Task[] = [];
+ for (const task of tasks) {
+  switch (taskStage(task)) {
+   case 'ready': ready.push(task); break;
+   case 'backlog': backlog.push(task); break;
+   case 'done': completed.push(task); break;
+   default: inProgress.push(task);
+  }
+ }
+ return {
+  inProgress,
+  todo:[...ready,...backlog],
+  recent:completed.sort((a,b)=>b.updated_at-a.updated_at).slice(0,5)
+ };
+}

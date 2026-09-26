@@ -102,3 +102,75 @@ func TestPullRequestObservationReportsClosureWithoutMutation(t *testing.T) {
 		t.Fatalf("PR observation: %#v %v", pr, err)
 	}
 }
+
+func TestFastForwardMainRecoversLostResponseWithoutSecondUpdate(t *testing.T) {
+	base, branch, updates := "base", "verified", 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/repos/owner/repo/git/ref/heads/main":
+			_ = json.NewEncoder(w).Encode(map[string]any{"object": map[string]string{"sha": base}})
+		case "/repos/owner/repo/git/ref/heads/marina/run":
+			_ = json.NewEncoder(w).Encode(map[string]any{"object": map[string]string{"sha": branch}})
+		case "/repos/owner/repo/git/refs/heads/main":
+			if r.Method != http.MethodPatch {
+				t.Errorf("unexpected method %s", r.Method)
+			}
+			updates++
+			var body struct {
+				SHA   string `json:"sha"`
+				Force bool   `json:"force"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.SHA != branch || body.Force {
+				t.Errorf("unguarded update: %+v %v", body, err)
+			}
+			base = branch
+			conn, _, err := w.(http.Hijacker).Hijack()
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			_ = conn.Close() // GitHub applied the update but its response was lost.
+		default:
+			t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+	client, err := New(Config{APIURL: server.URL, Repository: "owner/repo", BaseBranch: "main", Authorize: func(context.Context, int64) error { return nil }}, server.Client())
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := sourcecontrol.FastForwardRequest{Repository: "owner/repo", BaseRef: "main", ExpectedBase: "base", HeadRef: "marina/run", ExpectedHead: "verified", AuthorityFence: 1}
+	for range 2 {
+		revision, err := client.FastForward(context.Background(), request)
+		if err != nil || revision.Commit != "verified" || revision.Ref != "main" {
+			t.Fatalf("revision=%+v err=%v", revision, err)
+		}
+	}
+	if updates != 1 {
+		t.Fatalf("updates=%d, want one", updates)
+	}
+}
+
+func TestFastForwardMainRejectsMovedBaseAndChangedTaskHead(t *testing.T) {
+	for _, state := range []struct{ name, base, branch string }{{"moved base", "other", "verified"}, {"changed task head", "base", "other"}} {
+		t.Run(state.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodGet {
+					t.Error("mutation reached provider")
+					return
+				}
+				sha := state.base
+				if strings.HasSuffix(r.URL.Path, "/marina/run") {
+					sha = state.branch
+				}
+				_ = json.NewEncoder(w).Encode(map[string]any{"object": map[string]string{"sha": sha}})
+			}))
+			defer server.Close()
+			client, _ := New(Config{APIURL: server.URL, Repository: "owner/repo", BaseBranch: "main", Authorize: func(context.Context, int64) error { return nil }}, server.Client())
+			_, err := client.FastForward(context.Background(), sourcecontrol.FastForwardRequest{Repository: "owner/repo", BaseRef: "main", ExpectedBase: "base", HeadRef: "marina/run", ExpectedHead: "verified", AuthorityFence: 1})
+			if err == nil {
+				t.Fatal("changed head accepted")
+			}
+		})
+	}
+}
