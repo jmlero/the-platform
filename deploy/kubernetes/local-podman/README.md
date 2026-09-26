@@ -29,6 +29,11 @@ podman --connection podman-machine-default-root ps
 sh scripts/local-podman-start.sh
 ```
 
+When kagent is installed, its dashboard is available through the
+[localhost-only dashboard port-forward](../kagent-trial/README.md#dashboard).
+The [permanent kagent/chat installation guide](../local-podman-kagent/README.md)
+records the local overlay and the one-turn preparation procedure.
+
 The optional LaunchAgent installed by
 `python3 scripts/install-local-podman-startup.py` starts the existing VM and
 cluster at login. Its log is

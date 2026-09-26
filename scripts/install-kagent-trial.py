@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Install the locked KINT trial only into unused local Kind resources.
+"""Install the locked kagent candidate into unused local Kind resources.
 
 Preparation egress stays open for atelet until the explicit runtime gate closes
-it. This helper never changes the host, task intake, or the existing platform.
+it. Permanent mode retains the engine as part of the local installation. This
+helper never changes the host, task intake, or the existing Deck/Marina release.
 """
 import argparse
 import base64
@@ -21,8 +22,8 @@ def run(args, **kwargs):
     return subprocess.check_output(args, text=True, **kwargs)
 
 
-def apply(items):
-    result = run(KUBE + ["apply", "--server-side", "--field-manager=kint-02", "-f", "-"],
+def apply(items, manager="kint-02"):
+    result = run(KUBE + ["apply", "--server-side", "--field-manager=" + manager, "-f", "-"],
                  input=json.dumps({"apiVersion": "v1", "kind": "List", "items": items}))
     print(result, end="")
 
@@ -36,10 +37,29 @@ def check_collisions(desired, existing):
             raise ValueError(f"resource collision: {identity}; refusing to adopt existing resources")
 
 
+def prepare_permanent(resources, policies):
+    """Give the first local install its own ownership and network selector."""
+    def relabel(value):
+        if isinstance(value, dict):
+            if value.get("the-platform.dev/trial") == "kint-02":
+                value["the-platform.dev/installation"] = "local-kagent"
+                del value["the-platform.dev/trial"]
+            for item in value.values():
+                relabel(item)
+        elif isinstance(value, list):
+            for item in value:
+                relabel(item)
+
+    relabel(resources)
+    relabel(policies)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("assets", type=Path)
     parser.add_argument("--helm", required=True)
+    parser.add_argument("--permanent", action="store_true",
+                        help="retain the engine as the local installation, with installation ownership labels")
     args = parser.parse_args()
     assets = args.assets.resolve()
     spec = importlib.util.spec_from_file_location("trial", ROOT / "scripts/render-kagent-trial.py")
@@ -50,6 +70,11 @@ def main():
         if hashlib.sha256((assets / asset["name"]).read_bytes()).hexdigest() != asset["sha256"]:
             raise ValueError("CLI checksum mismatch: " + asset["name"])
     objects = trial.render(args.helm, assets, lock)["items"]
+    policies = json.loads((PROFILE / "network-policy.json").read_text())["items"]
+    if args.permanent:
+        prepare_permanent(objects, policies)
+    manager = "kint-local" if args.permanent else "kint-02"
+    label = {"the-platform.dev/installation": "local-kagent"} if args.permanent else trial.LABEL
     if not trial.certificate_api_ready(json.loads(run(KUBE + ["get", "--raw", "/apis/certificates.k8s.io"]))):
         raise ValueError("required beta certificate API is unavailable")
     # The profile's NetworkPolicy deliberately pins this existing local node.
@@ -64,15 +89,15 @@ def main():
         existing.extend(json.loads(run(KUBE + ["get", resource, "-o", "json"]))["items"])
     check_collisions(objects, existing)
     namespaces = [o for o in objects if o["kind"] == "Namespace"]
-    apply(namespaces)
-    print(run(KUBE + ["apply", "-f", str(PROFILE / "network-policy.json")]), end="")
+    apply(namespaces, manager)
+    apply(policies, manager)
     apply([{"apiVersion": "networking.k8s.io/v1", "kind": "NetworkPolicy",
             "metadata": {"name": "kint-preparation-downloads", "namespace": "ate-system",
-                         "labels": trial.LABEL},
+                         "labels": label},
             "spec": {"podSelector": {"matchLabels": {"app": "atelet"}},
-                     "policyTypes": ["Egress"], "egress": [{}]}}])
+                     "policyTypes": ["Egress"], "egress": [{}]}}], manager)
     crds = [o for o in objects if o["kind"] == "CustomResourceDefinition"]
-    apply(crds)
+    apply(crds, manager)
     for obj in crds:
         run(KUBE + ["wait", "--for=condition=Established", "crd/" + obj["metadata"]["name"], "--timeout=30s"])
     pools = [("service-dns-ca-pool", "podcertificate-controller-system", "ca"),
@@ -93,18 +118,19 @@ def main():
     cert = base64.b64decode(pool["CAs"][0]["RootCertificateDER"])
     pem = subprocess.check_output(["openssl", "x509", "-inform", "der", "-outform", "pem"], input=cert).decode()
     apply([{"apiVersion": "v1", "kind": "Secret",
-            "metadata": {"name": "actor-id-ca-certs", "namespace": "ate-system", "labels": trial.LABEL},
-            "stringData": {"ca.crt": pem}}])
+            "metadata": {"name": "actor-id-ca-certs", "namespace": "ate-system", "labels": label},
+            "stringData": {"ca.crt": pem}}], manager)
     issuer = json.loads(run(KUBE + ["get", "--raw", "/.well-known/openid-configuration"]))["issuer"]
     auth = {"actorIdentityJWTProvider": "kubernetes", "jwtProviders": [{
         "name": "kubernetes", "issuer": issuer, "audiences": ["api.ate-system.svc"],
         "certificateAuthorityFile": "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt",
         "discoveryTokenFile": "/var/run/secrets/kubernetes.io/serviceaccount/token"}]}
     apply([{"apiVersion": "v1", "kind": "ConfigMap",
-            "metadata": {"name": "ate-api-authentication", "namespace": "ate-system", "labels": trial.LABEL},
-            "data": {"authentication.yaml": json.dumps(auth)}}])
-    apply([o for o in objects if o["kind"] not in ("Namespace", "CustomResourceDefinition")])
-    print("Trial installed. Finish preparation, close kint-preparation-downloads, then run live acceptance.")
+            "metadata": {"name": "ate-api-authentication", "namespace": "ate-system", "labels": label},
+            "data": {"authentication.yaml": json.dumps(auth)}}], manager)
+    apply([o for o in objects if o["kind"] not in ("Namespace", "CustomResourceDefinition")], manager)
+    print(("Permanent local engine" if args.permanent else "Trial") +
+          " installed. Finish preparation, close kint-preparation-downloads, then run live acceptance.")
 
 
 if __name__ == "__main__":

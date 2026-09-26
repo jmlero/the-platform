@@ -2,12 +2,16 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -151,5 +155,78 @@ func TestServeRejectsIncompleteOrUnreadableTLSBeforeContactingDeck(t *testing.T)
 				t.Fatalf("exit code = %d, stderr = %q", code, stderr.String())
 			}
 		})
+	}
+}
+
+func TestShutdownDrainsAnActiveModelResponse(t *testing.T) {
+	started := make(chan struct{})
+	release := make(chan struct{})
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		close(started)
+		<-release
+		w.WriteHeader(http.StatusOK)
+	}))
+	server.Start()
+	defer server.Close()
+	response := make(chan error, 1)
+	go func() {
+		result, err := server.Client().Get(server.URL)
+		if err == nil {
+			defer result.Body.Close()
+			if result.StatusCode != http.StatusOK {
+				err = fmt.Errorf("status = %d", result.StatusCode)
+			}
+		}
+		response <- err
+	}()
+	<-started
+	shutdown := make(chan error, 1)
+	go func() { shutdown <- shutdownHTTPServer(server.Config) }()
+	// A model stream can outlive the old 10-second grace. The release must
+	// complete without losing its response after shutdown starts.
+	time.Sleep(11 * time.Second)
+	close(release)
+	if err := <-shutdown; err != nil {
+		t.Fatalf("shutdown interrupted active response: %v", err)
+	}
+	if err := <-response; err != nil {
+		t.Fatalf("active response failed: %v", err)
+	}
+}
+
+func TestShutdownKeepsGatewayOpenUntilActiveControllerFinishes(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+	var controllers sync.WaitGroup
+	controllers.Add(1)
+	shutdown := make(chan error, 1)
+	go func() { shutdown <- drainControllersAndShutdown(server.Config, &controllers) }()
+	response, err := server.Client().Get(server.URL)
+	if err != nil {
+		t.Fatalf("gateway closed while active controller still needed it: %v", err)
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("gateway status = %d", response.StatusCode)
+	}
+	controllers.Done()
+	if err := <-shutdown; err != nil {
+		t.Fatalf("shutdown after controller completed: %v", err)
+	}
+}
+
+func TestConversationCycleSurvivesTerminationSignal(t *testing.T) {
+	signalContext, signalDone := context.WithCancel(t.Context())
+	cycleContext, cycleDone := conversationCycleContext(signalContext)
+	defer cycleDone()
+	signalDone()
+	if cycleContext.Err() != nil {
+		t.Fatal("termination signal interrupted the active conversation cycle")
+	}
+	cycleDone()
+	if cycleContext.Err() != context.Canceled {
+		t.Fatalf("cycle was not bounded by its own cancellation: %v", cycleContext.Err())
 	}
 }

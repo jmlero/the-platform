@@ -1,4 +1,4 @@
-# Isolated feasibility trial. No model credential or production workload.
+# Local kagent installation. No model credential or production workload.
 rbac:
   namespaces: [kint-engine]
 controller:
@@ -12,7 +12,7 @@ controller:
       namespace: kint-engine
       name: kint-worker
 ui:
-  replicas: 0
+  replicas: 1
   route:
     enabled: false
 kmcp:

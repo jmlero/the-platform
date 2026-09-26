@@ -24,10 +24,11 @@ distinct from the existing Marina worker's `0.153.4`. No Marina profile changes
 are made here. The separate [KINT-07/08 acceptance](../../../docs/validation/kint-07-08-2026-09-23.md)
 proves pinned LangChain/BYO and the minimal question bridge on this topology.
 
-The minimal active topology is one kagent controller, its PostgreSQL, one
-Substrate API/controller/node agent, ingress and egress routers, credential
-provider, certificate controller, Substrate PostgreSQL, RustFS snapshot store,
-and one gVisor worker. No Redis, UI, kmcp, tool catalog, oauth2-proxy, vector
+The minimal active topology is one kagent controller, its PostgreSQL and
+dashboard, one Substrate API/controller/node agent, ingress and egress routers,
+credential provider, certificate controller, Substrate PostgreSQL, RustFS
+snapshot store,
+and one gVisor worker. No Redis, kmcp, tool catalog, oauth2-proxy, vector
 extension, tracing collector or model account is installed. The bucket-init Job
 is preparation only. Three PVCs request 2.5 GiB in total; local-path capacity is
 not a filesystem quota. Image/layer/gVisor caches consume additional node disk.
@@ -43,8 +44,9 @@ report is an idle/lifecycle measurement, not a full-workload peak capacity claim
 
 The upstream kagent controller's `unsecure` mode is retained only inside this
 synthetic trial: it is a caller-identity partition, **not authentication**.
-There is no ingress, NodePort or UI. Administrative access is an authenticated
-Kubernetes port-forward bound to `127.0.0.1`. NetworkPolicy denies worker access
+There is no ingress or NodePort. The dashboard and administrative API are reached
+through Kubernetes port-forwards bound to `127.0.0.1`; the dashboard has no
+separate sign-in in this local profile. NetworkPolicy denies worker access
 to the controller, Deck, Kubernetes and the internet. Substrate uses generated
 pod certificates, trust bundles and Kubernetes-issued identity, in separate
 trial-owned namespaces. Its Secret reader and atespace-to-namespace credential grant are scoped to
@@ -107,6 +109,16 @@ python3 scripts/render-kagent-trial.py /private/tmp/kint-20260922 \
   --output /private/tmp/kint-20260922/trial.json --preflight
 python3 scripts/install-kagent-trial.py /private/tmp/kint-20260922 \
   --helm /private/tmp/kint-20260922/darwin-arm64/helm
+```
+
+## Dashboard
+
+The locked UI image is installed with the controller. To open the dashboard,
+keep this command running in a terminal, then visit `http://127.0.0.1:18080`:
+
+```sh
+kubectl --context kind-marina-local -n kint-engine port-forward \
+  --address 127.0.0.1 service/kint-engine-ui 18080:8080
 ```
 
 The installer creates new namespaces, network policies, CRDs, CA/JWT pools,

@@ -242,6 +242,14 @@
                     "the-platform.dev/probe": "kint"
                   }
                 }
+              },
+              {
+                "podSelector": {
+                  "matchLabels": {
+                    "app.kubernetes.io/component": "ui",
+                    "app.kubernetes.io/instance": "kint-engine"
+                  }
+                }
               }
             ],
             "ports": [
@@ -311,6 +319,76 @@
               },
               {
                 "port": 8085
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "networking.k8s.io/v1",
+      "kind": "NetworkPolicy",
+      "metadata": {
+        "name": "kint-ui",
+        "namespace": "kint-engine",
+        "labels": {
+          "the-platform.dev/trial": "kint-02"
+        }
+      },
+      "spec": {
+        "podSelector": {
+          "matchLabels": {
+            "app.kubernetes.io/component": "ui",
+            "app.kubernetes.io/instance": "kint-engine"
+          }
+        },
+        "policyTypes": [
+          "Ingress",
+          "Egress"
+        ],
+        "ingress": [],
+        "egress": [
+          {
+            "to": [
+              {
+                "podSelector": {
+                  "matchLabels": {
+                    "app.kubernetes.io/component": "controller",
+                    "app.kubernetes.io/instance": "kint-engine"
+                  }
+                }
+              }
+            ],
+            "ports": [
+              {
+                "protocol": "TCP",
+                "port": 8083
+              }
+            ]
+          },
+          {
+            "to": [
+              {
+                "namespaceSelector": {
+                  "matchLabels": {
+                    "kubernetes.io/metadata.name": "kube-system"
+                  }
+                },
+                "podSelector": {
+                  "matchLabels": {
+                    "k8s-app": "kube-dns"
+                  }
+                }
+              }
+            ],
+            "ports": [
+              {
+                "protocol": "UDP",
+                "port": 53
+              },
+              {
+                "protocol": "TCP",
+                "port": 53
               }
             ]
           }

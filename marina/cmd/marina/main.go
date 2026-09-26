@@ -462,9 +462,14 @@ func runServe(arguments []string, stderr io.Writer) int {
 					}
 				}
 				if conversationController != nil {
-					for _, err := range conversationController.Cycle(ctx) {
+					if ctx.Err() != nil {
+						return
+					}
+					cycleCtx, cancel := conversationCycleContext(ctx)
+					for _, err := range conversationController.Cycle(cycleCtx) {
 						logger.Warn("conversation workflow deferred", "error", err)
 					}
+					cancel()
 				}
 			}
 		}
@@ -501,9 +506,7 @@ func runServe(arguments []string, stderr io.Writer) int {
 		logger.Info("Marina HTTP service shutting down")
 	}
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if err := server.Shutdown(shutdownCtx); err != nil {
+	if err := drainControllersAndShutdown(server, &controllers); err != nil {
 		logger.Error("Marina HTTP service shutdown failed", "error", err)
 		return 1
 	}
@@ -512,6 +515,27 @@ func runServe(arguments []string, stderr io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+// Keep established gateway streams alive while a replacement Pod starts.
+// Conversation calls are bounded to five minutes by the installed profile;
+// Kubernetes gives this process an additional 30 seconds to finish draining.
+func shutdownHTTPServer(server *http.Server) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	return server.Shutdown(ctx)
+}
+
+// A termination signal stops new reconciliation cycles, while the current
+// conversation cycle keeps its own deadline and can complete through the
+// gateway before the old Pod closes its HTTP listener.
+func conversationCycleContext(signalContext context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(signalContext), 30*time.Minute)
+}
+
+func drainControllersAndShutdown(server *http.Server, controllers *sync.WaitGroup) error {
+	controllers.Wait()
+	return shutdownHTTPServer(server)
 }
 
 func logControlCycle(logger *slog.Logger, cycle reconcile.ControlCycle, trigger string) {

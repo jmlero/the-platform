@@ -1,6 +1,10 @@
 import importlib.util
+import hashlib
+import json
 from pathlib import Path
+import tempfile
 import unittest
+from unittest.mock import patch
 
 
 class TrialRenderTests(unittest.TestCase):
@@ -41,6 +45,34 @@ class TrialRenderTests(unittest.TestCase):
         scoped = self.trial.scope_mutations(role)
         self.assertEqual(role["rules"][0]["verbs"], ["get", "list", "watch"])
         self.assertEqual(scoped[0]["metadata"]["namespace"], "kint-engine")
+
+    def test_render_includes_pinned_dashboard_without_default_model(self):
+        with tempfile.TemporaryDirectory() as directory:
+            archive = Path(directory) / "kagent.tgz"
+            archive.write_bytes(b"chart")
+            lock = {"charts": [{"name": "kagent", "archive": archive.name,
+                                "sha256": hashlib.sha256(b"chart").hexdigest()}],
+                    "images": [{"upstream": "ghcr.io/kagent-dev/kagent/ui:1.0.0-alpha1",
+                                "pinned": "ghcr.io/kagent-dev/kagent/ui@sha256:pinned"}]}
+            dashboard = {"apiVersion": "apps/v1", "kind": "Deployment",
+                         "metadata": {"name": "kint-engine-ui", "namespace": "kint-engine"},
+                         "spec": {"replicas": 0, "template": {"spec": {"containers": [{
+                             "name": "ui", "image": "ghcr.io/kagent-dev/kagent/ui:1.0.0-alpha1"}]}}}}
+            objects = [dashboard,
+                       {"apiVersion": "v1", "kind": "Service",
+                        "metadata": {"name": "kint-engine-ui", "namespace": "kint-engine"}},
+                       {"apiVersion": "kagent.dev/v1alpha3", "kind": "ModelConfig",
+                        "metadata": {"name": "default", "namespace": "kint-engine"}}]
+            with patch.object(self.trial, "run", side_effect=["rendered", json.dumps(objects)]):
+                rendered = self.trial.render("helm", Path(directory), lock)["items"]
+        ui = next(item for item in rendered if item["kind"] == "Deployment")
+        self.assertEqual(ui["metadata"]["name"], "kint-engine-ui")
+        self.assertEqual(ui["spec"]["replicas"], 1)
+        self.assertEqual(ui["spec"]["template"]["spec"]["containers"][0]["image"],
+                         "ghcr.io/kagent-dev/kagent/ui@sha256:pinned")
+        self.assertTrue(any(item["kind"] == "Service" and
+                            item["metadata"]["name"] == "kint-engine-ui" for item in rendered))
+        self.assertFalse(any(item["kind"] == "ModelConfig" for item in rendered))
 
 
 if __name__ == "__main__":

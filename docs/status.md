@@ -1,6 +1,6 @@
 # Current state
 
-Last updated: 2026-09-25.
+Last updated: 2026-09-26.
 
 This is the only description of what is supported, what is implemented but not
 yet accepted, and what is not supported. Other documents link here instead of
@@ -71,14 +71,29 @@ Disabling new intake does not pause executions that have already started.
 
 **platformctl** is a stateless CLI over Deck's API.
 
+**Local chat engine** ([evidence](validation/kint-16-2026-09-26.md))
+
+- Pinned kagent and Substrate are permanently installed beside the existing
+  repository runtime. A prepared, bounded conversation turn produced a real
+  model reply in its Deck thread, and that thread survived a Deck restart.
+- Each chat turn needs a fresh prepared template, ModelConfig and Secret. The
+  local installation has one unused turn ready; the operator prepares the next
+  slot with the [local helper](../deploy/kubernetes/local-podman-kagent/README.md)
+  after the current turn finishes. Repository tasks still use the existing
+  runtime.
+- The pinned local Marina release pair passed an image upgrade during an active
+  kagent model call and a previous-image, retained-data-copy rollback while
+  preserving the exact Deck reply and usage
+  ([evidence](validation/kint-10-recovery-2026-09-26.md)).
+
 ## Implemented but not yet accepted
 
 | Capability | Where it stands | Still missing |
 | --- | --- | --- |
-| Conversational agent with no write authority (CHAT-04) | Deterministic checks pass. | Live engine and model acceptance. |
+| Conversational agent with no write authority (CHAT-04) | Deterministic checks and one installed model reply pass. | Browser acceptance and the remaining negative/restart cases. |
 | Engine questions answered in the thread (CHAT-05) | Product checks and real-process conformance pass. | Installed engine and browser acceptance. |
 | Conversation delegation, result publication and linked follow-up (CHAT-06–08) | Product checks and real Deck conformance pass. | Installed actor, model and browser acceptance. |
-| kagent as the agent engine (KINT-01–08) | Isolated local trials passed: a native Codex PR, the LangChain workload and a question round-trip. The trials were torn down afterwards. | Permanent installation (KINT-16), core failure cases (KINT-09), upgrade and rollback (KINT-10), cutover and removal (KINT-11–15), per [decision 0023](decisions/0023-focus-kagent-cutover.md). It is **not** the installed runtime. |
+| kagent for repository work (KINT-01–11) | Isolated local trials passed a native Codex PR and a question round-trip. KINT-16 installed the engine permanently for chat; KINT-10 accepted the pinned local image transition. | Core repository failure cases (KINT-09), cutover (KINT-11), and legacy removal (KINT-12–15), per [decision 0023](decisions/0023-focus-kagent-cutover.md). New repository work still uses the existing runtime. |
 
 ## Not supported
 

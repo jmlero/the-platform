@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "status": "qualified for KINT-01/02 local lifecycle trial only; governed workload acceptance remains KINT-03 onward",
+  "status": "dependency lock for the pinned local kagent/Substrate installation; acceptance state is in docs/status.md",
   "kagent_commit": "850c464726881317997c32515f8b621b949d6ce1",
   "substrate_commit": "a7701e8dc8cb63a18d63e7fe771aff5a5ecca279",
   "charts": [
@@ -96,6 +96,11 @@
     {
       "upstream": "ghcr.io/kagent-dev/kagent/controller:1.0.0-alpha1",
       "pinned": "ghcr.io/kagent-dev/kagent/controller@sha256:b60c5df1645875530a6db71c0398e0d775bd8760a3083a1051aa81ff756c0d73",
+      "platform": "linux/arm64"
+    },
+    {
+      "upstream": "ghcr.io/kagent-dev/kagent/ui:1.0.0-alpha1",
+      "pinned": "ghcr.io/kagent-dev/kagent/ui@sha256:5a6ecc6aaf462c3e0e1c21e52597e139aae21062c5c77fedca675509952defd7",
       "platform": "linux/arm64"
     },
     {

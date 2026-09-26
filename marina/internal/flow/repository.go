@@ -142,7 +142,13 @@ func (c *Controller) ReconcileRepository(ctx context.Context) error {
 		return provider.RecordRepositoryResult(ctx, c.Config.ProjectID, result)
 	}
 	if request.ExpectedBindingVersion != 0 && request.ExpectedBindingVersion != current.Version {
-		return reject("The repository binding changed. Refresh and submit the association again.")
+		// Private installation revisions can advance Marina's binding before
+		// Deck receives a new association. Accept the operator's older Deck
+		// version only when its exact repository binding remains in history.
+		observed, _, readErr := c.Journal.RepositorySnapshot(ctx, c.Config.ProjectID, request.ExpectedBindingVersion)
+		if readErr != nil || request.Binding == nil || observed != *request.Binding || request.ExpectedBindingVersion > current.Version {
+			return reject("The repository binding changed. Refresh and submit the association again.")
+		}
 	}
 	config, err := requestedRepository(c.Config, request)
 	if err != nil {

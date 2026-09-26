@@ -1,0 +1,24 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: marina-conversation-credential
+  namespace: kint-engine
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [replace-in-private-overlay]
+    verbs: [get, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: marina-conversation-credential
+  namespace: kint-engine
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: marina-conversation-credential
+subjects:
+  - kind: ServiceAccount
+    name: marina
+    namespace: marina-system

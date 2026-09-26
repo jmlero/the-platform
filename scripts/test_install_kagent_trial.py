@@ -26,6 +26,22 @@ class TrialInstallTests(unittest.TestCase):
             [{"kind": "Namespace", "metadata": {"name": "ate-system"}}],
             [{"kind": "Namespace", "metadata": {"name": "marina-system"}}])
 
+    def test_permanent_install_relabels_owned_resources_and_policy_selectors(self):
+        resources = [{"kind": "Namespace", "metadata": {"name": "kint-engine",
+                      "labels": {"the-platform.dev/trial": "kint-02"}}}]
+        policies = [{"kind": "NetworkPolicy", "metadata": {"name": "internal",
+                     "namespace": "ate-system", "labels": {"the-platform.dev/trial": "kint-02"}},
+                     "spec": {"ingress": [{"from": [{"namespaceSelector": {
+                         "matchLabels": {"the-platform.dev/trial": "kint-02"}}}]}]}}]
+        self.install.prepare_permanent(resources, policies)
+        self.assertEqual(resources[0]["metadata"]["labels"],
+                         {"the-platform.dev/installation": "local-kagent"})
+        self.assertEqual(policies[0]["metadata"]["labels"],
+                         {"the-platform.dev/installation": "local-kagent"})
+        self.assertEqual(policies[0]["spec"]["ingress"][0]["from"][0]
+                         ["namespaceSelector"]["matchLabels"],
+                         {"the-platform.dev/installation": "local-kagent"})
+
 
 if __name__ == "__main__":
     unittest.main()

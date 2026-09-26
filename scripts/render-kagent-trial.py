@@ -108,9 +108,8 @@ def render(helm, directory, lock):
         for obj in documents:
             if not obj:
                 continue
-            name = obj["metadata"]["name"]
-            # UI has no enabled switch; omit its objects, not just its running Pod.
-            if name.startswith("kint-engine-ui") or obj["kind"] == "ModelConfig":
+            # The chart's default ModelConfig has no governed credential.
+            if obj["kind"] == "ModelConfig":
                 continue
             pin_images(obj, images)
             objects.append(obj)
