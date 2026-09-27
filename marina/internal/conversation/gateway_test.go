@@ -61,7 +61,7 @@ func TestGatewayDeniesToolsAndSecondModelCall(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 			t.Fatal(err)
 		}
-		if request.Text.Format.Type != "json_schema" || request.Text.Format.Name != "conversation_reply" || !request.Text.Format.Strict || len(request.Text.Format.Schema.Required) != 2 {
+		if request.Text.Format.Type != "json_schema" || request.Text.Format.Name != "conversation_reply" || !request.Text.Format.Strict || len(request.Text.Format.Schema.Required) != 3 {
 			t.Fatalf("conversation output format not constrained: %+v", request.Text.Format)
 		}
 		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"output":[{"type":"message","content":[{"type":"output_text","text":"Hello"}]}],"usage":{"input_tokens":10,"output_tokens":5}}`))}, nil
@@ -98,5 +98,41 @@ func TestGatewayDeniesToolsAndSecondModelCall(t *testing.T) {
 	if turn.UsedTokens != 15 || turn.ReservedTokens != 0 {
 		data, _ := json.Marshal(turn)
 		t.Fatalf("usage: %s", data)
+	}
+
+	// Only an answer delivered to this turn's clarification admits one more call.
+	engine := journal.ConversationEngineJournal()
+	record, err := engine.EnsureEngineAttempt(ctx, spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, step := range []func(*rt.EngineAttempt){
+		func(r *rt.EngineAttempt) {
+			r.Phase, r.State, r.InstanceID, r.Revision, r.Route, r.ContextID = "ready", rt.StateRunning, "instance", spec.Engine.Revision, "route", "context"
+		},
+		func(r *rt.EngineAttempt) { r.Phase = "sending" },
+		func(r *rt.EngineAttempt) { r.Phase, r.TaskID, r.QuestionID = "active", "task", "clarification" },
+	} {
+		step(&record)
+		if record, err = engine.UpdateEngineAttempt(ctx, record); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if status := call(`{"input":"hello"}`); status != 429 || upstreamCalls != 1 {
+		t.Fatalf("follow-up before the answer: status=%d calls=%d", status, upstreamCalls)
+	}
+	record.AnswerMessageID, record.AnswerDigest, record.AnswerPhase = "marina-answer-"+message.ID, strings.Repeat("f", 64), "sending"
+	if record, err = engine.UpdateEngineAttempt(ctx, record); err != nil {
+		t.Fatal(err)
+	}
+	if status := call(`{"input":"hello and the answer"}`); status != 200 || upstreamCalls != 2 {
+		t.Fatalf("follow-up after the answer: status=%d calls=%d", status, upstreamCalls)
+	}
+	if status := call(`{"input":"hello again"}`); status != 429 || upstreamCalls != 2 {
+		t.Fatalf("third call: status=%d calls=%d", status, upstreamCalls)
+	}
+	turn, err = journal.GetConversationTurn(ctx, message.ID)
+	if err != nil || turn.UsedTokens != 30 || turn.ReservedTokens != 0 {
+		t.Fatalf("usage after follow-up: %+v %v", turn, err)
 	}
 }

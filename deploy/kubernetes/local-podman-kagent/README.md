@@ -45,7 +45,11 @@ task intake disabled outside a selected exercise.
    that in `kint-engine`; Marina refuses to adopt or delete resources without
    its `the-platform.dev/owner: marina` label.
 6. The harness images must already be cached in the worker node: template
-   preparation starts a golden actor without preparation egress.
+   preparation starts a golden actor without preparation egress. After changing
+   a Harness image in the local registry, allow atelet TCP egress to
+   `10.89.0.2:5000` only until the affected templates report Ready, then remove
+   that NetworkPolicy. Without it the golden actor retries the pull and stays in
+   `ACTOR_STATE_RESUMING`, holding a worker.
 7. Allow `atenet-egress` to reach Marina over TLS: create its `marina-gateway-ca`
    Secret from the private installation `ca.crt`, mount it read-only at
    `/run/marina-ca` in `atenet-egress`, and set the dynamic HTTPS backend's

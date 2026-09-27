@@ -52,3 +52,51 @@ func TestConversationTurnReplayAndUnknownModelCallStayBounded(t *testing.T) {
 		t.Fatalf("accounting: %+v %v", turn, err)
 	}
 }
+
+func TestConversationFollowUpCallFollowsTheFirstAndFitsTheTurnBudget(t *testing.T) {
+	ctx := context.Background()
+	store, err := sqlite.Open(ctx, t.TempDir()+"/journal.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	message := workcontrol.ConversationMessage{ID: "msg_1", ProjectID: "prj_1", ChannelID: "chn_1", ThreadID: "thr_1", AuthorType: "human", Body: "Help me choose", InvokedAgentID: "agt_1", InvocationRequestID: "request-1", CreatedAt: time.Now().UnixMilli()}
+	turn, err := store.EnsureConversationTurn(ctx, message, time.Now().Add(time.Minute), 1000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveConversationSpecification(ctx, turn.MessageID, rt.Specification{DeadlineAt: turn.DeadlineAt}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.ReserveConversationFollowUpCall(ctx, turn.MessageID, 100); err == nil {
+		t.Fatal("follow-up call reserved before the first call")
+	}
+	if err := store.ReserveConversationCall(ctx, turn.MessageID, 600); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.CompleteConversationCall(ctx, turn.MessageID, 400); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.ReserveConversationFollowUpCall(ctx, turn.MessageID, 601); err == nil {
+		t.Fatal("follow-up reservation exceeded the remaining turn budget")
+	}
+	if err := store.ReserveConversationFollowUpCall(ctx, turn.MessageID, 600); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.ReserveConversationFollowUpCall(ctx, turn.MessageID, 1); err == nil {
+		t.Fatal("second follow-up reservation accepted")
+	}
+	if err := store.CompleteConversationFollowUpCall(ctx, turn.MessageID, 601); err == nil {
+		t.Fatal("follow-up usage above its reservation accepted")
+	}
+	if err := store.CompleteConversationFollowUpCall(ctx, turn.MessageID, 250); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.ReserveConversationFollowUpCall(ctx, turn.MessageID, 1); err == nil {
+		t.Fatal("a third model call was reserved")
+	}
+	turn, err = store.GetConversationTurn(ctx, turn.MessageID)
+	if err != nil || turn.UsedTokens != 650 || turn.ReservedTokens != 0 {
+		t.Fatalf("usage after follow-up: %+v %v", turn, err)
+	}
+}

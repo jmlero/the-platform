@@ -18,7 +18,8 @@ import (
 )
 
 // Gateway grants one text-only model call to a single immutable conversation
-// turn. It has no source, shell, tool, task, or result-publication route.
+// turn, and one follow-up after the turn's clarification question was answered.
+// It has no source, shell, tool, task, or result-publication route.
 type Gateway struct {
 	journal       *sqlite.Store
 	signingKey    []byte
@@ -56,9 +57,23 @@ var conversationResponseFormat = json.RawMessage(`{
               "additionalProperties": false
             }
           ]
+        },
+        "question": {
+          "anyOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "properties": {
+                "text": {"type": "string"},
+                "choices": {"type": "array", "items": {"type": "string"}}
+              },
+              "required": ["text", "choices"],
+              "additionalProperties": false
+            }
+          ]
         }
       },
-      "required": ["answer", "delegation"],
+      "required": ["answer", "delegation", "question"],
       "additionalProperties": false
     }
   }
@@ -158,7 +173,18 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	reservation := int64(len(encoded)) + 1024 + g.model.MaxOutputTokens
-	if err := g.journal.ReserveConversationCall(r.Context(), id, reservation); err != nil {
+	reserve, complete := g.journal.ReserveConversationCall, g.journal.CompleteConversationCall
+	if turn.ModelCallStatus == "completed" {
+		engine, err := g.journal.ConversationEngineJournal().GetEngineAttempt(r.Context(), id)
+		// The actor may call while the answer delivery is still in flight;
+		// either phase means Marina recorded this turn's answer.
+		if err != nil || (engine.AnswerPhase != "sending" && engine.AnswerPhase != "sent") {
+			http.Error(w, "model budget or turn unavailable", 429)
+			return
+		}
+		reserve, complete = g.journal.ReserveConversationFollowUpCall, g.journal.CompleteConversationFollowUpCall
+	}
+	if err := reserve(r.Context(), id, reservation); err != nil {
 		http.Error(w, "model budget or turn unavailable", 429)
 		return
 	}
@@ -209,7 +235,7 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	accountCtx, finish := context.WithTimeout(context.WithoutCancel(r.Context()), 5*time.Second)
 	defer finish()
-	if err := g.journal.CompleteConversationCall(accountCtx, id, decoded.Usage.InputTokens+decoded.Usage.OutputTokens); err != nil {
+	if err := complete(accountCtx, id, decoded.Usage.InputTokens+decoded.Usage.OutputTokens); err != nil {
 		http.Error(w, "model usage could not be recorded", 503)
 		return
 	}

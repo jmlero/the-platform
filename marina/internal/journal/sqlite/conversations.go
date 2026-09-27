@@ -283,3 +283,37 @@ func (s *Store) CompleteConversationCall(ctx context.Context, messageID string, 
 	}
 	return nil
 }
+
+// ReserveConversationFollowUpCall admits the one model call that answers a
+// turn's clarification after the first call completed. Both calls share the
+// turn's token budget; an unknown follow-up keeps its reservation.
+func (s *Store) ReserveConversationFollowUpCall(ctx context.Context, messageID string, tokens int64) error {
+	if tokens < 1 {
+		return errors.New("invalid model reservation")
+	}
+	result, err := s.db.ExecContext(ctx, `UPDATE conversation_turns SET reserved_tokens=?,follow_up_call='reserved',updated_at=?
+		WHERE message_id=? AND status='running' AND model_call_status='completed' AND follow_up_call='' AND used_tokens+?<=max_tokens AND deadline_at>?`,
+		tokens, s.clock().UnixMilli(), messageID, tokens, s.clock().UnixMilli())
+	if err != nil {
+		return err
+	}
+	if count, err := result.RowsAffected(); err != nil || count != 1 {
+		return errors.Join(err, errors.New("conversation follow-up call unavailable or budget exhausted"))
+	}
+	return nil
+}
+
+func (s *Store) CompleteConversationFollowUpCall(ctx context.Context, messageID string, tokens int64) error {
+	if tokens < 0 {
+		return errors.New("negative model usage")
+	}
+	result, err := s.db.ExecContext(ctx, `UPDATE conversation_turns SET reserved_tokens=0,used_tokens=used_tokens+?,follow_up_call='completed',updated_at=?
+		WHERE message_id=? AND follow_up_call='reserved' AND ?<=reserved_tokens`, tokens, s.clock().UnixMilli(), messageID, tokens)
+	if err != nil {
+		return err
+	}
+	if count, err := result.RowsAffected(); err != nil || count != 1 {
+		return errors.Join(err, errors.New("conversation usage exceeds reservation or follow-up is not pending"))
+	}
+	return nil
+}

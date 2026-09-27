@@ -231,7 +231,11 @@ creates a `marina-` AgentTemplate, ModelConfig and same-name `gateway` Secret
 routed through its HTTPS conversation gateway, freezes the prepared revision in
 the turn's specification, and deletes the three resources after publication.
 No template or Secret serves two turns, and Marina never adopts or deletes a
-resource it did not label as its own. The result stays in Marina's artifact
+resource it did not label as its own. The actor may ask one typed clarification
+question (kagent's ask-user request with up to six choices) instead of replying.
+Deck shows it in the thread; the answer goes to the same waiting task, and the
+gateway then admits exactly one follow-up model call within the turn's token
+limit. The result stays in Marina's artifact
 store and its exact publication request is journaled before Deck receives a
 reply and optional task. Local model and engine proof is still required; see
 [CHAT-04 evidence](../../../docs/validation/chat-04-2026-09-23.md) and
