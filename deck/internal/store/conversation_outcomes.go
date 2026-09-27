@@ -93,7 +93,7 @@ func (s *Store) PublishConversationOutcome(ctx context.Context, in domain.Conver
 		}
 		var profile *domain.WorkloadProfile
 		if validated.Status == domain.TaskReady {
-			if in.ProfileID != "repository/v1" || in.ProfileDigest == "" || validated.Budget.MaxAttempts != 2 {
+			if (in.ProfileID != "repository/v1" && in.ProfileID != "repository/v2") || in.ProfileDigest == "" || validated.Budget.MaxAttempts != 2 {
 				return out, fmt.Errorf("Ready delegation requires the installed repository profile and two attempts: %w", domain.ErrInvalidInput)
 			}
 			profile, err = admittedProfile(ctx, tx, invocation.ProjectID, domain.WorkloadInvocation{ProfileID: in.ProfileID, ProfileDigest: in.ProfileDigest, Task: validated}, *validated.Budget)

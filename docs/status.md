@@ -1,6 +1,6 @@
 # Current state
 
-Last updated: 2026-09-26.
+Last updated: 2026-09-27.
 
 This is the only description of what is supported, what is implemented but not
 yet accepted, and what is not supported. Other documents link here instead of
@@ -81,8 +81,8 @@ Disabling new intake does not pause executions that have already started.
 - Each chat turn needs a fresh prepared template, ModelConfig and Secret. The
   operator prepares the next slot with the
   [local helper](../deploy/kubernetes/local-podman-kagent/README.md) after the
-  current turn finishes. The next slot is currently waiting for its golden
-  snapshot; repository tasks still use the existing runtime.
+  current turn finishes. One fresh slot is prepared; repository tasks still
+  use the existing runtime.
 - The pinned local Marina release pair passed an image upgrade during an active
   kagent model call and a previous-image, retained-data-copy rollback while
   preserving the exact Deck reply and usage
@@ -92,9 +92,11 @@ Disabling new intake does not pause executions that have already started.
 
 | Capability | Where it stands | Still missing |
 | --- | --- | --- |
-| Conversational agent with no write authority (CHAT-04) | Deterministic checks and one earlier installed model reply pass. The [latest browser probe](validation/chat-04-10-local-2026-09-26.md) blocked after model accounting, and the next actor template is pending its golden snapshot. | Restore a ready single-use slot, then pass browser and negative/restart cases. |
-| Engine questions answered in the thread (CHAT-05) | Product checks and real-process conformance pass. | Installed engine and browser acceptance. |
-| Conversation delegation, result publication and linked follow-up (CHAT-06–08) | Product checks and real Deck conformance pass. | Installed actor, model and browser acceptance. |
+| Conversational agent with no write authority (CHAT-04) | Deterministic checks, installed model replies and [browser rendering](validation/chat-04-06-browser-2026-09-27.md) pass. | Negative/restart acceptance. |
+| Engine questions answered in the thread (CHAT-05) | Product checks and real-process conformance pass; an installed model clarification [rendered in the browser](validation/chat-04-06-browser-2026-09-27.md) across two turns. | Engine-typed question acceptance. |
+| Conversation delegation, result publication and linked follow-up (CHAT-06–08) | Product checks and real Deck conformance pass. A [local model-created Ready task](validation/chat-06-10-landing-2026-09-27.md) landed after verification and CI; its originating thread showed the result and a linked follow-up. A bounded earlier task posted a blocker there. | Remaining negative and restart cases before support. |
+| Conversation recovery and full path (CHAT-09–10) | A [complete local chat-to-result path](validation/chat-06-10-landing-2026-09-27.md) and duplicate-request replay passed. | Restart and response-loss cases for this path. |
+| Landing on main after clean verification and required CI (LAND-01) | The [versioned v2 workflow](validation/land-01-workflow-2026-09-27.md) passes product checks and conformance. [Direct](validation/land-01-private-local-2026-09-27.md) and [chat-created](validation/chat-06-10-landing-2026-09-27.md) private local Kind tasks landed after clean verification and observed GitHub CI. | Protected-CI enforcement proof, deferred for the private acceptance repository. |
 | kagent for repository work (KINT-01–11) | Isolated local trials passed a native Codex PR and a question round-trip. KINT-16 installed the engine permanently for chat; KINT-10 accepted the pinned local image transition. | Core repository failure cases (KINT-09), cutover (KINT-11), and legacy removal (KINT-12–15), per [decision 0023](decisions/0023-focus-kagent-cutover.md). New repository work still uses the existing runtime. |
 
 ## Not supported
@@ -107,11 +109,12 @@ Disabling new intake does not pause executions that have already started.
 - Independent semantic review before each commit. The policy is decided
   ([decision 0021](decisions/0021-semantic-review-gate.md)); the behavior is not
   built.
-- Landing on main without a pull request, after the platform check and GitHub
-  CI ([decision 0022](decisions/0022-autonomous-software-factory.md)). Work still
-  ends at a pull request.
+- Landing on main as an accepted workflow. The normal local installation still
+  selects PR delivery; a v2 test run landed on main, but protected-CI proof is
+  deferred for the private acceptance repository.
 - PRDs drafted in the chat and committed to the project repository, and tasks
-  derived from them. Tasks are created by hand or promoted from messages.
+  derived from them. Tasks can be created by hand, promoted from messages, or
+  delegated by the installed chat agent; PRD automation is still absent.
 - Notes and knowledge bases that agents maintain.
 - The diagnostic analysis workflow (LangChain) is retired
   ([decision 0023](decisions/0023-focus-kagent-cutover.md)). Its code is still

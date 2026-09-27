@@ -78,6 +78,39 @@ func TestConversationOutcomeCreatesOneReadyTaskAndReply(t *testing.T) {
 	}
 }
 
+func TestConversationOutcomeAdmitsFastForwardProfile(t *testing.T) {
+	ctx := context.Background()
+	s, err := Open(ctx, filepath.Join(t.TempDir(), "deck.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	digest := strings.Repeat("b", 64)
+	authority := []string{"source.read", "source.write", "source.fast_forward"}
+	if err := s.PublishWorkloads(ctx, "prj_default", "test", domain.WorkloadCatalog{ExpiresAt: time.Now().Add(time.Minute).UnixMilli(), Profiles: []domain.WorkloadProfile{{ID: "repository/v2", Digest: digest, Harness: "codex/v1", Authority: authority, MaxTokens: 30000, BudgetMinutes: 40, MinAttempts: 2}}}); err != nil {
+		t.Fatal(err)
+	}
+	channel, err := s.CreateChannel(ctx, "prj_default", "landing")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.RegisterAgent(ctx, domain.Agent{ID: "agt_chat", InstallationID: "chat", Name: "Chat", Capabilities: []string{"conversation.invoke.prj_default"}}); err != nil {
+		t.Fatal(err)
+	}
+	invocation, err := s.InvokeConversation(ctx, domain.ConversationInvocationInput{ChannelID: channel.ID, AgentID: "agt_chat", AuthorID: "operator:one", RequestID: "landing-delegation", Body: "Fix and land the regression"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := s.PublishConversationOutcome(ctx, domain.ConversationOutcomeInput{InvocationMessageID: invocation.Message.ID, AgentID: "agt_chat", Status: "completed", Body: "Task created", ResultDigest: "sha256:landing", ProfileID: "repository/v2", ProfileDigest: digest, Task: &domain.CreateTaskInput{Title: "Fix regression", AcceptanceCriteria: "Regression passes", Status: domain.TaskReady, Budget: &domain.Budget{TimeMinutes: 30, MaxAttempts: 2, MaxTokens: 20000, MaxConcurrency: 1, Authority: authority}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	task, err := s.GetTask(ctx, result.TaskID)
+	if err != nil || task.Status != domain.TaskReady || task.Workload == nil || task.Workload.ID != "repository/v2" {
+		t.Fatalf("landing delegation: task=%+v err=%v", task, err)
+	}
+}
+
 func TestConversationFollowupPreservesOriginalTaskAndHistory(t *testing.T) {
 	ctx := context.Background()
 	s, err := Open(ctx, filepath.Join(t.TempDir(), "deck.db"))

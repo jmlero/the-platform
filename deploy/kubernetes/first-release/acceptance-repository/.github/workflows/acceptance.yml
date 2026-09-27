@@ -1,7 +1,7 @@
 name: Acceptance
 on:
   push:
-    branches: [main]
+    branches: [main, 'marina/**']
   pull_request:
     branches: [main]
 permissions:

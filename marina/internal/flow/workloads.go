@@ -13,7 +13,7 @@ func (c Config) WorkloadProfiles() []workcontrol.WorkloadProfile {
 	kinds := []string{"instruction", "goal", "document", "decision", "message"}
 	if c.RepositoryEnabled() {
 		kinds = append(kinds, "git")
-		profiles = append(profiles, workcontrol.WorkloadProfile{ID: "repository/v1", Digest: c.Digest(), Harness: "codex/v1", Authority: []string{"source.read", "source.write", "pull_request.create"}, MaxTokens: c.MaxTokens, BudgetMinutes: c.BudgetMinutes, MinAttempts: 2, Tools: []string{}, ContextKinds: kinds})
+		profiles = append(profiles, workcontrol.WorkloadProfile{ID: c.RepositoryProfileID(), Digest: c.Digest(), Harness: "codex/v1", Authority: c.RepositoryAuthority(), MaxTokens: c.MaxTokens, BudgetMinutes: c.BudgetMinutes, MinAttempts: 2, Tools: []string{}, ContextKinds: kinds})
 	}
 	if c.Analysis != nil {
 		analysisKinds := []string{}
@@ -27,6 +27,20 @@ func (c Config) WorkloadProfiles() []workcontrol.WorkloadProfile {
 		profiles = append(profiles, workcontrol.WorkloadProfile{ID: analysis.Kind, Digest: c.AnalysisDigest(), Harness: c.Analysis.HarnessVersion, Authority: []string{c.AnalysisAuthority()}, MaxTokens: c.Analysis.MaxTokens, BudgetMinutes: c.Analysis.BudgetMinutes, MinAttempts: 1, Tools: tools, ContextKinds: analysisKinds})
 	}
 	return profiles
+}
+
+func (c Config) RepositoryProfileID() string {
+	if c.Delivery == "fast_forward" {
+		return "repository/v2"
+	}
+	return "repository/v1"
+}
+
+func (c Config) RepositoryAuthority() []string {
+	if c.Delivery == "fast_forward" {
+		return []string{"source.read", "source.write", "source.fast_forward"}
+	}
+	return []string{"source.read", "source.write", "pull_request.create"}
 }
 func (c *Controller) PublishWorkloads(ctx context.Context) error {
 	provider, ok := c.Provider.(workcontrol.WorkloadPublication)

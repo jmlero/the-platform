@@ -46,6 +46,24 @@ func TestGatewayDeniesToolsAndSecondModelCall(t *testing.T) {
 	upstreamCalls := 0
 	client := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		upstreamCalls++
+		var request struct {
+			Text struct {
+				Format struct {
+					Type   string `json:"type"`
+					Name   string `json:"name"`
+					Strict bool   `json:"strict"`
+					Schema struct {
+						Required []string `json:"required"`
+					} `json:"schema"`
+				} `json:"format"`
+			} `json:"text"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Fatal(err)
+		}
+		if request.Text.Format.Type != "json_schema" || request.Text.Format.Name != "conversation_reply" || !request.Text.Format.Strict || len(request.Text.Format.Schema.Required) != 2 {
+			t.Fatalf("conversation output format not constrained: %+v", request.Text.Format)
+		}
 		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"output":[{"type":"message","content":[{"type":"output_text","text":"Hello"}]}],"usage":{"input_tokens":10,"output_tokens":5}}`))}, nil
 	})}
 	key := []byte(strings.Repeat("k", 32))

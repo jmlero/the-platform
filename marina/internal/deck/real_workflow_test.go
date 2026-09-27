@@ -45,7 +45,7 @@ func TestRealRepositoryWorkflow(t *testing.T) {
 		t.Fatal(err)
 	}
 	var approved workcontrol.ContextSource
-	for _, scenario := range []string{"completed", "profile_completed", "promoted_completed", "verification_failed", "head_changed", "pr_closed", "ci_missing", "missing_authority", "context_first", "context_reuse", "context_revised", "context_revoked"} {
+	for _, scenario := range []string{"completed", "profile_completed", "promoted_completed", "verification_failed", "head_changed", "pr_closed", "ci_missing", "missing_authority", "context_first", "context_reuse", "context_revised", "context_revoked", "landing_completed", "landing_profile_completed", "landing_moved_base", "landing_ci_failed", "landing_ci_missing", "landing_verification_failed"} {
 		t.Run(scenario, func(t *testing.T) {
 			directory := t.TempDir()
 			db := filepath.Join(directory, "journal.db")
@@ -70,9 +70,12 @@ func TestRealRepositoryWorkflow(t *testing.T) {
 				approved = registerApprovedContext(t, ctx, client, identity.LogicalAgentID, workcontrol.ContextSource{}, "Keep the API stable")
 			}
 			config := flow.Config{ProjectID: "prj_default", PublicURL: "https://marina.internal", PolicyVersion: "test", MaxTokens: 100000, BudgetMinutes: 30, AllowedPaths: []string{"src"}, Checks: []worker.Check{{ID: "regression", Directory: ".", Command: []string{"go", "test", "./..."}}}, RequiredCI: []string{"required-test"}, Git: github.Config{Repository: "acme/repo", BaseBranch: "main", CloneURL: "https://git.internal/acme/repo.git"}}
+			if strings.HasPrefix(scenario, "landing_") {
+				config.Delivery = "fast_forward"
+			}
 			config.Kubernetes.Image = "worker@sha256:" + strings.Repeat("d", 64)
 			var taskResponse taskDTO
-			authority := []string{"source.read", "source.write", "pull_request.create"}
+			authority := config.RepositoryAuthority()
 			if scenario == "missing_authority" {
 				authority = []string{} // Generic/legacy work still exercises Marina's own authority check.
 			}
@@ -95,12 +98,12 @@ func TestRealRepositoryWorkflow(t *testing.T) {
 					t.Fatal(err)
 				}
 				err = client.do(ctx, "POST", "/api/v1/tasks/"+taskResponse.ID+"/move", map[string]string{"status": "ready"}, &taskResponse)
-			} else if scenario == "profile_completed" {
+			} else if scenario == "profile_completed" || scenario == "landing_profile_completed" {
 				if err = client.PublishWorkloads(ctx, "prj_default", workcontrol.WorkloadCatalog{Profiles: config.WorkloadProfiles(), ExpiresAt: time.Now().Add(time.Minute).UnixMilli()}); err != nil {
 					t.Fatal(err)
 				}
-				invoke := map[string]any{"profile_id": "repository/v1", "profile_digest": config.Digest(), "task": input}
-				err = client.doIdempotent(ctx, "POST", "/api/v1/operator/projects/prj_default/workloads/invoke", "repository-invocation", invoke, &taskResponse)
+				invoke := map[string]any{"profile_id": config.RepositoryProfileID(), "profile_digest": config.Digest(), "task": input}
+				err = client.doIdempotent(ctx, "POST", "/api/v1/operator/projects/prj_default/workloads/invoke", "repository-invocation-"+scenario, invoke, &taskResponse)
 			} else {
 				err = client.do(ctx, "POST", "/api/v1/tasks", input, &taskResponse)
 			}
@@ -140,7 +143,7 @@ func TestRealRepositoryWorkflow(t *testing.T) {
 			if err = journal.MarkAcquisitionBound(ctx, intent.ID, run.ID); err != nil {
 				t.Fatal(err)
 			}
-			source := &workflowSource{head: strings.Repeat("a", 40), scenario: scenario}
+			source := &workflowSource{head: strings.Repeat("a", 40), main: strings.Repeat("a", 40), scenario: scenario}
 			runtime := &workflowRuntime{journal: journal, artifacts: store, scenario: scenario, observations: map[string]runtimeapi.Observation{}}
 			controller := &flow.Controller{Config: config, Journal: journal, Provider: client, Runtime: runtime, Artifacts: store, Source: func(execution.Execution) (sourcecontrol.Port, error) { return source, nil }}
 			for cycle := 0; cycle < 26; cycle++ {
@@ -181,9 +184,9 @@ func TestRealRepositoryWorkflow(t *testing.T) {
 				}
 			}
 			want := execution.StateCompleted
-			if scenario == "ci_missing" {
+			if scenario == "ci_missing" || scenario == "landing_ci_missing" {
 				want = execution.StateRunning
-			} else if scenario != "completed" && scenario != "profile_completed" && scenario != "promoted_completed" && !strings.HasPrefix(scenario, "context_") || scenario == "context_revoked" {
+			} else if scenario != "completed" && scenario != "profile_completed" && scenario != "promoted_completed" && scenario != "landing_completed" && scenario != "landing_profile_completed" && !strings.HasPrefix(scenario, "context_") || scenario == "context_revoked" {
 				want = execution.StateBlocked
 			}
 			if e.State != want {
@@ -203,6 +206,16 @@ func TestRealRepositoryWorkflow(t *testing.T) {
 				evidence, err := journal.ListEvidence(ctx, e.ID)
 				if err != nil || len(evidence) != 1 || evidence[0].SourceRevision != strings.Repeat("b", 40) {
 					t.Fatalf("wrong evidence: %#v %v", evidence, err)
+				}
+			}
+			if scenario == "landing_completed" || scenario == "landing_profile_completed" {
+				if detail.Runs[0].Status != workcontrol.RunCompleted || !strings.Contains(detail.Runs[0].ResultSummary, strings.Repeat("b", 40)) || source.prCreates != 0 || source.lands != 1 || source.main != strings.Repeat("b", 40) || source.commits != 1 {
+					t.Fatalf("landing effects: run=%+v source=%+v", detail.Runs[0], source)
+				}
+			}
+			if scenario == "landing_moved_base" || scenario == "landing_ci_failed" || scenario == "landing_ci_missing" || scenario == "landing_verification_failed" {
+				if source.lands != 0 || source.prCreates != 0 || source.main == strings.Repeat("b", 40) {
+					t.Fatalf("unsafe landing effects: %+v", source)
 				}
 			}
 			if strings.HasPrefix(scenario, "context_") {
@@ -272,7 +285,7 @@ func (r *workflowRuntime) Start(ctx context.Context, spec runtimeapi.Specificati
 		result.Changes = []worker.Change{{Path: "src/fix.go", Content: []byte("package fixture\n"), Mode: "100644"}}
 	} else {
 		exit := 0
-		if r.scenario == "verification_failed" {
+		if r.scenario == "verification_failed" || r.scenario == "landing_verification_failed" {
 			exit = 1
 		}
 		result.Checks = []worker.CheckResult{{ID: "regression", Directory: ".", Command: []string{"go", "test", "./..."}, ExitCode: exit, Output: "test output", OutputDigest: artifacts.Digest([]byte("test output"))}}
@@ -294,14 +307,14 @@ func (r *workflowRuntime) Cleanup(context.Context, string) error { return nil }
 
 type workflowSource struct {
 	sourcecontrol.Port
-	head, scenario     string
-	commits, prCreates int
-	lost               bool
+	head, main, scenario      string
+	commits, prCreates, lands int
+	lost                      bool
 }
 
 func (s *workflowSource) CurrentHead(_ context.Context, r sourcecontrol.HeadRequest) (sourcecontrol.Revision, error) {
 	if r.Ref == "main" {
-		return sourcecontrol.Revision{Commit: strings.Repeat("a", 40)}, nil
+		return sourcecontrol.Revision{Commit: s.main}, nil
 	}
 	if s.scenario == "head_changed" && s.prCreates > 0 {
 		return sourcecontrol.Revision{Commit: strings.Repeat("c", 40)}, nil
@@ -318,6 +331,9 @@ func (s *workflowSource) WriteChanges(context.Context, sourcecontrol.WriteReques
 	if s.commits == 0 {
 		s.commits++
 		s.head = strings.Repeat("b", 40)
+		if s.scenario == "landing_moved_base" {
+			s.main = strings.Repeat("c", 40)
+		}
 		return sourcecontrol.Revision{}, context.DeadlineExceeded
 	}
 	return sourcecontrol.Revision{Commit: s.head}, nil
@@ -337,10 +353,33 @@ func (s *workflowSource) GetPullRequest(context.Context, sourcecontrol.Observati
 	return sourcecontrol.PullRequest{ID: "1", State: state, HeadRevision: s.head, URL: "https://git.internal/pr/1"}, nil
 }
 func (s *workflowSource) ObserveChecks(context.Context, sourcecontrol.ObservationRequest) ([]sourcecontrol.CheckObservation, error) {
-	if s.scenario == "ci_missing" {
+	if s.scenario == "ci_missing" || s.scenario == "landing_ci_missing" {
 		return nil, nil
 	}
-	return []sourcecontrol.CheckObservation{{ID: "required-test", HeadRevision: s.head, State: "success", ObservedAt: time.Now()}}, nil
+	state := "success"
+	if s.scenario == "landing_ci_failed" {
+		state = "failure"
+	}
+	return []sourcecontrol.CheckObservation{{ID: "required-test", HeadRevision: s.head, State: state, ObservedAt: time.Now()}}, nil
+}
+
+func (s *workflowSource) FastForward(_ context.Context, request sourcecontrol.FastForwardRequest) (sourcecontrol.Revision, error) {
+	if request.ExpectedHead != s.head || request.HeadRef == "" || request.BaseRef != "main" {
+		return sourcecontrol.Revision{}, errors.New("unguarded landing")
+	}
+	if s.main == s.head {
+		return sourcecontrol.Revision{Commit: s.main, Ref: "main"}, nil
+	}
+	if s.main != request.ExpectedBase {
+		return sourcecontrol.Revision{}, errors.New("main moved")
+	}
+	s.lands++
+	s.main = s.head
+	if s.lost == false {
+		s.lost = true
+		return sourcecontrol.Revision{}, context.DeadlineExceeded
+	}
+	return sourcecontrol.Revision{Commit: s.main, Ref: "main"}, nil
 }
 func (s *workflowSource) ObserveReviews(context.Context, sourcecontrol.ObservationRequest) ([]sourcecontrol.ReviewObservation, error) {
 	return nil, nil

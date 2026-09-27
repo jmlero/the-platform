@@ -46,6 +46,8 @@ type ControlJournal interface {
 	MarkOutboxPublished(context.Context, string) error
 	CompleteOutboxPublication(context.Context, string, string, int64, int64, int64, time.Time, string) (execution.Execution, error)
 	RecordOutboxFailure(context.Context, string, execution.FailureClass, string, int) error
+	CurrentProjectBinding(context.Context, string) (execution.ProjectBinding, error)
+	RepositorySnapshot(context.Context, string, int64) (workcontrol.RepositoryBinding, string, error)
 }
 
 type ControlCycle struct {
@@ -310,9 +312,9 @@ func (controller *ControlController) processAcquisition(ctx context.Context, int
 		}
 	}
 	if boundTask.Context != nil && boundTask.Context.Repository != nil {
-		bindingVersion = boundTask.Context.Repository.Version
-		if bindingVersion < 1 {
-			return execution.ErrInvalidInput
+		bindingVersion, err = bindingVersionForWork(ctx, controller.journal, intent.ProjectID, bindingVersion, boundTask)
+		if err != nil {
+			return err
 		}
 	}
 	record, _, err := controller.journal.EnsureExecution(ctx, execution.NewExecution{
@@ -331,6 +333,41 @@ func (controller *ControlController) processAcquisition(ctx context.Context, int
 		return err
 	}
 	return controller.journal.MarkAcquisitionBound(ctx, intent.ID, intent.ExternalRunID)
+}
+
+// A Deck repository association can outlive a Marina profile revision. New
+// work pinned to the current profile uses its current binding only when the
+// repository identity has not changed; already acquired work keeps its version.
+func bindingVersionForWork(ctx context.Context, journal ControlJournal, project string, fallback int64, task workcontrol.WorkItem) (int64, error) {
+	if task.Context == nil || task.Context.Repository == nil {
+		return fallback, nil
+	}
+	selected := *task.Context.Repository
+	if selected.Version < 1 {
+		return 0, execution.ErrInvalidInput
+	}
+	recorded, _, err := journal.RepositorySnapshot(ctx, project, selected.Version)
+	if err != nil {
+		return 0, err
+	}
+	if recorded != selected {
+		return 0, execution.ErrConflict
+	}
+	if task.Workload == nil {
+		return selected.Version, nil
+	}
+	current, err := journal.CurrentProjectBinding(ctx, project)
+	if err != nil {
+		return 0, err
+	}
+	latest, profile, err := journal.RepositorySnapshot(ctx, project, current.Version)
+	if err != nil {
+		return 0, err
+	}
+	if latest.Repository == selected.Repository && latest.CloneURL == selected.CloneURL && latest.BaseBranch == selected.BaseBranch && task.Workload.Digest == profile {
+		return current.Version, nil
+	}
+	return selected.Version, nil
 }
 
 func (controller *ControlController) recordClaimObservation(ctx context.Context, intentID string, run workcontrol.Run) error {

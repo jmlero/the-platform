@@ -45,7 +45,7 @@ func configureConversation(config flow.Config, journal *sqlite.Store, source wor
 		return nil, nil, nil, err
 	}
 	gateway := conversation.NewGateway(journal, key, config.Model, config.Conversation.Digest(config.Model), config.PolicyVersion, nil)
-	controller := &conversation.Controller{ProjectID: config.ProjectID, AgentID: agentID, PolicyVersion: config.PolicyVersion, DelegationProfileDigest: config.Digest(),
+	controller := &conversation.Controller{ProjectID: config.ProjectID, AgentID: agentID, PolicyVersion: config.PolicyVersion, DelegationProfileDigest: config.Digest(), DelegationProfileID: config.RepositoryProfileID(),
 		Profile: *config.Conversation, Model: config.Model, Source: source, Journal: journal, Blobs: blobs,
 		Engine: kagent.New(conn, endpoint, journal.ConversationEngineJournal(), blobs, gateway), Gateway: gateway,
 		InstallCredential: func(ctx context.Context, spec runtime.Specification, credential string) error {

@@ -74,8 +74,12 @@ func (c *Controller) ConfigurationForExecution(ctx context.Context, e execution.
 	if err = json.Unmarshal([]byte(snapshot), &task); err != nil {
 		return Config{}, err
 	}
-	if task.Context != nil && task.Context.Repository != nil && *task.Context.Repository != selected {
-		return Config{}, contextProblem("The authorized repository differs from its recorded binding")
+	if task.Context != nil && task.Context.Repository != nil {
+		authorized := task.Context.Repository
+		if authorized.Version > selected.Version || authorized.Repository != selected.Repository ||
+			authorized.CloneURL != selected.CloneURL || authorized.BaseBranch != selected.BaseBranch {
+			return Config{}, contextProblem("The authorized repository differs from its recorded binding")
+		}
 	}
 	return withRepository(c.Config, selected), nil
 }

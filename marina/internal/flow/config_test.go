@@ -35,6 +35,33 @@ func TestRepositoryEngineAcceptsOnlyPinnedLocalNativeProfile(t *testing.T) {
 	if err := c.Validate(); err != nil {
 		t.Fatal(err)
 	}
+	legacy := c.WorkloadProfiles()[0]
+	if legacy.ID != "repository/v1" || !slices.Equal(legacy.Authority, []string{"source.read", "source.write", "pull_request.create"}) {
+		t.Fatalf("legacy repository grant changed: %+v", legacy)
+	}
+	c.RequiredCI = []string{"ci"}
+	c.Delivery = "fast_forward"
+	if err := c.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	landing := c.WorkloadProfiles()[0]
+	if landing.ID != "repository/v2" || !slices.Equal(landing.Authority, []string{"source.read", "source.write", "source.fast_forward"}) || landing.Digest == legacy.Digest {
+		t.Fatalf("landing profile was not separately authorized: %+v", landing)
+	}
+	c.RequiredCI = []string{"  "}
+	if err := c.Validate(); err == nil {
+		t.Fatal("blank required CI accepted for landing")
+	}
+	c.RequiredCI = []string{"ci", "ci"}
+	if err := c.Validate(); err == nil {
+		t.Fatal("duplicate required CI accepted for landing")
+	}
+	c.RequiredCI = []string{"ci"}
+	c.Delivery = "unknown"
+	if err := c.Validate(); err == nil {
+		t.Fatal("unknown delivery mode accepted")
+	}
+	c.Delivery = "fast_forward"
 	changed := c
 	selection := *c.RepositoryEngine
 	selection.Endpoint = "arbitrary.example:8083"

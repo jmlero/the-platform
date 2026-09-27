@@ -2,6 +2,7 @@ package flow
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,57 @@ import (
 	"github.com/jmlero/the-platform/marina/internal/sourcecontrol/github"
 	"github.com/jmlero/the-platform/marina/internal/workcontrol"
 )
+
+func TestConfigurationForExecutionKeepsAuthorizedRepositoryAcrossProfileRotation(t *testing.T) {
+	ctx := context.Background()
+	journal, err := sqlite.Open(ctx, filepath.Join(t.TempDir(), "journal.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer journal.Close()
+	config := Config{ProjectID: "p", Git: github.Config{Repository: "owner/repo", CloneURL: "https://github.com/owner/repo.git", BaseBranch: "main"}}
+	input := execution.ProjectBinding{ProjectID: "p", Provider: "deck", Repository: config.Git.CloneURL, Runtime: "test", PolicyVersion: "old", ContextConfig: "old", ArtifactConfig: "test", DeliveryConfig: "test", BudgetMinutes: 30, MaxConcurrency: 1}
+	old, err := journal.EnsureProjectBinding(ctx, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	repository := workcontrol.RepositoryBinding{Version: old.Version, Repository: config.Git.Repository, CloneURL: config.Git.CloneURL, BaseBranch: config.Git.BaseBranch}
+	input.PolicyVersion = "new"
+	input.ContextConfig = config.Digest()
+	current, err := journal.EnsureProjectBinding(ctx, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	selected := repository
+	selected.Version = current.Version
+	if err := journal.RecordRepositorySnapshot(ctx, "p", config.Digest(), selected); err != nil {
+		t.Fatal(err)
+	}
+	work := workcontrol.WorkItem{Context: &workcontrol.TaskContext{Repository: &repository}}
+	snapshot, err := json.Marshal(work)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = journal.EnsureAcquisitionIntent(ctx, execution.NewAcquisitionIntent{TaskSnapshot: string(snapshot), ProjectID: "p", WorkID: "task", TaskVersion: 1, TaskDigest: "task-digest", AcceptanceCriteriaDigest: "acceptance-digest", ClaimKey: "claim", AgentID: "agent", LeaseSeconds: 60, BudgetMinutes: 30})
+	if err != nil {
+		t.Fatal(err)
+	}
+	controller := Controller{Config: config, Journal: journal}
+	e := execution.Execution{ProjectID: "p", ExternalWorkID: "task", TaskVersion: 1, BindingVersion: current.Version}
+	if _, err := controller.ConfigurationForExecution(ctx, e); err != nil {
+		t.Fatalf("same repository rejected after profile rotation: %v", err)
+	}
+	work.Context.Repository.Repository = "owner/other"
+	snapshot, _ = json.Marshal(work)
+	_, _, err = journal.EnsureAcquisitionIntent(ctx, execution.NewAcquisitionIntent{TaskSnapshot: string(snapshot), ProjectID: "p", WorkID: "forged", TaskVersion: 1, TaskDigest: "forged-digest", AcceptanceCriteriaDigest: "acceptance-digest", ClaimKey: "forged-claim", AgentID: "agent", LeaseSeconds: 60, BudgetMinutes: 30})
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.ExternalWorkID = "forged"
+	if _, err := controller.ConfigurationForExecution(ctx, e); err == nil {
+		t.Fatal("changed repository accepted")
+	}
+}
 
 type repositoryProvider struct {
 	Provider

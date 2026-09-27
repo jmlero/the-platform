@@ -28,6 +28,42 @@ type Gateway struct {
 	client        *http.Client
 }
 
+// The gateway, rather than the actor, fixes the upstream output contract.
+// A missing delegation is represented as null so strict-schema providers can
+// require every top-level property without granting the model extra fields.
+var conversationResponseFormat = json.RawMessage(`{
+  "format": {
+    "type": "json_schema",
+    "name": "conversation_reply",
+    "strict": true,
+    "schema": {
+      "type": "object",
+      "properties": {
+        "answer": {"type": "string", "description": "Plain answer for the operator, without claiming an action already happened"},
+        "delegation": {
+          "anyOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "properties": {
+                "title": {"type": "string"},
+                "description": {"type": "string"},
+                "acceptance_criteria": {"type": "string"},
+                "mode": {"type": "string", "enum": ["ready", "draft"]},
+                "followup_task_id": {"type": "string"}
+              },
+              "required": ["title", "description", "acceptance_criteria", "mode", "followup_task_id"],
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "required": ["answer", "delegation"],
+      "additionalProperties": false
+    }
+  }
+}`)
+
 func NewGateway(journal *sqlite.Store, signingKey []byte, model workerapi.Model, profileDigest, policyVersion string, client *http.Client) *Gateway {
 	if client == nil {
 		client = &http.Client{Timeout: 2 * time.Minute}
@@ -116,7 +152,7 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	encoded, err := json.Marshal(map[string]any{"model": g.model.Name, "input": input.Input, "instructions": input.Instructions,
-		"store": false, "stream": false, "max_output_tokens": g.model.MaxOutputTokens})
+		"store": false, "stream": false, "max_output_tokens": g.model.MaxOutputTokens, "text": conversationResponseFormat})
 	if err != nil {
 		http.Error(w, "model input invalid", 400)
 		return

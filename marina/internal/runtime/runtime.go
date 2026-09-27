@@ -149,7 +149,7 @@ func (specification Specification) Validate(now time.Time) error {
 		specification.FilesystemPolicy, specification.PolicyVersion,
 	}
 	switch specification.Workload {
-	case "", "repository/v1":
+	case "", "repository/v1", "repository/v2":
 		required = append(required, specification.RepositoryURI, specification.SourceRevision)
 	case "diagnostic-analysis/v1":
 		for _, digest := range []string{specification.InputDigest, specification.ProfileDigest} {

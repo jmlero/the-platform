@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/jmlero/the-platform/marina/internal/analysis"
@@ -42,6 +43,7 @@ type Config struct {
 	AllowedPaths               []string                    `json:"allowed_paths"`
 	Checks                     []workresult.Check          `json:"checks"`
 	RequiredCI                 []string                    `json:"required_ci"`
+	Delivery                   string                      `json:"delivery,omitempty"`
 	RequireApproval            bool                        `json:"require_approval"`
 	MaxTokens                  int64                       `json:"max_tokens"`
 	BudgetMinutes              int                         `json:"budget_minutes"`
@@ -57,6 +59,21 @@ func safeURL(value string) bool {
 func (c Config) Validate() error {
 	if c.Version < 0 || c.Version > 1 {
 		return errors.New("unsupported workflow configuration version")
+	}
+	if c.Delivery != "" && c.Delivery != "pull_request" && c.Delivery != "fast_forward" {
+		return errors.New("unsupported repository delivery mode")
+	}
+	if c.Delivery == "fast_forward" && (!c.RepositoryEnabled() || len(c.RequiredCI) == 0) {
+		return errors.New("fast-forward delivery requires repository binding and required CI")
+	}
+	if c.Delivery == "fast_forward" {
+		seenCI := make(map[string]bool, len(c.RequiredCI))
+		for _, check := range c.RequiredCI {
+			if strings.TrimSpace(check) == "" || seenCI[check] {
+				return errors.New("fast-forward delivery requires distinct nonempty CI check names")
+			}
+			seenCI[check] = true
+		}
 	}
 	if c.ProjectID == "" || c.PolicyVersion == "" || !safeURL(c.PublicURL) || !safeURL(c.Model.Endpoint) ||
 		c.Model.Name == "" || c.Model.MaxOutputTokens < 1 || c.Model.MaxOutputTokens > 65536 || c.MaxTokens < 10000 || c.MaxTokens > 10000000 ||
@@ -82,7 +99,7 @@ func (c Config) Validate() error {
 		if c.Conversation.MaxTokens > c.MaxTokens || c.Conversation.BudgetMinutes > c.BudgetMinutes {
 			return errors.New("conversation limits cannot exceed installation limits")
 		}
-		if d := c.Conversation.Delegation; d != nil && (!c.RepositoryEnabled() || d.MaxTokens > c.MaxTokens || d.TimeMinutes > c.BudgetMinutes) {
+		if d := c.Conversation.Delegation; d != nil && (!c.RepositoryEnabled() || d.MaxTokens > c.MaxTokens || d.TimeMinutes > c.BudgetMinutes || !slices.Equal(d.Authority, c.RepositoryAuthority())) {
 			return errors.New("conversation delegation must fit the installed repository profile")
 		}
 	}

@@ -1725,8 +1725,9 @@ paths:
       summary: Publish one explicit delegation as a Ready repository task
       description: >-
         Requires a project-scoped service grant, the exact invoked human message,
-        the current installed repository/v1 profile digest, its bounded budget,
-        acceptance criteria and required source/PR authority. Creates one task
+        the current installed repository/v1 or repository/v2 profile digest, its
+        bounded budget, acceptance criteria and the matching PR or fast-forward
+        authority. Creates one task
         and one linked thread reply atomically. Exact retries return the same
         identities; changed requests conflict. A follow-up can target only a
         completed task originating in the same thread.
@@ -1743,7 +1744,7 @@ paths:
                 status: {type: string, enum: [completed]}
                 body: {type: string, minLength: 1, maxLength: 8192}
                 result_digest: {type: string}
-                profile_id: {type: string, enum: [repository/v1]}
+                profile_id: {type: string, enum: [repository/v1, repository/v2]}
                 profile_digest: {type: string}
                 task: {$ref: "#/components/schemas/CreateTask"}
                 followup_task_id: {type: string}
@@ -2212,6 +2213,7 @@ components:
             "type": "string",
             "enum": [
               "repository/v1",
+              "repository/v2",
               "diagnostic-analysis/v1"
             ]
           },
@@ -3162,7 +3164,8 @@ components:
             Explicit permissions; never inferred from prose. Operator admission of
             tasks with source.* or pull_request.* permissions into Ready requires
             acceptance criteria, max_attempts >= 2, and source.read, source.write,
-            pull_request.create. Incomplete tasks can remain in Backlog. Consumers
+            plus pull_request.create or source.fast_forward. Incomplete tasks can
+            remain in Backlog. Consumers
             independently enforce their workflow prerequisites after claiming.
           type: array
           uniqueItems: true

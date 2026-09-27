@@ -43,8 +43,10 @@ func (p Profile) Validate(model workerapi.Model) error {
 	}
 	if p.Delegation != nil {
 		b := p.Delegation
-		if b.TimeMinutes < 1 || b.MaxAttempts != 2 || b.MaxTokens < 1 || b.MaxConcurrency != 1 || b.MaxCostMinor < 0 || len(b.Authority) != 3 ||
-			!slices.Contains(b.Authority, "source.read") || !slices.Contains(b.Authority, "source.write") || !slices.Contains(b.Authority, "pull_request.create") {
+		pr := []string{"source.read", "source.write", "pull_request.create"}
+		landing := []string{"source.read", "source.write", "source.fast_forward"}
+		if b.TimeMinutes < 1 || b.MaxAttempts != 2 || b.MaxTokens < 1 || b.MaxConcurrency != 1 || b.MaxCostMinor < 0 ||
+			(!slices.Equal(b.Authority, pr) && !slices.Equal(b.Authority, landing)) {
 			return errors.New("conversation delegation requires a fixed bounded repository grant")
 		}
 	}
@@ -63,6 +65,7 @@ func (p Profile) Digest(model workerapi.Model) string {
 type Controller struct {
 	ProjectID, AgentID, PolicyVersion string
 	DelegationProfileDigest           string
+	DelegationProfileID               string
 	Profile                           Profile
 	Model                             workerapi.Model
 	Source                            workcontrol.ConversationSource
@@ -426,11 +429,14 @@ func (c *Controller) publishOutcome(ctx context.Context, turn sqlite.Conversatio
 		if d := result.Delegation; d != nil {
 			status := "backlog"
 			var budget *workcontrol.ConversationBudget
-			if d.Mode == "ready" && c.Profile.Delegation != nil && c.DelegationProfileDigest != "" && turn.Specification.ProfileDigest == c.Profile.Digest(c.Model) {
+			if d.Mode == "ready" && !explicitDraftIntent(turn.Body) && c.Profile.Delegation != nil && c.DelegationProfileDigest != "" && turn.Specification.ProfileDigest == c.Profile.Digest(c.Model) {
 				status = "ready"
 				copy := *c.Profile.Delegation
 				budget = &copy
-				in.ProfileID, in.ProfileDigest = "repository/v1", c.DelegationProfileDigest
+				in.ProfileID, in.ProfileDigest = c.DelegationProfileID, c.DelegationProfileDigest
+				if in.ProfileID == "" {
+					in.ProfileID = "repository/v1"
+				}
 			}
 			in.Task = &workcontrol.ConversationTaskInput{Title: d.Title, Description: d.Description, AcceptanceCriteria: d.AcceptanceCriteria, Status: status, Budget: budget}
 			in.FollowupTaskID = d.FollowupTaskID
@@ -461,4 +467,17 @@ func (c *Controller) publishOutcome(ctx context.Context, turn sqlite.Conversatio
 		return errors.New("conversation publication escaped source identity")
 	}
 	return c.Journal.MarkConversationPublished(ctx, turn.MessageID, out.MessageID, out.TaskID)
+}
+
+// Model interpretation cannot override an operator's explicit instruction to
+// keep work unstarted. Ambiguous wording remains a draft until the operator
+// deliberately moves the task to ready.
+func explicitDraftIntent(body string) bool {
+	text := strings.ToLower(body)
+	for _, phrase := range []string{"draft", "do not start", "don't start", "without starting", "do not implement", "don't implement", "do not execute", "don't execute"} {
+		if strings.Contains(text, phrase) {
+			return true
+		}
+	}
+	return false
 }

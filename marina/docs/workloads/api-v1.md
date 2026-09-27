@@ -175,10 +175,13 @@ drawer exposes the same result evidence and progress. `model.usage` and
 `execution.progress` events include confirmed tokens/cost plus pending calls and
 reserved budgets; reservations must not be presented as confirmed spend.
 
-Repository invocation uses `repository/v1`, its discovered digest and three
-explicit source/PR grants. The result remains a verified PR ready for human
-review. Analysis has no source-write/PR authority, and only v2 may use selected
-project context and `read_context_source`. Both preserve the existing approval
+Repository invocation uses the discovered digest for `repository/v1` (PR delivery)
+or `repository/v2` (guarded fast-forward delivery). Each requires three explicit
+grants: source read/write plus PR creation or fast-forward, respectively. The
+landing profile waits for required CI on the exact task-branch commit before
+updating the unchanged base branch. Analysis has no source-write authority;
+only its revisioned harness may use selected project context and
+`read_context_source`. Both preserve the existing approval
 policy. Pause/resume/replan/retry and automatic revision loops remain unsupported.
 
 ## Tool and diagnostics

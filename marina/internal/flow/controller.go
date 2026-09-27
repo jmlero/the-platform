@@ -93,7 +93,7 @@ func (c *Controller) save(ctx context.Context, e execution.Execution, s state) e
 	if err != nil {
 		return err
 	}
-	message := map[string]string{"plan": "Repository pinned; preparing approval", "approval": "Plan submitted", "implement": "Implementing the approved change", "branch": "Implementation result saved", "publish": "Publishing the scoped change", "verify": "Verifying the published commit in a clean worker", "pull_request": "Independent checks passed; opening pull request", "ci": "Waiting for required CI and review checks", "evidence": "Recording verification evidence", "complete": "Verification evidence ready"}[s.Step]
+	message := map[string]string{"plan": "Repository pinned; preparing approval", "approval": "Plan submitted", "implement": "Implementing the approved change", "branch": "Implementation result saved", "publish": "Publishing the scoped change", "verify": "Verifying the published commit in a clean worker", "pull_request": "Independent checks passed; opening pull request", "ci": "Waiting for required CI and review checks", "land": "Required CI passed; fast-forwarding the base branch", "evidence": "Recording verification evidence", "complete": "Verification evidence ready"}[s.Step]
 	if message == "" {
 		message = s.Step
 	}
@@ -117,7 +117,7 @@ func (c *Controller) save(ctx context.Context, e execution.Execution, s state) e
 	if err != nil {
 		return err
 	}
-	workload, harness, profile := "repository/v1", "codex/v1", s.ConfigDigest
+	workload, harness, profile := c.Config.RepositoryProfileID(), "codex/v1", s.ConfigDigest
 	if s.Analysis != nil {
 		workload = analysis.Kind
 		harness = s.Analysis.HarnessVersion
@@ -278,6 +278,9 @@ func (c *Controller) advance(ctx context.Context, e execution.Execution) error {
 		if s.Analysis != nil {
 			return c.transition(ctx, e, execution.StateCompleted, "Validated diagnostic analysis available")
 		}
+		if c.Config.Delivery == "fast_forward" {
+			return c.transition(ctx, e, execution.StateCompleted, "Verified commit landed on the base branch")
+		}
 		return c.transition(ctx, e, execution.StateCompleted, "Verified pull request ready for human review")
 	}
 	if err = c.Authorize(ctx, e, e.FenceToken); err != nil {
@@ -305,9 +308,9 @@ func (c *Controller) advance(ctx context.Context, e execution.Execution) error {
 		if strings.TrimSpace(task.AcceptanceCriteria) == "" {
 			return c.block(ctx, e, r, "Observable acceptance criteria are required for a repository change")
 		}
-		for _, authority := range []string{"source.read", "source.write", "pull_request.create"} {
+		for _, authority := range c.Config.RepositoryAuthority() {
 			if !slices.Contains(task.Budget.Authority, authority) {
-				return c.block(ctx, e, r, "Task must explicitly authorize source.read, source.write and pull_request.create; create a new task with the required authority")
+				return c.block(ctx, e, r, "Task must explicitly authorize "+strings.Join(c.Config.RepositoryAuthority(), ", ")+"; create a new task with the required authority")
 			}
 		}
 		if e.MaxAttempts < 2 {
@@ -369,6 +372,12 @@ func (c *Controller) advance(ctx context.Context, e execution.Execution) error {
 		submission := workcontrol.PlanRevisionSubmission{IdempotencyKey: g.IdempotencyKey, AgentID: g.AgentID, ExpectedVersion: g.ExpectedVersion, FenceToken: g.FenceToken,
 			Plan:          fmt.Sprintf("Implement the bounded task at `%s` in `%s`.\n\nAllowed paths: %s.\n\nRun the configured checks in a separate clean Kubernetes Job at the published commit. Open one PR against `%s`; stop for human review. Failed checks or requested review changes block this task.\n\nModel destination: %s (%s). No merge or deployment is authorized.", s.Base, c.Config.Git.Repository, strings.Join(c.Config.AllowedPaths, ", "), c.Config.Git.BaseBranch, c.Config.Model.Endpoint, c.Config.Model.Name),
 			ContextDigest: c.contextDigest(task, s), RiskClass: "medium", VerificationStrategy: "Independent clean checkout; all configured local and required CI checks must pass for the PR head", ExpectedSideEffects: []string{"create scoped Git branch", "publish commit", "open pull request"}, RollbackApproach: "Close the PR and delete its branch; the base branch is not changed", PolicyVersion: c.Config.PolicyVersion, RequireApproval: c.Config.RequireApproval, DecisionExpiresAt: &e.DeadlineAt}
+		if c.Config.Delivery == "fast_forward" {
+			submission.Plan = fmt.Sprintf("Implement the bounded task at `%s` in `%s`.\n\nAllowed paths: %s.\n\nRun the configured checks in a separate clean Kubernetes Job at the published commit. Wait for required CI on that exact task-branch commit, then fast-forward `%s` only if it still points to `%s`. Never force-push or deploy.\n\nModel destination: %s (%s).", s.Base, c.Config.Git.Repository, strings.Join(c.Config.AllowedPaths, ", "), c.Config.Git.BaseBranch, s.Base, c.Config.Model.Endpoint, c.Config.Model.Name)
+			submission.VerificationStrategy = "Independent clean checkout, required CI on the exact task-branch commit, then guarded fast-forward"
+			submission.ExpectedSideEffects = []string{"create scoped Git branch", "publish commit", "fast-forward base branch"}
+			submission.RollbackApproach = "Revert the landed commit through a separately authorized task; never force-push"
+		}
 		if s.Analysis != nil {
 			submission.Plan = fmt.Sprintf("Analyze the frozen synthetic diagnostic fixture %s revision %d using LangChain create_agent on LangGraph. Profile: %s. Inputs: %s. Model destination: %s (%s). Return a structured report with source quotes; no repository or mutation authority is granted.", s.Analysis.Fixture.ID, s.Analysis.Fixture.Revision, s.ProfileDigest, s.Base, c.Config.Model.Endpoint, c.Config.Model.Name)
 			submission.RiskClass = "low"
@@ -457,6 +466,9 @@ func (c *Controller) advance(ctx context.Context, e execution.Execution) error {
 				}
 			}
 			s.Step = "pull_request"
+			if c.Config.Delivery == "fast_forward" {
+				s.Step = "ci"
+			}
 		}
 		return c.save(ctx, e, s)
 	}
@@ -505,6 +517,9 @@ func (c *Controller) advance(ctx context.Context, e execution.Execution) error {
 		s.Head = revision.Commit
 		s.Step = "verify"
 		return c.save(ctx, e, s)
+	}
+	if c.Config.Delivery == "fast_forward" && (s.Step == "ci" || s.Step == "land" || s.Step == "evidence" || s.Step == "complete") {
+		return c.advanceLanding(ctx, e, r, s)
 	}
 	if s.Step == "pull_request" {
 		source, err := c.Source(e)

@@ -103,6 +103,31 @@ func TestWorkloadCatalogRejectsStaleSelectionAndPublisherTakeover(t *testing.T) 
 	}
 }
 
+func TestLandingProfileAdmitsOnlyItsFastForwardGrant(t *testing.T) {
+	ctx := context.Background()
+	s, err := Open(ctx, filepath.Join(t.TempDir(), "deck.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	p := domain.WorkloadProfile{ID: "repository/v2", Digest: strings.Repeat("d", 64), Harness: "codex/v1", Authority: []string{"source.read", "source.write", "source.fast_forward"}, MaxTokens: 20000, BudgetMinutes: 5, MinAttempts: 2}
+	catalog := domain.WorkloadCatalog{Profiles: []domain.WorkloadProfile{p}, ExpiresAt: time.Now().Add(time.Minute).UnixMilli()}
+	if err := s.PublishWorkloads(ctx, "prj_default", "marina", catalog); err != nil {
+		t.Fatal(err)
+	}
+	in := domain.WorkloadInvocation{ProfileID: p.ID, ProfileDigest: p.Digest, Task: domain.CreateTaskInput{Title: "Land change", AcceptanceCriteria: "CI passes on the exact commit", Budget: &domain.Budget{TimeMinutes: 5, MaxAttempts: 2, MaxTokens: 10000, MaxConcurrency: 1, Authority: p.Authority}}}
+	mutation, _ := NewMutation("operator:test", "landing")
+	task, err := s.InvokeWorkload(ctx, "prj_default", mutation, in)
+	if err != nil || task.Workload == nil || task.Workload.ID != p.ID || task.Status != domain.TaskReady {
+		t.Fatalf("landing task: %+v %v", task, err)
+	}
+	p.Authority[2] = "pull_request.create"
+	catalog.Profiles = []domain.WorkloadProfile{p}
+	if err := s.PublishWorkloads(ctx, "prj_default", "marina", catalog); !errors.Is(err, domain.ErrInvalidInput) {
+		t.Fatalf("PR authority advertised as landing: %v", err)
+	}
+}
+
 func TestWorkloadCatalogAcceptsRevisionedLangChainBYOWithAnalysisOnlyAuthority(t *testing.T) {
 	ctx := context.Background()
 	s, err := Open(ctx, filepath.Join(t.TempDir(), "deck.db"))

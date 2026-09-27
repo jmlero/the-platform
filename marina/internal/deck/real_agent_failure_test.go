@@ -96,7 +96,7 @@ func TestRealAgentFailureSemantics(t *testing.T) {
 					adapter = analyzing
 				}
 				runtime := &agentFailureRuntime{Adapter: adapter, scenario: scenario, observations: map[string]runtimeapi.Observation{}}
-				source := &workflowSource{head: strings.Repeat("a", 40)}
+				source := &workflowSource{head: strings.Repeat("a", 40), main: strings.Repeat("a", 40)}
 				controller := &flow.Controller{Config: config, Journal: journal, Provider: client, Runtime: runtime, Artifacts: store, Source: func(execution.Execution) (sourcecontrol.Port, error) { return source, nil }}
 				var e execution.Execution
 				injected := false

@@ -260,6 +260,33 @@ func TestDelegatedResultRetriesOneFrozenPublicationAfterLostResponse(t *testing.
 	}
 }
 
+func TestExplicitDraftRequestCannotBecomeReadyFromModelMode(t *testing.T) {
+	ctx := context.Background()
+	journal, err := sqlite.Open(ctx, t.TempDir()+"/journal.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer journal.Close()
+	blobs, err := artifacts.New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	message := workcontrol.ConversationMessage{ID: "msg_draft", ProjectID: "prj_1", ChannelID: "chn_1", ThreadID: "thr_1", AuthorType: "human", Body: "Create a Backlog draft task to improve the status page. Keep it a draft and do not start implementation.", InvokedAgentID: "agt_1", InvocationRequestID: "req_draft", CreatedAt: time.Now().UnixMilli()}
+	source := &publicationSource{testSource: testSource{message: message}}
+	engine := &testEngine{blobs: blobs, result: conversationbyo.Result{Answer: "I will record the idea.", Delegation: &conversationbyo.Delegation{Title: "Improve status page", AcceptanceCriteria: "Blocked tasks have a clear explanation", Mode: "ready"}}}
+	model := workerapi.Model{Name: "fixture", MaxOutputTokens: 100, Currency: "USD"}
+	profile := Profile{Engine: rt.EngineSelection{Backend: "kagent", Version: kagent.Version, Endpoint: "kint-engine-controller.kint-engine.svc:8083", Namespace: "kint-engine", Harness: "kint-conversation-byo", Template: "turn-draft", Revision: strings.Repeat("a", 64)}, MaxTokens: 5000, BudgetMinutes: 5,
+		Delegation: &workcontrol.ConversationBudget{TimeMinutes: 30, MaxAttempts: 2, MaxTokens: 20000, MaxConcurrency: 1, Authority: []string{"source.read", "source.write", "pull_request.create"}}}
+	c := Controller{ProjectID: "prj_1", AgentID: "agt_1", PolicyVersion: "test", Source: source, Journal: journal, Blobs: blobs, Engine: engine,
+		Profile: profile, Model: model, DelegationProfileDigest: strings.Repeat("b", 64), Gateway: NewGateway(journal, []byte(strings.Repeat("k", 32)), model, profile.Digest(model), "test", nil), InstallCredential: func(context.Context, rt.Specification, string) error { return nil }}
+	if failures := c.Cycle(ctx); len(failures) != 0 {
+		t.Fatal(failures)
+	}
+	if source.seen.Task == nil || source.seen.Task.Status != "backlog" || source.seen.Task.Budget != nil || !strings.Contains(source.seen.Body, "Backlog draft created") {
+		t.Fatalf("explicit draft was promoted: %+v", source.seen)
+	}
+}
+
 func TestEngineQuestionWaitsThenResumesOriginatingConversation(t *testing.T) {
 	ctx := context.Background()
 	journal, err := sqlite.Open(ctx, t.TempDir()+"/journal.db")

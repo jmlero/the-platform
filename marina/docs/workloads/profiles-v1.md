@@ -10,14 +10,14 @@ inspection. See the [API client guide](api-v1.md).
 
 | Property | Repository workflow | Diagnostic analysis |
 | --- | --- | --- |
-| Workload | `repository/v1` (legacy runtime records omit this field) | `diagnostic-analysis/v1` |
+| Workload | `repository/v1` for PR delivery; `repository/v2` for guarded main landing (legacy runtime records omit this field) | `diagnostic-analysis/v1` |
 | Harness | Existing Codex CLI invocation in a pinned worker image | `langchain-create-agent/v1` (fixture only), `/v2` (selected context/tool), or `langchain-create-agent/kagent-byo-v1` (pinned BYO runtime); LangChain `create_agent` on LangGraph |
-| Configuration | Existing `git`, `checks`, `allowed_paths`, `required_ci`, `kubernetes.image` | Optional `analysis` object: version, revision, image, harness_version, max_tokens, budget_minutes, fixture, tools |
+| Configuration | `git`, `checks`, `allowed_paths`, `required_ci`, `kubernetes.image`; optional `delivery: "fast_forward"` selects the landing profile | Optional `analysis` object: version, revision, image, harness_version, max_tokens, budget_minutes, fixture, tools |
 | Inputs | Authorized task, exact repository commit, immutable context package | Authorized task, profile/input digests, frozen diagnostic sources and, for v2 or BYO, selected context package |
 | Output | Scoped source changes and separate deterministic verification result | JSON `summary` and `findings`, each with code, source_id, quote and explanation |
-| Completion | Separate clean verification Job, current PR head and required CI | Independent Go validator checks fixture findings and source quotes; evidence binds input, profile, output and v2 context digests |
+| Completion | Separate clean verification Job; v1 observes the PR head and required CI, while v2 observes required CI on the task-branch commit and fast-forwards the exact commit to the unchanged base | Independent Go validator checks fixture findings and source quotes; evidence binds input, profile, output and v2 context digests |
 | Tools | Bounded coding harness; trusted verification commands | `DiagnosticReport` structured output; v2 and BYO optionally allow `read_context_source` through Marina |
-| Source authority | Explicit `source.read`, `source.write`, `pull_request.create` | None; Git gateway routes deny access |
+| Source authority | Explicit `source.read`, `source.write`, plus `pull_request.create` (v1) or `source.fast_forward` (v2) | None; Git gateway routes deny access |
 | Model | Installed Responses-compatible endpoint/name and file credential reference | Same governed endpoint; self-contained requests, no stored conversations or hosted tools |
 | Runtime | Isolated Kubernetes Job or selected kagent engine, one implementation and one verification attempt | Isolated Kubernetes Job or selected kagent BYO engine, one analysis attempt |
 

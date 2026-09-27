@@ -129,7 +129,11 @@ func validateRepositoryReadiness(criteria string, budget domain.Budget) error {
 	if budget.MaxAttempts < 2 {
 		missing = append(missing, "at least two attempts for implementation and verification")
 	}
-	for _, permission := range []string{"source.read", "source.write", "pull_request.create"} {
+	required := []string{"source.read", "source.write", "pull_request.create"}
+	if slices.Contains(budget.Authority, "source.fast_forward") {
+		required[2] = "source.fast_forward"
+	}
+	for _, permission := range required {
 		if !slices.Contains(budget.Authority, permission) {
 			missing = append(missing, "explicit "+permission+" authority")
 		}

@@ -125,6 +125,9 @@ func (c *Controller) worker(ctx context.Context, e execution.Execution, task wor
 			return fail(execution.ErrBudgetExhausted)
 		}
 		spec := runtimeapi.Specification{IdempotencyKey: key, RepositoryURI: c.Config.Git.CloneURL, SourceRevision: s.Head, ContextURI: "journal://" + e.ID, ContextDigest: c.contextDigest(task, s), HarnessVersion: c.Config.Kubernetes.Image, Limits: runtimeapi.Limits{CPUMillis: 2000, MemoryBytes: 4 << 30, EphemeralStorageBytes: 4 << 30, WallTimeSeconds: int64(c.Config.BudgetMinutes) * 60, MaxProcesses: 256}, NetworkPolicy: "gateway-only", FilesystemPolicy: "ephemeral-read-only-root", AuthorityFence: e.FenceToken, DeadlineAt: e.DeadlineAt, PolicyVersion: c.Config.PolicyVersion}
+		if c.Config.Delivery == "fast_forward" {
+			spec.Workload = "repository/v2"
+		}
 		if s.Analysis != nil {
 			spec.Workload = analysis.Kind
 			spec.Tools = s.Analysis.Tools
