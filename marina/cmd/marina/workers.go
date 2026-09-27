@@ -77,7 +77,7 @@ func configureWorkers(config flow.Config, journal *sqlite.Store, provider flow.P
 		git.ReadBlob = store.Get
 		git.CommitTime = e.CreatedAt
 		git.Authorize = func(ctx context.Context, fence int64) error { return controller.Authorize(ctx, e, fence) }
-		return github.New(git, nil)
+		return github.New(git, sourceClient())
 	}
 	if config.RepositoryEnabled() {
 		if _, err := github.New(config.Git, nil); err != nil {
@@ -91,7 +91,7 @@ func configureWorkers(config flow.Config, journal *sqlite.Store, provider flow.P
 	// Retain cancellation and inspection for a journaled pilot attempt even
 	// after the profile stops selecting the engine for new work.
 	const engineEndpoint = "kint-engine-controller.kint-engine.svc:8083"
-	conn, err := grpc.NewClient(engineEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(engineEndpoint, append([]grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}, engineDialOptions...)...)
 	if err != nil {
 		return nil, nil, err
 	}

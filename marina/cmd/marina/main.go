@@ -231,7 +231,7 @@ func runServe(arguments []string, stderr io.Writer) int {
 			return 2
 		}
 	}
-	client, err := newDeckClient(*serverURL, *tokenFile, &http.Client{Timeout: 5 * time.Second}, deck.WithRequiredCapabilities(requiredCapabilities))
+	client, err := newDeckClient(*serverURL, *tokenFile, &http.Client{Timeout: 5 * time.Second, Transport: deckTransport}, deck.WithRequiredCapabilities(requiredCapabilities))
 	if err != nil {
 		logger.Error("configure Deck", "error", err)
 		return 1

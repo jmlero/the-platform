@@ -40,7 +40,7 @@ func configureConversation(config flow.Config, journal *sqlite.Store, source wor
 		return nil, nil, nil, err
 	}
 	endpoint := config.Conversation.Engine.Endpoint
-	conn, err := grpc.NewClient(endpoint, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(endpoint, append([]grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}, engineDialOptions...)...)
 	if err != nil {
 		return nil, nil, nil, err
 	}

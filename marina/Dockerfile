@@ -8,9 +8,12 @@ RUN go mod download
 COPY . .
 
 ARG VERSION=dev
+# Only live fault-injection test images set GO_TAGS=faultinject.
+ARG GO_TAGS=
 RUN mkdir -p /out/data && \
     CGO_ENABLED=0 GOOS=linux go build \
       -buildvcs=false \
+      -tags "${GO_TAGS}" \
       -trimpath \
       -ldflags="-s -w -X main.version=${VERSION}" \
       -o /out/marina \
