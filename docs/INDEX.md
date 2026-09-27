@@ -69,3 +69,4 @@ One fact lives in one place. Other documents link to it instead of copying it.
 | [0021](decisions/0021-semantic-review-gate.md) | Independent review before every commit. |
 | [0022](decisions/0022-autonomous-software-factory.md) | Autonomous software factory: PRDs from the chat in the repo, agents land on main after two checks. |
 | [0023](decisions/0023-focus-kagent-cutover.md) | kagent cutover gated on core failure cases; the LangChain diagnostic workload is retired. |
+| [0024](decisions/0024-per-attempt-engine-templates.md) | Marina creates and removes each engine attempt's own template and gateway Secret. |
