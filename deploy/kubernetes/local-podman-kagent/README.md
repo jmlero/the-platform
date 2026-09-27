@@ -34,23 +34,18 @@ task intake disabled outside a selected exercise.
    digest in a `kint-conversation-byo` Harness. Its image command is
    `/conversation-byo`; its Substrate worker pool is `kint-worker`. A Podman
    image ID is not the registry OCI digest.
-5. For the first turn, create one opaque Secret with a random nonempty `gateway`
-   placeholder, one ModelConfig whose `apiKeySecret` names **that same Secret**
-   and whose Responses base URL is
-   `https://marina.marina-system.svc/conversation/model/v1`, and one AgentTemplate
-   referencing that ModelConfig and the `kint-conversation-byo` Harness. Wait
-   for its `Ready=True` condition and record `latestSuccessfulRevision`.
-   Each prepared template and Secret serves one turn; reusing either for another
-   invocation is rejected. Never copy an earlier turn's bound gateway token into
-   a new Secret.
-6. Use this overlay as the private Kustomization resource. Keep its existing
-   credentials and PVC patches. In the private workflow, select the ready
-   `conversation` engine revision and set `budget_minutes`, `max_tokens`, and
-   the fixed delegation limits from the
-   [profile contract](../../../marina/docs/workloads/profiles-v1.md).
-   Add a private Kustomize patch replacing
-   `Role/marina-conversation-credential` rule 0 `resourceNames` with the one
-   active Secret name. The source overlay's placeholder grants no real Secret.
+5. Use this overlay as the private Kustomization resource. Keep its existing
+   credentials and PVC patches. In the private workflow, select the
+   `kint-conversation-byo` Harness without a template or revision, and set
+   `budget_minutes`, `max_tokens`, and the fixed delegation limits from the
+   [profile contract](../../../marina/docs/workloads/profiles-v1.md). Marina
+   creates a `marina-` AgentTemplate, ModelConfig and same-name `gateway`
+   Secret for every chat turn and repository attempt, and deletes them after
+   the engine instance is gone. `Role/marina-engine-templates` grants exactly
+   that in `kint-engine`; Marina refuses to adopt or delete resources without
+   its `the-platform.dev/owner: marina` label.
+6. The harness images must already be cached in the worker node: template
+   preparation starts a golden actor without preparation egress.
 7. Allow `atenet-egress` to reach Marina over TLS: create its `marina-gateway-ca`
    Secret from the private installation `ca.crt`, mount it read-only at
    `/run/marina-ca` in `atenet-egress`, and set the dynamic HTTPS backend's
@@ -59,23 +54,12 @@ task intake disabled outside a selected exercise.
    overlay permits only the needed kagent controller and Marina model route;
    it does not open direct worker internet access.
 8. Apply the reviewed private Kustomization, roll out Marina, and verify Deck
-   at `https://localhost:8443`, the chat template revision, exact Secret grant,
-   and disabled Marina intake. A Deck invocation should yield one agent reply or
-   an explicit blocker in the same thread.
+   at `https://localhost:8443` and disabled Marina intake. A Deck invocation
+   should yield one agent reply or an explicit blocker in the same thread, and
+   no `the-platform.dev/owner=marina` resources should remain afterwards.
 
-For the next turn, after the previous turn is terminal, run:
-
-```sh
-python3 scripts/prepare-local-kagent-chat-turn.py \
-  ~/.local/share/the-platform/marina-local/installation <new-template-name> --apply
-```
-
-The helper creates a fresh Secret, ModelConfig and AgentTemplate, waits for the
-prepared revision, backs up the two private configuration files, selects the
-revision and exact Secret grant, runs preflight, applies the overlay, and restarts
-Marina. It never prints the Secret value. Keep the earlier terminal thread and
-engine history. The active prepared template is an operator-managed single-turn
-slot; preparation of the next slot is required before another invocation.
+Each invocation gets its own template, so turns need no preparation between
+them and Marina keeps running. Keep earlier terminal threads and engine history.
 
 ## Recovery and rollback
 
@@ -86,6 +70,11 @@ Reconcile or let an uncertain attempt block; do not resend it blindly. Once no
 work is active, restart only the dedicated `kint-worker` Deployment to obtain a
 fresh UID and address. This remains a KINT-09 failure case, not proof of
 transparent recovery.
+
+Each worker runs one actor. A golden actor stuck in `ACTOR_STATE_DELETING`,
+with atelet logging `runsc state` exit status 128 on every retry, keeps its
+worker's slot. While no work is active, deleting only that worker Pod releases
+the slot; the actor is then reported crashed with no worker.
 
 To roll back the platform release, disable new intake, reconcile active attempts,
 restore the saved private workflow and Kustomization, previous Deck/Marina image

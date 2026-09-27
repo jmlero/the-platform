@@ -78,11 +78,11 @@ Disabling new intake does not pause executions that have already started.
 - Pinned kagent and Substrate are permanently installed beside the existing
   repository runtime. A prepared, bounded conversation turn produced a real
   model reply in its Deck thread, and that thread survived a Deck restart.
-- Each chat turn needs a fresh prepared template, ModelConfig and Secret. The
-  operator prepares the next slot with the
-  [local helper](../deploy/kubernetes/local-podman-kagent/README.md) after the
-  current turn finishes. One fresh slot is prepared; repository tasks still
-  use the existing runtime.
+- Marina creates each chat turn's own AgentTemplate, ModelConfig and gateway
+  Secret and removes them after the reply is published, so consecutive turns
+  need no operator preparation or restart
+  ([installation guide](../deploy/kubernetes/local-podman-kagent/README.md)).
+  Repository tasks still use the existing runtime.
 - The pinned local Marina release pair passed an image upgrade during an active
   kagent model call and a previous-image, retained-data-copy rollback while
   preserving the exact Deck reply and usage

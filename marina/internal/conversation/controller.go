@@ -32,7 +32,7 @@ type Profile struct {
 }
 
 func (p Profile) Validate(model workerapi.Model) error {
-	if err := p.Engine.Validate(); err != nil {
+	if err := p.Engine.ValidateProfile(); err != nil {
 		return err
 	}
 	if p.Engine.Version != kagent.Version || p.Engine.Endpoint != "kint-engine-controller.kint-engine.svc:8083" ||
@@ -62,6 +62,14 @@ func (p Profile) Digest(model workerapi.Model) string {
 	return hex.EncodeToString(sum[:])
 }
 
+// template is the attempt-exclusive engine configuration for one turn. Each
+// turn gets its own Secret, so a cached credential never reaches another turn.
+func (p Profile) template(messageID string) rt.EngineTemplate {
+	return rt.EngineTemplate{Namespace: p.Engine.Namespace, Name: rt.EngineTemplateName("conversation-" + messageID), Harness: p.Engine.Harness,
+		Description: "Read-only project conversation turn", SystemPrompt: "Interpret one frozen Deck conversation turn. No tools or repository access.",
+		Model: "conversation", BaseURL: "https://marina.marina-system.svc/conversation/model/v1"}
+}
+
 type Controller struct {
 	ProjectID, AgentID, PolicyVersion string
 	DelegationProfileDigest           string
@@ -72,6 +80,7 @@ type Controller struct {
 	Journal                           *sqlite.Store
 	Blobs                             *artifacts.Store
 	Engine                            rt.Adapter
+	Templates                         rt.EngineTemplates
 	Gateway                           *Gateway
 	InstallCredential                 func(context.Context, rt.Specification, string) error
 }
@@ -188,7 +197,7 @@ func (c *Controller) input(ctx context.Context, turn sqlite.ConversationTurn) (c
 	return in, nil
 }
 
-func (c *Controller) specification(ctx context.Context, turn sqlite.ConversationTurn) (rt.Specification, error) {
+func (c *Controller) specification(ctx context.Context, turn sqlite.ConversationTurn, template, revision string) (rt.Specification, error) {
 	in, err := c.input(ctx, turn)
 	if err != nil {
 		return rt.Specification{}, err
@@ -201,7 +210,7 @@ func (c *Controller) specification(ctx context.Context, turn sqlite.Conversation
 	if err != nil {
 		return rt.Specification{}, err
 	}
-	selection := c.Profile.Engine
+	selection := c.Profile.Engine.Prepared(template, revision)
 	spec := rt.Specification{Engine: &selection, Workload: "conversation/v1", InputDigest: in.InputDigest,
 		ProfileDigest: c.Profile.Digest(c.Model), ExecutionID: turn.MessageID, AttemptID: turn.MessageID,
 		IdempotencyKey: "conversation-" + turn.MessageID, ContextURI: "artifact://" + digest, ContextDigest: digest,
@@ -221,14 +230,25 @@ func (c *Controller) advance(ctx context.Context, turn sqlite.ConversationTurn) 
 		if !time.Now().Before(turn.DeadlineAt) {
 			return c.Journal.FinishConversationTurn(ctx, turn.MessageID, "blocked", "", "Conversation deadline expired before dispatch")
 		}
-		owner, err := c.Journal.ConversationTemplateOwner(ctx, c.Profile.Engine.Namespace, c.Profile.Engine.Template)
+		if c.Templates == nil {
+			return errors.New("conversation engine template provisioning unavailable")
+		}
+		template := c.Profile.template(turn.MessageID)
+		owner, err := c.Journal.ConversationTemplateOwner(ctx, template.Namespace, template.Name)
 		if err != nil {
 			return err
 		}
 		if owner != "" && owner != turn.MessageID {
 			return c.Journal.FinishConversationTurn(ctx, turn.MessageID, "blocked", "", "Prepared conversation template was already used by another turn")
 		}
-		spec, err := c.specification(ctx, turn)
+		revision, err := c.Templates.EnsureEngineTemplate(ctx, template)
+		if errors.Is(err, rt.ErrEngineTemplatePending) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		spec, err := c.specification(ctx, turn, template.Name, revision)
 		if err != nil {
 			return err
 		}
@@ -465,6 +485,15 @@ func (c *Controller) publishOutcome(ctx context.Context, turn sqlite.Conversatio
 	}
 	if out.InvocationMessageID != in.InvocationMessageID || out.Status != in.Status || out.ResultDigest != in.ResultDigest || out.MessageID == "" || (in.Task == nil && out.TaskID != "") || (in.Task != nil && out.TaskID == "") || out.FollowupTaskID != in.FollowupTaskID {
 		return errors.New("conversation publication escaped source identity")
+	}
+	// The engine instance is gone once a turn is terminal. Remove the turn's
+	// template before marking publication, so a restart retries the removal.
+	if c.Templates == nil {
+		return errors.New("conversation engine template provisioning unavailable")
+	}
+	template := c.Profile.template(turn.MessageID)
+	if err := c.Templates.DeleteEngineTemplate(ctx, template.Namespace, template.Name); err != nil {
+		return err
 	}
 	return c.Journal.MarkConversationPublished(ctx, turn.MessageID, out.MessageID, out.TaskID)
 }

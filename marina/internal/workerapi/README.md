@@ -1,9 +1,9 @@
 # Governed worker and engine gateway
 
 `workerapi.Server` owns admission and bounded model/source/context access for
-both existing workers and the KINT-04 engine integration. Installed workflows
-still launch the supported workers. Engine resource provisioning and workflow
-selection remain pending; do not treat these routes as an enabled kagent profile.
+both existing workers and the KINT-04 engine integration. Marina provisions
+each engine attempt's AgentTemplate, ModelConfig and gateway Secret itself; see
+`internal/kubernetes/engine.go`.
 See [KINT-04 acceptance evidence](../../../docs/validation/kint-04-2026-09-22.md).
 
 ## Engine contract
@@ -56,11 +56,14 @@ remain uncertain and must not be counted as zero usage.
 
 ## Governed installation wiring
 
-The isolated local installation proof passed. This is a manual preparation
-contract; automatic profile provisioning and dispatch remain KINT-06/07 work. Follow the [locked isolated trial](../../../deploy/kubernetes/kagent-trial/README.md)
-and its ownership/teardown rules.
+Marina performs steps 1, 4 and 6 for every attempt: it derives a `marina-`
+name from the durable attempt key, creates the resources, waits for the
+prepared revision, and deletes them after the engine instance is gone. The
+steps below record the contract those resources satisfy. Follow the [locked
+isolated trial](../../../deploy/kubernetes/kagent-trial/README.md) for engine
+installation and teardown.
 
-1. Choose a fresh attempt-exclusive AgentTemplate name and same-name Secret in
+1. Use a fresh attempt-exclusive AgentTemplate name and same-name Secret in
    the engine namespace. Initially use a random nonfunctional Secret value under
    `gateway`. Use a dedicated ModelConfig referring to that Secret and key:
    `provider: OpenAI`, `openAI.apiFormat: responses`, and

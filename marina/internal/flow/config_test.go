@@ -30,7 +30,7 @@ func TestRepositoryEngineAcceptsOnlyPinnedLocalNativeProfile(t *testing.T) {
 		AllowedPaths: []string{"app"}, Checks: []workresult.Check{{ID: "check", Directory: ".", Command: []string{"go", "test", "./..."}}}}
 	c.Model = workerapi.Model{Endpoint: "https://openrouter.ai/api/v1", Name: "fixture", MaxOutputTokens: 2000, Currency: "USD", InputMicrosPerMillion: 100, OutputMicrosPerMillion: 100}
 	c.Git = github.Config{APIURL: "https://api.github.com", CloneURL: "https://github.com/owner/repo.git", Repository: "owner/repo", AuthorName: "Test", AuthorEmail: "test@example.com", BaseBranch: "main"}
-	c.RepositoryEngine = &runtimeapi.EngineSelection{Backend: "kagent", Version: kagent.Version, Endpoint: "kint-engine-controller.kint-engine.svc:8083", Namespace: "kint-engine", Harness: "kint-codex", Template: "kint-one-task", Revision: strings.Repeat("a", 64)}
+	c.RepositoryEngine = &runtimeapi.EngineSelection{Backend: "kagent", Version: kagent.Version, Endpoint: "kint-engine-controller.kint-engine.svc:8083", Namespace: "kint-engine", Harness: "kint-codex"}
 	c.RepositoryEngineGatewayURL = "https://marina.marina-system.svc"
 	if err := c.Validate(); err != nil {
 		t.Fatal(err)
@@ -70,10 +70,10 @@ func TestRepositoryEngineAcceptsOnlyPinnedLocalNativeProfile(t *testing.T) {
 		t.Fatal("untrusted cleartext controller endpoint accepted")
 	}
 	selection = *c.RepositoryEngine
-	selection.Template = "../shared"
+	selection.Template, selection.Revision = "kint-one-task", strings.Repeat("a", 64)
 	changed.RepositoryEngine = &selection
 	if err := changed.Validate(); err == nil {
-		t.Fatal("invalid attempt Secret name accepted")
+		t.Fatal("a fixed prepared template would serve more than one attempt")
 	}
 }
 

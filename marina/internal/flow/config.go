@@ -116,7 +116,7 @@ func (c Config) Validate() error {
 		}
 	}
 	if c.RepositoryEngine != nil {
-		if err := c.RepositoryEngine.Validate(); err != nil {
+		if err := c.RepositoryEngine.ValidateProfile(); err != nil {
 			return err
 		}
 		if c.RepositoryEngineGatewayURL != "https://marina.marina-system.svc" ||

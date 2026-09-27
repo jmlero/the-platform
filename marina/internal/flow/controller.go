@@ -28,15 +28,16 @@ type Provider interface {
 }
 
 type Controller struct {
-	BindingConfig func(context.Context, execution.Execution) (Config, error)
-	Config        Config
-	Journal       *sqlite.Store
-	Provider      Provider
-	Runtime       runtimeapi.Adapter
-	EngineRuntime runtimeapi.Adapter
-	PrepareEngine func(context.Context, runtimeapi.Specification) error
-	Artifacts     *artifacts.Store
-	Source        func(execution.Execution) (sourcecontrol.Port, error)
+	BindingConfig   func(context.Context, execution.Execution) (Config, error)
+	Config          Config
+	Journal         *sqlite.Store
+	Provider        Provider
+	Runtime         runtimeapi.Adapter
+	EngineRuntime   runtimeapi.Adapter
+	EngineTemplates runtimeapi.EngineTemplates
+	PrepareEngine   func(context.Context, runtimeapi.Specification) error
+	Artifacts       *artifacts.Store
+	Source          func(execution.Execution) (sourcecontrol.Port, error)
 }
 
 // Every value used in an external write is derived from this durable state,

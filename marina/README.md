@@ -33,7 +33,7 @@ The trial profile was removed afterward; regular intake uses the original image.
 An optional pinned conversation profile now consumes Deck's ordered explicit
 agent invocation feed through a read-only kagent BYO actor. It freezes the selected thread
 context, permits one governed model call, and retains a bounded result artifact.
-It requires one prepared, attempt-exclusive template per turn. Engine questions
+Marina creates and removes one attempt-exclusive engine template per turn. Engine questions
 are written to the originating Deck thread, and one answer is sent to the same
 waiting attempt. The service identity needs `conversation.question.write` in
 addition to invocation and channel read grants. Terminal turns publish one

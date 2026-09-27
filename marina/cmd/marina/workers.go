@@ -96,6 +96,7 @@ func configureWorkers(config flow.Config, journal *sqlite.Store, provider flow.P
 		return nil, nil, err
 	}
 	controller.EngineRuntime = kagent.New(conn, engineEndpoint, journal, store, gateway)
+	controller.EngineTemplates = runtime
 	controller.PrepareEngine = func(ctx context.Context, spec runtimeapi.Specification) error {
 		credential, err := gateway.EngineCredential(ctx, spec)
 		if err != nil {

@@ -183,13 +183,13 @@ func TestInvocationRunsOnceWithReadOnlyEngineSpecification(t *testing.T) {
 	engine := &testEngine{blobs: blobs}
 	model := workerapi.Model{Name: "fixture", MaxOutputTokens: 100, Currency: "USD"}
 	key := []byte(strings.Repeat("k", 32))
-	profile := Profile{Engine: rt.EngineSelection{Backend: "kagent", Version: kagent.Version, Endpoint: "kint-engine-controller.kint-engine.svc:8083", Namespace: "kint-engine", Harness: "kint-conversation-byo", Template: "turn-1", Revision: strings.Repeat("a", 64)}, MaxTokens: 5000, BudgetMinutes: 5}
+	profile := Profile{Engine: rt.EngineSelection{Backend: "kagent", Version: kagent.Version, Endpoint: "kint-engine-controller.kint-engine.svc:8083", Namespace: "kint-engine", Harness: "kint-conversation-byo"}, MaxTokens: 5000, BudgetMinutes: 5}
 	changedModel := model
 	changedModel.Endpoint = "https://other-model.example/v1"
 	if profile.Digest(changedModel) == profile.Digest(model) {
 		t.Fatal("model endpoint change did not change the authorized profile")
 	}
-	controller := Controller{ProjectID: "prj_1", AgentID: "agt_1", PolicyVersion: "test", Source: testSource{message: message}, Journal: journal, Blobs: blobs, Engine: engine,
+	controller := Controller{ProjectID: "prj_1", AgentID: "agt_1", PolicyVersion: "test", Source: testSource{message: message}, Journal: journal, Blobs: blobs, Engine: engine, Templates: &fakeTemplates{},
 		Profile: profile,
 		Model:   model, Gateway: NewGateway(journal, key, model, profile.Digest(model), "test", nil), InstallCredential: func(context.Context, rt.Specification, string) error { return nil }}
 	if failures := controller.Cycle(ctx); len(failures) != 0 {
@@ -223,7 +223,7 @@ func TestDelegatedResultRetriesOneFrozenPublicationAfterLostResponse(t *testing.
 	source := &publicationSource{testSource: testSource{message: message}, lost: true}
 	engine := &testEngine{blobs: blobs, result: conversationbyo.Result{Answer: "I will handle it.", Delegation: &conversationbyo.Delegation{Title: "Fix login", Description: "Repair login", AcceptanceCriteria: "Regression passes", Mode: "ready"}}}
 	model := workerapi.Model{Name: "fixture", MaxOutputTokens: 100, Currency: "USD"}
-	profile := Profile{Engine: rt.EngineSelection{Backend: "kagent", Version: kagent.Version, Endpoint: "kint-engine-controller.kint-engine.svc:8083", Namespace: "kint-engine", Harness: "kint-conversation-byo", Template: "turn-delegate", Revision: strings.Repeat("a", 64)}, MaxTokens: 5000, BudgetMinutes: 5,
+	profile := Profile{Engine: rt.EngineSelection{Backend: "kagent", Version: kagent.Version, Endpoint: "kint-engine-controller.kint-engine.svc:8083", Namespace: "kint-engine", Harness: "kint-conversation-byo"}, MaxTokens: 5000, BudgetMinutes: 5,
 		Delegation: &workcontrol.ConversationBudget{TimeMinutes: 30, MaxAttempts: 2, MaxTokens: 20000, MaxConcurrency: 1, Authority: []string{"source.read", "source.write", "pull_request.create"}}}
 	tooManyAttempts := profile
 	copyBudget := *profile.Delegation
@@ -232,7 +232,7 @@ func TestDelegatedResultRetriesOneFrozenPublicationAfterLostResponse(t *testing.
 	if err := tooManyAttempts.Validate(model); err == nil {
 		t.Fatal("three-attempt conversation grant exceeds the repository workflow")
 	}
-	controller := Controller{ProjectID: "prj_1", AgentID: "agt_1", PolicyVersion: "test", Source: source, Journal: journal, Blobs: blobs, Engine: engine,
+	controller := Controller{ProjectID: "prj_1", AgentID: "agt_1", PolicyVersion: "test", Source: source, Journal: journal, Blobs: blobs, Engine: engine, Templates: &fakeTemplates{},
 		Profile: profile, Model: model, DelegationProfileDigest: strings.Repeat("b", 64), Gateway: NewGateway(journal, []byte(strings.Repeat("k", 32)), model, profile.Digest(model), "test", nil), InstallCredential: func(context.Context, rt.Specification, string) error { return nil }}
 	if failures := controller.Cycle(ctx); len(failures) != 1 {
 		t.Fatalf("lost response should leave terminal unpublished: %v", failures)
@@ -275,9 +275,9 @@ func TestExplicitDraftRequestCannotBecomeReadyFromModelMode(t *testing.T) {
 	source := &publicationSource{testSource: testSource{message: message}}
 	engine := &testEngine{blobs: blobs, result: conversationbyo.Result{Answer: "I will record the idea.", Delegation: &conversationbyo.Delegation{Title: "Improve status page", AcceptanceCriteria: "Blocked tasks have a clear explanation", Mode: "ready"}}}
 	model := workerapi.Model{Name: "fixture", MaxOutputTokens: 100, Currency: "USD"}
-	profile := Profile{Engine: rt.EngineSelection{Backend: "kagent", Version: kagent.Version, Endpoint: "kint-engine-controller.kint-engine.svc:8083", Namespace: "kint-engine", Harness: "kint-conversation-byo", Template: "turn-draft", Revision: strings.Repeat("a", 64)}, MaxTokens: 5000, BudgetMinutes: 5,
+	profile := Profile{Engine: rt.EngineSelection{Backend: "kagent", Version: kagent.Version, Endpoint: "kint-engine-controller.kint-engine.svc:8083", Namespace: "kint-engine", Harness: "kint-conversation-byo"}, MaxTokens: 5000, BudgetMinutes: 5,
 		Delegation: &workcontrol.ConversationBudget{TimeMinutes: 30, MaxAttempts: 2, MaxTokens: 20000, MaxConcurrency: 1, Authority: []string{"source.read", "source.write", "pull_request.create"}}}
-	c := Controller{ProjectID: "prj_1", AgentID: "agt_1", PolicyVersion: "test", Source: source, Journal: journal, Blobs: blobs, Engine: engine,
+	c := Controller{ProjectID: "prj_1", AgentID: "agt_1", PolicyVersion: "test", Source: source, Journal: journal, Blobs: blobs, Engine: engine, Templates: &fakeTemplates{},
 		Profile: profile, Model: model, DelegationProfileDigest: strings.Repeat("b", 64), Gateway: NewGateway(journal, []byte(strings.Repeat("k", 32)), model, profile.Digest(model), "test", nil), InstallCredential: func(context.Context, rt.Specification, string) error { return nil }}
 	if failures := c.Cycle(ctx); len(failures) != 0 {
 		t.Fatal(failures)
@@ -302,8 +302,8 @@ func TestEngineQuestionWaitsThenResumesOriginatingConversation(t *testing.T) {
 	source := &questionSource{testSource: testSource{message: message}}
 	engine := &questionEngine{testEngine: &testEngine{blobs: blobs}}
 	model := workerapi.Model{Name: "fixture", MaxOutputTokens: 100, Currency: "USD"}
-	profile := Profile{Engine: rt.EngineSelection{Backend: "kagent", Version: kagent.Version, Endpoint: "kint-engine-controller.kint-engine.svc:8083", Namespace: "kint-engine", Harness: "kint-conversation-byo", Template: "turn-question", Revision: strings.Repeat("a", 64)}, MaxTokens: 5000, BudgetMinutes: 5}
-	c := Controller{ProjectID: "prj_1", AgentID: "agt_1", PolicyVersion: "test", Source: source, Journal: journal, Blobs: blobs, Engine: engine, Profile: profile, Model: model, Gateway: NewGateway(journal, []byte(strings.Repeat("k", 32)), model, profile.Digest(model), "test", nil), InstallCredential: func(context.Context, rt.Specification, string) error { return nil }}
+	profile := Profile{Engine: rt.EngineSelection{Backend: "kagent", Version: kagent.Version, Endpoint: "kint-engine-controller.kint-engine.svc:8083", Namespace: "kint-engine", Harness: "kint-conversation-byo"}, MaxTokens: 5000, BudgetMinutes: 5}
+	c := Controller{ProjectID: "prj_1", AgentID: "agt_1", PolicyVersion: "test", Source: source, Journal: journal, Blobs: blobs, Engine: engine, Templates: &fakeTemplates{}, Profile: profile, Model: model, Gateway: NewGateway(journal, []byte(strings.Repeat("k", 32)), model, profile.Digest(model), "test", nil), InstallCredential: func(context.Context, rt.Specification, string) error { return nil }}
 	if failures := c.Cycle(ctx); len(failures) != 0 {
 		t.Fatal(failures)
 	}

@@ -50,8 +50,8 @@ func TestCancelledConversationCollectsBeforeCleanup(t *testing.T) {
 	message := workcontrol.ConversationMessage{ID: "msg_cancel", ProjectID: "prj_1", ChannelID: "chn_1", ThreadID: "thr_1", AuthorType: "human", Body: "Explain", InvokedAgentID: "agt_1", InvocationRequestID: "req_cancel", CreatedAt: time.Now().UnixMilli()}
 	model := workerapi.Model{Name: "fixture", MaxOutputTokens: 100, Currency: "USD"}
 	engine := &cancellationEngine{}
-	profile := Profile{Engine: rt.EngineSelection{Backend: "kagent", Version: kagent.Version, Endpoint: "kint-engine-controller.kint-engine.svc:8083", Namespace: "kint-engine", Harness: "kint-conversation-byo", Template: "turn-cancel", Revision: strings.Repeat("a", 64)}, MaxTokens: 5000, BudgetMinutes: 5}
-	controller := Controller{ProjectID: "prj_1", AgentID: "agt_1", PolicyVersion: "test", Source: testSource{message: message}, Journal: journal, Blobs: blobs, Engine: engine,
+	profile := Profile{Engine: rt.EngineSelection{Backend: "kagent", Version: kagent.Version, Endpoint: "kint-engine-controller.kint-engine.svc:8083", Namespace: "kint-engine", Harness: "kint-conversation-byo"}, MaxTokens: 5000, BudgetMinutes: 5}
+	controller := Controller{ProjectID: "prj_1", AgentID: "agt_1", PolicyVersion: "test", Source: testSource{message: message}, Journal: journal, Blobs: blobs, Engine: engine, Templates: &fakeTemplates{},
 		Profile: profile,
 		Model:   model, Gateway: NewGateway(journal, []byte(strings.Repeat("k", 32)), model, profile.Digest(model), "test", nil), InstallCredential: func(context.Context, rt.Specification, string) error { return nil }}
 	if failures := controller.Cycle(ctx); len(failures) != 0 {

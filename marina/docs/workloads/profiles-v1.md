@@ -191,9 +191,7 @@ service certificate.
 
 Build `marina/Dockerfile.conversation-byo` as a pinned image and prepare a
 `kint-conversation-byo` Harness with no source, shell, browser, task or tool
-capabilities. Give it a dedicated AgentTemplate, a same-name `gateway` Secret,
-and a Responses ModelConfig routed through Marina's HTTPS conversation gateway.
-The private workflow may then select the exact prepared revision:
+capabilities. The private workflow selects that Harness; it names no template:
 
 ```json
 {
@@ -203,9 +201,7 @@ The private workflow may then select the exact prepared revision:
       "version": "1.0.0-alpha1@850c464726881317997c32515f8b621b949d6ce1",
       "endpoint": "kint-engine-controller.kint-engine.svc:8083",
       "namespace": "kint-engine",
-      "harness": "kint-conversation-byo",
-      "template": "<dedicated template name>",
-      "revision": "<prepared revision digest>"
+      "harness": "kint-conversation-byo"
     },
     "budget_minutes": 5,
     "max_tokens": 10000,
@@ -230,10 +226,12 @@ project. An interpreted task cannot add its own budget or grants. The gateway UR
 `https://marina.marina-system.svc/conversation/model/v1/responses`.
 Marina registers its stable agent with `conversation.invoke.{project_id}` only
 while this profile is configured. It scans the project channel ledger and runs
-one frozen, bounded turn through the pinned engine. The template and Secret are
-attempt-exclusive and cannot be reused by another turn. Provision a new pair
-and select its revision before another invocation; a second invocation against
-the used template is recorded as blocked. The result stays in Marina's artifact
+one frozen, bounded turn through the pinned engine. For every turn Marina
+creates a `marina-` AgentTemplate, ModelConfig and same-name `gateway` Secret
+routed through its HTTPS conversation gateway, freezes the prepared revision in
+the turn's specification, and deletes the three resources after publication.
+No template or Secret serves two turns, and Marina never adopts or deletes a
+resource it did not label as its own. The result stays in Marina's artifact
 store and its exact publication request is journaled before Deck receives a
 reply and optional task. Local model and engine proof is still required; see
 [CHAT-04 evidence](../../../docs/validation/chat-04-2026-09-23.md) and

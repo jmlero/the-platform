@@ -49,6 +49,27 @@ func (c *Controller) engineInput(ctx context.Context, task workcontrol.WorkItem,
 		AllowedPaths: c.Config.AllowedPaths, Checks: c.Config.Checks, Context: &manifest}, nil
 }
 
+// repositoryTemplate is the attempt-exclusive native Codex configuration.
+// The attempt's Secret shares its name, so no other attempt can inherit its
+// cached gateway credential.
+func (c *Controller) repositoryTemplate(key string) runtimeapi.EngineTemplate {
+	return runtimeapi.EngineTemplate{Namespace: c.Config.RepositoryEngine.Namespace, Name: runtimeapi.EngineTemplateName(key), Harness: c.Config.RepositoryEngine.Harness,
+		Description: "Bounded repository implementation attempt", SystemPrompt: "Follow the frozen task instructions and the scoped gateway. Do not use unselected sources.",
+		Model: "marina-governed", BaseURL: strings.TrimRight(c.Config.RepositoryEngineGatewayURL, "/") + "/engine/model/v1"}
+}
+
+// removeTemplate deletes only templates Marina provisioned; installation-owned
+// templates of older attempts remain for the operator.
+func (c *Controller) removeTemplate(ctx context.Context, spec runtimeapi.Specification) error {
+	if spec.Engine == nil || !strings.HasPrefix(spec.Engine.Template, runtimeapi.EngineTemplatePrefix) {
+		return nil
+	}
+	if c.EngineTemplates == nil {
+		return errors.New("engine template provisioning is unavailable")
+	}
+	return c.EngineTemplates.DeleteEngineTemplate(ctx, spec.Engine.Namespace, spec.Engine.Template)
+}
+
 func enginePrompt(input worker.Input) ([]byte, error) {
 	encoded, err := json.Marshal(input)
 	if err != nil {
@@ -150,7 +171,18 @@ func (c *Controller) worker(ctx context.Context, e execution.Execution, task wor
 			if err != nil {
 				return fail(err)
 			}
-			selection := *c.Config.RepositoryEngine
+			if c.EngineTemplates == nil {
+				return fail(errors.New("engine template provisioning is unavailable"))
+			}
+			template := c.repositoryTemplate(key)
+			revision, err := c.EngineTemplates.EnsureEngineTemplate(ctx, template)
+			if errors.Is(err, runtimeapi.ErrEngineTemplatePending) {
+				return runtimeapi.Attempt{}, false, workresult.Result{}, "", nil
+			}
+			if err != nil {
+				return fail(err)
+			}
+			selection := c.Config.RepositoryEngine.Prepared(template.Name, revision)
 			spec.Engine = &selection
 			spec.ContextURI = "artifact://" + digest
 			spec.InputDigest = strings.TrimPrefix(digest, "sha256:")
@@ -495,6 +527,19 @@ func (c *Controller) stop(ctx context.Context, e execution.Execution) error {
 			return err
 		}
 	}
+	// A template prepared before its attempt was recorded has no cleanup
+	// record; remove it here. Recorded attempts are cleaned up after the engine
+	// instance is gone.
+	if c.Config.RepositoryEngine != nil && c.EngineTemplates != nil {
+		key := e.ID + ":implement"
+		for _, attempt := range items {
+			if attempt.IdempotencyKey == key {
+				return nil
+			}
+		}
+		template := c.repositoryTemplate(key)
+		return c.EngineTemplates.DeleteEngineTemplate(ctx, template.Namespace, template.Name)
+	}
 	return nil
 }
 
@@ -542,6 +587,9 @@ func (c *Controller) cleanup(ctx context.Context) error {
 			if err = runtime.Cleanup(ctx, attempt.ProviderHandle); err != nil {
 				return fmt.Errorf("cleanup %s: %w", attempt.ID, err)
 			}
+		}
+		if err = c.removeTemplate(ctx, attempt.Specification); err != nil {
+			return fmt.Errorf("remove engine template %s: %w", attempt.ID, err)
 		}
 		cleanupDetail := "Kubernetes Job and attempt credential removed; artifacts retained"
 		if attempt.Specification.Engine != nil {
