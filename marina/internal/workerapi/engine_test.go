@@ -415,6 +415,41 @@ func TestEngineSourceReadsStayBoundToRepositoryAndNeverPublish(t *testing.T) {
 	}
 }
 
+func TestEngineSourceFetchKeepsTheCompressedRequestEncoding(t *testing.T) {
+	// Git compresses large upload-pack requests, such as a full clone that
+	// wants every advertised ref. Dropping the encoding corrupts the request.
+	s, a, _, _ := engineFixture(t)
+	token, err := s.EngineCredential(context.Background(), a.Specification)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.config.SourceURL = a.Specification.RepositoryURI
+	s.client = &http.Client{Transport: credentialTransport(func(r *http.Request) (*http.Response, error) {
+		if r.URL.String() != a.Specification.RepositoryURI+"/git-upload-pack" || r.Header.Get("Content-Encoding") != "gzip" ||
+			r.Header.Get("Accept") != "application/x-git-upload-pack-result" {
+			return &http.Response{StatusCode: 400, Body: io.NopCloser(strings.NewReader("malformed request"))}, nil
+		}
+		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"application/x-git-upload-pack-result"}}, Body: io.NopCloser(strings.NewReader("pack"))}, nil
+	})}
+	request := func(encoding string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest("POST", "/engine/git/git-upload-pack", strings.NewReader("compressed wants"))
+		r.TLS = &tls.ConnectionState{}
+		r.Header.Set("Authorization", "Bearer "+token)
+		r.Header.Set("Content-Type", "application/x-git-upload-pack-request")
+		r.Header.Set("Accept", "application/x-git-upload-pack-result")
+		r.Header.Set("Content-Encoding", encoding)
+		w := httptest.NewRecorder()
+		s.ServeHTTP(w, r)
+		return w
+	}
+	if w := request("gzip"); w.Code != 200 || w.Body.String() != "pack" {
+		t.Fatalf("compressed fetch: %d %q", w.Code, w.Body.String())
+	}
+	if w := request("br"); w.Code != 400 {
+		t.Fatalf("unsupported request encoding forwarded: %d", w.Code)
+	}
+}
+
 func TestNativeNormalizationRemovesSearchDeclarationButRejectsInvocation(t *testing.T) {
 	for _, choice := range []any{"auto", map[string]any{"type": "web_search"}} {
 		body := map[string]any{"client_metadata": map[string]any{"session": "untrusted metadata"}, "tools": []any{map[string]any{"type": "function", "name": "exec_command"}, map[string]any{"type": "web_search", "external_web_access": true}}, "tool_choice": choice}

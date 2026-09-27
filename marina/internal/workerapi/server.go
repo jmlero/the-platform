@@ -356,6 +356,13 @@ func (server *Server) source(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unexpected source query", 400)
 		return
 	}
+	// Git gzips large upload-pack requests, such as a full clone; the encoding
+	// must reach the provider with the bytes it describes.
+	encoding := r.Header.Get("Content-Encoding")
+	if encoding != "" && encoding != "gzip" {
+		http.Error(w, "unsupported source request encoding", 400)
+		return
+	}
 	ctx, cancel := server.liveContext(r)
 	defer cancel()
 	request, err := http.NewRequestWithContext(ctx, r.Method, strings.TrimRight(sourceURL, "/")+path, http.MaxBytesReader(w, r.Body, 16<<20))
@@ -365,6 +372,12 @@ func (server *Server) source(w http.ResponseWriter, r *http.Request) {
 	}
 	request.Header.Set("Content-Type", r.Header.Get("Content-Type"))
 	request.Header.Set("Git-Protocol", r.Header.Get("Git-Protocol"))
+	if accept := r.Header.Get("Accept"); accept != "" {
+		request.Header.Set("Accept", accept)
+	}
+	if encoding != "" {
+		request.Header.Set("Content-Encoding", encoding)
+	}
 	if tokenFile != "" {
 		token, err := os.ReadFile(tokenFile)
 		if err != nil || strings.TrimSpace(string(token)) == "" {
