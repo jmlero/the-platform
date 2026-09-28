@@ -73,13 +73,26 @@ func (p authorizedRun) GetWork(context.Context, string) (workcontrol.WorkDetail,
 	return workcontrol.WorkDetail{Runs: []workcontrol.Run{p.run}}, nil
 }
 
-func TestEachRepositoryEngineAttemptRunsOnItsOwnPreparedTemplate(t *testing.T) {
+// engineFlow is a claimed execution at its implement step whose controller is
+// configured for native Codex; each test wires the runtimes it observes.
+type engineFlow struct {
+	ctx      context.Context
+	journal  *sqlite.Store
+	deadline time.Time
+	c        *Controller
+	e        execution.Execution
+	task     workcontrol.WorkItem
+	s        state
+}
+
+func newEngineFlow(t *testing.T) engineFlow {
+	t.Helper()
 	ctx := context.Background()
 	journal, err := sqlite.Open(ctx, t.TempDir()+"/journal.db")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer journal.Close()
+	t.Cleanup(func() { journal.Close() })
 	blobs, err := artifacts.New(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -109,9 +122,7 @@ func TestEachRepositoryEngineAttemptRunsOnItsOwnPreparedTemplate(t *testing.T) {
 		RepositoryEngine:           &runtimeapi.EngineSelection{Backend: "kagent", Version: kagent.Version, Endpoint: "kint-engine-controller.kint-engine.svc:8083", Namespace: "kint-engine", Harness: "kint-codex"},
 		RepositoryEngineGatewayURL: "https://marina.marina-system.svc"}
 	config.Kubernetes.Image = "worker@sha256:" + strings.Repeat("a", 64)
-	templates := &flowTemplates{pending: 1}
-	engine := &terminalEngine{}
-	c := &Controller{Config: config, Journal: journal, Provider: provider, Artifacts: blobs, EngineRuntime: engine, EngineTemplates: templates,
+	c := &Controller{Config: config, Journal: journal, Provider: provider, Artifacts: blobs,
 		PrepareEngine: func(context.Context, runtimeapi.Specification) error { return nil }}
 	s := state{Step: "implement", Base: strings.Repeat("b", 40), Head: strings.Repeat("b", 40), ConfigDigest: config.Digest()}
 	manifest, err := c.assembleContext(time.Now().UTC(), e, workcontrol.WorkItem{ID: "task", Title: "Fix the bound"}, s, workcontrol.ResolvedContext{})
@@ -122,6 +133,15 @@ func TestEachRepositoryEngineAttemptRunsOnItsOwnPreparedTemplate(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.ContextDigest = manifest.Digest
+	return engineFlow{ctx: ctx, journal: journal, deadline: deadline, c: c, e: e, task: task, s: s}
+}
+
+func TestEachRepositoryEngineAttemptRunsOnItsOwnPreparedTemplate(t *testing.T) {
+	f := newEngineFlow(t)
+	ctx, journal, deadline, c, e, task, s := f.ctx, f.journal, f.deadline, f.c, f.e, f.task, f.s
+	templates := &flowTemplates{pending: 1}
+	engine := &terminalEngine{}
+	c.EngineRuntime, c.EngineTemplates = engine, templates
 
 	// An unprepared template records no attempt and starts nothing.
 	if _, done, _, _, err := c.worker(ctx, e, task, s, "implement"); err != nil || done {
@@ -173,4 +193,54 @@ func TestEachRepositoryEngineAttemptRunsOnItsOwnPreparedTemplate(t *testing.T) {
 func (f *flowTemplates) ensuredRevision(name string) string {
 	sum := sha256.Sum256([]byte(name))
 	return hex.EncodeToString(sum[:])
+}
+
+// recordingRuntime stands in for one engine: it starts an attempt once and
+// then reports it as still running.
+type recordingRuntime struct {
+	runtimeapi.Adapter
+	prefix    string
+	started   int
+	inspected []string
+}
+
+func (r *recordingRuntime) InspectByKey(context.Context, string) (runtimeapi.Observation, error) {
+	return runtimeapi.Observation{}, nil
+}
+func (r *recordingRuntime) Start(_ context.Context, spec runtimeapi.Specification) (runtimeapi.Observation, error) {
+	r.started++
+	return runtimeapi.Observation{Found: true, ProviderHandle: r.prefix + spec.AttemptID, State: runtimeapi.StateRunning}, nil
+}
+func (r *recordingRuntime) Inspect(_ context.Context, handle string) (runtimeapi.Observation, error) {
+	r.inspected = append(r.inspected, handle)
+	return runtimeapi.Observation{Found: true, ProviderHandle: handle, State: runtimeapi.StateRunning}, nil
+}
+
+func TestActiveAttemptStaysOnItsEngineWhenTheProfileChanges(t *testing.T) {
+	for _, cutover := range []bool{true, false} {
+		f := newEngineFlow(t)
+		jobs, engine := &recordingRuntime{prefix: "job:"}, &recordingRuntime{prefix: "kagent:"}
+		f.c.Runtime, f.c.EngineRuntime, f.c.EngineTemplates = jobs, engine, &flowTemplates{}
+		// Cutover starts on the Job runtime and then selects native Codex;
+		// rollback starts on native Codex and then drops it.
+		selection := f.c.Config.RepositoryEngine
+		first, second := jobs, engine
+		if cutover {
+			f.c.Config.RepositoryEngine = nil
+		} else {
+			first, second = engine, jobs
+		}
+		if _, done, _, _, err := f.c.worker(f.ctx, f.e, f.task, f.s, "implement"); err != nil || done || first.started != 1 {
+			t.Fatalf("cutover=%v first start: done=%v err=%v started=%d", cutover, done, err, first.started)
+		}
+		if cutover {
+			f.c.Config.RepositoryEngine = selection
+		} else {
+			f.c.Config.RepositoryEngine = nil
+		}
+		attempt, done, _, _, err := f.c.worker(f.ctx, f.e, f.task, f.s, "implement")
+		if err != nil || done || len(first.inspected) != 1 || second.started != 0 || len(second.inspected) != 0 || (attempt.Specification.Engine == nil) != cutover {
+			t.Fatalf("cutover=%v: the active attempt moved engines: done=%v err=%v first=%+v second=%+v", cutover, done, err, first, second)
+		}
+	}
 }
