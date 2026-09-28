@@ -5,15 +5,15 @@ tech stack and the rules that keep work safe. Why it exists is in
 [VISION.md](VISION.md); what is supported today is in [status.md](status.md).
 Planned changes are in [plans/](plans/) until they ship.
 
-Last reviewed: 2026-09-25.
+Last reviewed: 2026-09-28.
 
 ## Components
 
 ```text
- browser ──> Deck ──────────── HTTP/JSON API v1 ──────────── Marina ──> Kubernetes
- (channels,  (steering and          ▲                        (execution   isolated
-  chat,       the ledger)           │                         and          worker Jobs
-  tasks)                        platformctl                   recovery)    (kagent: target)
+ browser ──> Deck ──────────── HTTP/JSON API v1 ──────────── Marina ──> kagent (chat agent, native Codex)
+ (channels,  (steering and          ▲                        (execution
+  chat,       the ledger)           │                         and       ──> Kubernetes (clean verification Jobs)
+  tasks)                        platformctl                   recovery)
                                 (CLI)                            │
                                                                  ├──> model provider (via Marina's gateway)
                                                                  └──> Git and CI
@@ -24,7 +24,7 @@ Last reviewed: 2026-09-25.
 | **Deck** (`deck/`) | Where I steer. Web UI with projects, what is happening, and the chat, plus the HTTP API. | Projects, conversations, tasks, budgets, plans, decisions, commands, and the operator-visible record of runs and evidence. Never schedules Pods, clones repositories or calls models. |
 | **Marina** (`marina/`) | Where work runs. Claims authorized tasks from Deck and runs them to a result or a blocker. | Repository binding, credentials, execution policy, immutable context packages, runtime attempts, usage, artifacts, verification, and recovery after restarts. |
 | **platformctl** (`cli/`) | Terminal client for Deck's public API. | Nothing; it is stateless and never calls Marina. |
-| **kagent** (target engine) | Runs the agent harnesses and their lifecycle ([decision 0017](decisions/0017-kagent-core-engine.md)). Trialled, not yet installed; see the [integration plan](plans/kagent-integration.md). | Engine task history and runtime lifecycle. |
+| **kagent** (agent engine) | Runs the chat agent and native Codex for repository work, pinned `v1.0.0-alpha1` ([decision 0017](decisions/0017-kagent-core-engine.md)). Marina creates each attempt's own template and gateway Secret ([decision 0024](decisions/0024-per-attempt-engine-templates.md)). | Engine task history and runtime lifecycle. |
 | **Git, CI, Kubernetes** | External systems. | Their own facts: source revisions, check results, workload state. |
 
 Deck and Marina are separate products: separate Go modules, binaries, SQLite
@@ -36,11 +36,11 @@ versioned HTTP/JSON API.
 
 | Part of the vision | Today | Target ([decision 0022](decisions/0022-autonomous-software-factory.md)) |
 | --- | --- | --- |
-| **Outer loop** (me and the chat agent) | Deck channels and threads. An explicitly invoked conversation agent runs in Marina with no write authority and replies in the thread. Tasks are created by hand or promoted from messages. | The chat agent drafts a PRD; after my approval Marina commits it to the project repository, and top-level tasks are derived from it. Context and knowledge bases come later. |
-| **Inner loop** (agents) | Marina starts an isolated coding Job at a pinned revision, then a separate clean verification Job runs the checks. | Native Codex on kagent. Failed checks feed back into bounded repair attempts ([0020](decisions/0020-bounded-repair-policy.md)); an independent review runs before every commit ([0021](decisions/0021-semantic-review-gate.md)). |
-| **Landing** | Marina opens a pull request, waits for required CI at the exact head, records evidence and stops for human review. | No pull request: clean verification (unit and end-to-end tests), push to a task branch, required GitHub CI on that commit, then fast-forward main. |
+| **Outer loop** (me and the chat agent) | Deck channels and threads. An explicitly invoked chat agent on kagent, with no write authority, replies in the thread, can ask one typed clarification, and can create a Backlog draft or a Ready task within a fixed budget. Tasks can also be created by hand or promoted from messages. | The chat agent drafts a PRD; after my approval Marina commits it to the project repository, and top-level tasks are derived from it. Context and knowledge bases come later. |
+| **Inner loop** (agents) | Native Codex on kagent implements the task at a pinned revision; a separate clean verification Job runs the checks. Failed checks block the task. | Native Codex on kagent. Failed checks feed back into bounded repair attempts ([0020](decisions/0020-bounded-repair-policy.md)); an independent review runs before every commit ([0021](decisions/0021-semantic-review-gate.md)). |
+| **Landing** | No pull request: after clean verification Marina pushes the exact commit to a task branch, waits for required GitHub CI on that commit, and fast-forwards main if it has not moved. GitHub branch protection is not required. | No pull request: clean verification (unit and end-to-end tests), push to a task branch, required GitHub CI on that commit, then fast-forward main. |
 | **CI and deployment** | GitHub. | GitHub. The platform observes CI and never deploys. |
-| **Deck UI** | Project channels, threads, a compact task list and a task drawer. | Three columns: projects, a simple middle column (in progress, to do, recently landed), and the chat. |
+| **Deck UI** | Three columns: projects, a middle column (in progress, to do, recently completed), and the chat, plus a task drawer. | Three columns: projects, a simple middle column (in progress, to do, recently landed), and the chat. |
 
 The LangChain diagnostic workflow is retired
 ([decision 0023](decisions/0023-focus-kagent-cutover.md)) and is removed with
@@ -55,7 +55,7 @@ the old runtime.
 | Storage | One SQLite database per service (`modernc.org/sqlite`) and artifact files on persistent volumes |
 | API | HTTP/JSON with an OpenAPI v1 contract in [deck/api/openapi.yaml](../deck/api/openapi.yaml) |
 | Runtime | Kubernetes: local Podman + Kind for acceptance, GKE Autopilot for tests; ephemeral Jobs with NetworkPolicy isolation |
-| Agent engine | Codex worker today; kagent with native Codex as the target (A2A protocol, pinned `v1.0.0-alpha1`) |
+| Agent engine | kagent (A2A protocol, pinned `v1.0.0-alpha1`) with native Codex for repository work and a Marina BYO actor for the chat. The old Codex worker Job stays in the code until KINT-12. |
 | Models | OpenRouter, reached only through Marina's model gateway |
 | Git, registry, CI | GitHub, GHCR, GitHub Actions |
 
@@ -143,7 +143,7 @@ Marina never assumes an operation failed and starts replacement work.
 | Model response uncertain | Keep the full reservation; never invent usage. |
 | Verification, CI or artifact storage fails | Do not complete; block or wait within budget. |
 | Operator cancels | Revoke authority, terminate the worker, clean up, then acknowledge. |
-| Delivered commit changes (PR head today, main moved in the target) | Earlier evidence becomes stale; the change is checked again or blocks. |
+| Delivered commit changes (task branch moved, or main moved before landing) | Earlier evidence becomes stale; the task blocks. Rebasing is LAND-03. |
 
 ## Security boundaries
 
@@ -152,13 +152,14 @@ Marina never assumes an operation failed and starts replacement work.
   ([decision 0005](decisions/0005-operator-authentication.md)).
 - Each worker attempt gets a short-lived gateway credential only. It has no
   Kubernetes token, Git write credential or model provider key.
-- Workers run in their own namespace with resource limits, a read-only root
-  filesystem and network access limited to Marina and DNS. NetworkPolicy isolates
-  Pods; it is not a VM boundary.
+- Agent attempts run as kagent actors in gVisor sandboxes; the engine's egress
+  router admits only Marina's gateway routes. Verification Jobs run in their own
+  namespace with resource limits, a read-only root filesystem and network access
+  limited to Marina and DNS. Neither boundary is a VM.
 
 ## Deployment
 
-Two single-replica services and short-lived worker Jobs:
+Two single-replica services, the kagent engine, and short-lived verification Jobs:
 
 ```mermaid
 flowchart LR
@@ -168,9 +169,11 @@ flowchart LR
     D --> DD[(Deck SQLite PVC)]
     M --> MD[(Marina SQLite and artifacts PVC)]
     M --> K[Kubernetes API]
-    K --> J[Isolated worker Jobs]
+    K --> J[Clean verification Jobs]
+    M --> E[kagent engine]
+    E --> A[Chat and Codex actors]
     M <--> G[Git and CI]
-    J -->|scoped gateway| M
+    A -->|scoped gateway| M
     M --> P[Model provider]
 ```
 

@@ -1,7 +1,7 @@
 # Integrate kagent and remove Marina's redundant agent engine
 
 - Date: 2026-09-22
-- Status: KINT-01–08 passed their scoped gates; permanent installation, core failure cases, cutover and removal pending
+- Status: KINT-01–11 and KINT-16 passed; repository work and the chat agent run on kagent. Removal (KINT-12–15) is next; KINT-17 is later
 - Decisions: [0017](../decisions/0017-kagent-core-engine.md); gates and scope narrowed by [0023](../decisions/0023-focus-kagent-cutover.md)
 - Tracking: KINT in [the backlog](../backlog.md)
 - Research: [adoption analysis](https://github.com/jmlero/the-platform/blob/744204a/docs/kagent-adoption.md)

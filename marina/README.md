@@ -1,8 +1,9 @@
 # The Marina
 
-Marina runs bounded repository fixes on Kubernetes infrastructure controlled by
-its operator. Its first workflow produces a verified pull request for human
-review, with durable progress, explicit data destinations and limited authority.
+Marina runs bounded repository changes on Kubernetes infrastructure controlled
+by its operator. Its workflow lands a verified commit on the base branch, or stops
+at a focused blocker, with durable progress, explicit data destinations and
+limited authority.
 The broader software-factory vision remains the long-term direction.
 
 This project starts from scratch as a new Kubernetes-based concept. Experience from the earlier AWS-native `platform-marina` informs the creator's technical judgment, but Marina inherits neither its architecture nor its code and is not a port or rewrite of it.
@@ -18,17 +19,16 @@ Read [the root architecture](../docs/ARCHITECTURE.md) for the joint Deck–Marin
 The [KINT-03 kagent adapter](internal/kagent/README.md) implements the pinned
 engine lifecycle and durable correlation at the runtime boundary, with
 [isolated local recovery evidence](../docs/validation/kint-03-2026-09-22.md).
-`serve` can select it only through an explicit pinned repository-engine profile. The
+A `repository_engine` profile selects native Codex on kagent for implementation;
+Marina creates each attempt's own template ([decision 0024](../docs/decisions/0024-per-attempt-engine-templates.md))
+and follows the engine task until the engine records its end. The
 [KINT-04 gateway](internal/workerapi/README.md) adds governed admission and
-attempt-scoped access, with real local native Codex/Substrate HTTPS injection,
-revocation, rotation and bypass acceptance. Installed workload migration remains
-pending; the live gateway fixture used synthetic Deck and model responses.
+attempt-scoped access for engine model, Git read and context calls.
 The [KINT-05 result boundary](../docs/validation/kint-05-2026-09-23.md)
 validates legacy or collected kagent output against frozen attempt inputs and
 retains the agent-free clean verifier.
-The [KINT-06 local pilot](../docs/validation/kint-06-2026-09-23.md) selected
-native Codex for one Deck-authorized repository task and reached a verified PR.
-The trial profile was removed afterward; regular intake uses the original image.
+The local installation runs repository work on native Codex; see
+[status](../docs/status.md) for what is accepted.
 
 An optional pinned conversation profile now consumes Deck's ordered explicit
 agent invocation feed through a read-only kagent BYO actor. It freezes the selected thread
@@ -77,17 +77,21 @@ On service startup, Marina validates Deck's Milestone 1 capabilities, opens the 
 
 With `--config workflow.json` (or `MARINA_CONFIG_FILE`), the service enables the
 repository workflow: frozen task budget/authority, immutable plan, optional
-approval, Kubernetes coding Job, scoped Git publication, independent verification
-Job, PR/CI observation and structured evidence completion. It supports one active
-task, one implementation and one verification attempt. Failed verification or
-requested changes block the task. Cancellation waits for observed termination. Pause, resume, replan, retry and
+approval, an implementation attempt (native Codex on kagent, or the legacy Codex
+Job until KINT-12), scoped Git publication, an independent verification Job,
+required CI on the exact commit and structured evidence completion. With
+`"delivery": "fast_forward"` (`repository/v2`) Marina then fast-forwards the base
+branch; without it (`repository/v1`) it opens a pull request. It supports one
+active task, one implementation and one verification attempt. Failed
+verification, failed CI or requested changes block the task. Cancellation waits for observed termination. Pause, resume, replan, retry and
 reduce-authority commands are rejected in this workflow; ledger support for
 those command types is not an execution capability. The separate verification
 Job runs deterministic checks, not independent semantic review. Completion means
-a PR ready for human review; merge and deployment remain human-controlled.
+the verified commit landed (v2) or a PR is ready for review (v1). Marina never
+deploys.
 
-The worker uses a configured Codex CLI image and an explicit Responses-compatible
-model endpoint. GitHub/GHES is the first source adapter. Workers receive neither
+Implementation attempts reach an explicit Responses-compatible model endpoint only
+through Marina's gateway. GitHub/GHES is the first source adapter. Workers receive neither
 source-write nor upstream-model credentials. The gateway checks live authority;
 artifacts survive worker cleanup on Marina-owned storage. This workflow uses
 fixed bounded repository rules and explicit immutable context; broader policy/plugin foundations

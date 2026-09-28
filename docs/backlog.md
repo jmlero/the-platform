@@ -1,6 +1,6 @@
 # Backlog
 
-Last reviewed: 2026-09-27.
+Last reviewed: 2026-09-28.
 
 The order of work. The direction is in [VISION.md](VISION.md), and what works
 today is in [status.md](status.md).
@@ -16,33 +16,27 @@ Everything serves the [first milestone](VISION.md#direction): one real
 repository, one PRD born in the chat, and agents landing its tasks on main
 without me touching the code.
 
-1. **kagent for real, and the chat agent live** (KINT-16, then CHAT-04–10).
-   kagent has only run as throwaway trials. A permanent installation turns on
-   the chat agent, which is the main tool of the outer loop, and everything else
-   builds on it.
-2. **Repository work on native Codex** (KINT-09 and KINT-10, then KINT-11). Pass
-   the core failure cases of [decision 0023](decisions/0023-focus-kagent-cutover.md),
-   then send new repository work to kagent.
-3. **Land on main instead of opening a pull request** (LAND-01). This is Marina's
-   Git delivery code and does not depend on the engine, so it runs alongside 1
-   and 2.
-4. **The three-column Deck** (UI-01). Deck only; it runs alongside the rest.
+The engine, the chat agent, native Codex and landing on main are accepted on
+local Kind (KINT-09–11, KINT-16, CHAT-04–10, LAND-01, UI-01). Next, in order:
 
-After that, in order: the feedback loop and review (AUTO), PRDs from the chat
-(PRD), and the milestone proof (FLOW-01). Removing the old runtime (KINT-12–15)
-runs alongside AUTO.
+1. **The feedback loop and review** (AUTO). Failed checks feed bounded repair
+   attempts, and an independent review passes every change before commit.
+2. **PRDs from the chat** (PRD), with the landing follow-ups they need (LAND-02).
+3. **The milestone proof** (FLOW-01).
+
+**Removing the old runtime** (KINT-12–15) runs alongside AUTO.
 
 ## Now
 
 | ID | State | Owner | Outcome |
 | --- | --- | --- | --- |
 | KINT-16 | Done | Ops/Marina | Permanent pinned kagent/Substrate and bounded chat profile installed locally. A real model reply appeared in its Deck thread and remained readable after Deck restart; each attempt requires a fresh prepared turn. Repository work remains on the current runtime. [Evidence](validation/kint-16-2026-09-26.md), [installation guide](../deploy/kubernetes/local-podman-kagent/README.md). |
-| CHAT-04–10 | Verify | Joint | Built; product checks and real Deck conformance pass ([04](validation/chat-04-2026-09-23.md), [05](validation/chat-05-2026-09-23.md), [06–08](validation/chat-06-08-2026-09-25.md)). [Local draft and clarification](validation/chat-04-10-local-2026-09-27.md) and [browser evidence](validation/chat-04-06-browser-2026-09-27.md) cover 04–05 in part. A [local chat-to-landing run](validation/chat-06-10-landing-2026-09-27.md) covers Ready delegation, a result and blocker in their originating threads, linked follow-up, duplicate request replay, and one complete 06–10 path. Remaining: an engine-typed question (05), negative/restart cases (04, 09), and response-loss recovery for the full chat path. A fresh one-use local chat actor is prepared. |
-| KINT-09 | Open | Joint | The core live failure cases of decision 0023, on real Deck, Marina and kagent with repository work: duplicate and lost responses, restarts during work, cancel during a model call, a tool call and a question, budget exhaustion and lost usage, and failed verification or CI. No duplicate work, commits or spend, and no false completion. Partial evidence: [23–24 September](validation/kint-09-10-2026-09-24.md), [cancel while waiting](validation/kint-09-2026-09-25.md), [permanent-installation response loss and stale worker route](validation/kint-09-permanent-2026-09-26.md), [queued chat turn across Marina restart](validation/kint-09-10-permanent-2026-09-26.md), [native budget denial and model-call cancellation](validation/kint-09-native-permanent-2026-09-26.md), [native Marina restart with exact-run cancellation](validation/kint-09-native-restart-2026-09-26.md), [native controller restart and safe failure](validation/kint-09-gateway-restart-2026-09-26.md), [native one-cent cost admission](validation/kint-09-native-cost-2026-09-26.md), [native database restart with exact-run cancellation](validation/kint-09-native-db-restart-2026-09-26.md), [native worker restart with exact-run cancellation](validation/kint-09-native-compute-restart-2026-09-26.md), [real GitHub PR response recovery](validation/kint-09-pr-response-2026-09-26.md). |
+| CHAT-04–10 | Done | Joint | The installed chat agent answers without write authority, asks a typed question, delegates a Ready task within a fixed budget, and reports the landed result in its originating thread, across restarts and lost responses; a second browser session saw the landed result. [Evidence](validation/chat-04-10-2026-09-28.md); earlier: [04](validation/chat-04-2026-09-23.md), [05](validation/chat-05-2026-09-23.md), [06–08](validation/chat-06-08-2026-09-25.md), [local draft and clarification](validation/chat-04-10-local-2026-09-27.md), [browser](validation/chat-04-06-browser-2026-09-27.md), [chat to landing](validation/chat-06-10-landing-2026-09-27.md). |
+| KINT-09 | Done | Joint | The core live failure cases of decision 0023 passed on real Deck, Marina and kagent with repository work: lost create, send and publication responses; Marina, engine and worker restarts during work; cancellation during a model call, a tool call and a question; token and time budget exhaustion and lost usage; failed verification and CI. No duplicate work, commits or spend, and no false completion. [Evidence](validation/kint-09-core-2026-09-28.md); the earlier partial reports stay in `validation/`. |
 | KINT-10 | Done | Ops/Marina | The pinned local release pair completed an active kagent model turn across image upgrade and restored the previous image with a retained data copy, preserving the exact message and usage. [Accepted local evidence](validation/kint-10-recovery-2026-09-26.md); [earlier failed transition](validation/kint-10-active-2026-09-26.md). Schema-aware downgrade and broader version changes remain KINT-17. |
-| KINT-11 | Open | Marina/Ops | After 09–10, drain legacy executions and send new repository work to native Codex on kagent. An active attempt never moves between engines. |
-| LAND-01 | Verify | Marina/Joint | The [versioned workflow](validation/land-01-workflow-2026-09-27.md) passes product checks and real-process conformance. A [private local Kind task](validation/land-01-private-local-2026-09-27.md) passed clean verification and exact-head GitHub CI, then fast-forwarded main and completed with evidence. `repository/v1` still opens a PR. The private acceptance repo cannot enforce required CI on main under GitHub Free; the operator deferred protected-CI proof, so acceptance remains open. Never force-push; only Marina holds Git write credentials. |
-| UI-01 | Done | Deck | Three columns are built and [accepted on local Kind](validation/ui-01-2026-09-26.md): projects; a middle column with In progress, To do, and Recently completed; and chat. The last group becomes Recently landed after LAND-01. |
+| KINT-11 | Done | Marina/Ops | New repository work runs on native Codex on kagent. All 28 Job-runtime attempts finished before the cutover, and an active attempt keeps its engine when the profile changes. [Evidence](validation/kint-11-land-01-2026-09-28.md). |
+| LAND-01 | Done | Marina/Joint | Verified commits land on main by exact fast-forward after clean verification and required CI on that commit; ten local tasks landed on 28 September. The operator accepted Marina's exact-commit gate as the MVP bar; GitHub-side enforcement is LAND-04. `repository/v1` still opens a PR. Never force-push; only Marina holds Git write credentials. [Evidence](validation/kint-11-land-01-2026-09-28.md), [workflow](validation/land-01-workflow-2026-09-27.md). |
+| UI-01 | Done | Deck | Three columns are built and [accepted on local Kind](validation/ui-01-2026-09-26.md): projects; a middle column with In progress, To do, and Recently completed; and chat. The last group becomes Recently landed with LAND-02. |
 
 ## Next
 
@@ -69,7 +63,7 @@ review is feedback for the next attempt.
 | --- | --- | --- | --- |
 | LAND-02 | Open | Joint | After LAND-01, a task completes on its own when its commit lands on main with evidence. Marina observes code prerequisites on main; the operator no longer confirms them. |
 | LAND-03 | Open | Marina | After LAND-01, when main moved, rebase the task commit and pass both checks again. A conflict becomes repair feedback (AUTO) or a blocker. Never force-push. |
-| VER-01 | Open | Marina/Ops | Each project's verification image carries what its unit and end-to-end tests need, such as browsers, prepackaged. Checks run without runtime downloads. |
+| VER-01 | Open | Marina/Ops | Each project's verification image carries what its unit and end-to-end tests need, such as browsers, prepackaged. Checks run without runtime downloads. The native Codex harness gets the same toolchain, so the implementer can run the checks before it finishes; today it has no Node.js. |
 | TEST-01 | Open | Deck | Browser end-to-end tests for Deck's main flows run in CI: open a project, chat, see a task move through the middle column, open its result. |
 
 ### PRDs from the chat
@@ -105,7 +99,8 @@ working release stays until the failure is fixed.
 
 | ID | State | Owner | Outcome and trigger |
 | --- | --- | --- | --- |
-| KINT-17 | Later | Joint | The live failure cases that decision 0023 moved out of KINT-09: event reordering, lease loss and context revocation during a call, bypass attempts, template edits during a call, artifact storage failure, schema-aware rollback, and a full footprint measurement. Required before an independent cluster or other users. |
+| KINT-17 | Later | Joint | The live failure cases that decision 0023 moved out of KINT-09: event reordering, lease loss and context revocation during a call, bypass attempts, template edits during a call, artifact storage failure, schema-aware rollback, and a full footprint measurement. Also the gaps KINT-09 found: a lost worker is noticed only at the task deadline, Deck accepts an answer after its turn ended, and a budget block names the failed engine task instead of the budget. Required before an independent cluster or other users. |
+| LAND-04 | Later | Ops/Joint | GitHub enforces the required check on main (branch protection or a ruleset), so an update of main without CI fails independently of Marina. Trigger: a repository whose plan supports it, or before other users. |
 | LATER-01 | Later | Joint | Several tasks in parallel. Trigger: after FLOW-01, when one active task is the bottleneck. |
 | LATER-06 | Later | Joint | Context and knowledge bases for agents in the outer loop, including notes that agents maintain. Trigger: after PRD-03. |
 | LATER-07 | Later | Ops | Move to an independent Kubernetes cluster, in the cloud or on-premises. Trigger: FLOW-01 passes and the laptop limits daily use; needs KINT-17. |

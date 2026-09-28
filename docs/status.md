@@ -1,37 +1,64 @@
 # Current state
 
-Last updated: 2026-09-27.
+Last updated: 2026-09-28.
 
 This is the only description of what is supported, what is implemented but not
 yet accepted, and what is not supported. Other documents link here instead of
 restating it. Update it in the same change that ships, removes or re-scopes a
 capability. The long-term direction is in [VISION.md](VISION.md).
 
-Deck and Marina run on local Kubernetes on the operator's laptop. They take one
-authorized task to either a verified pull request for human review or a clear
-blocker.
+Deck, Marina and the kagent engine run on local Kubernetes on the operator's
+laptop. The chat agent turns a request into a task, and Marina takes one
+authorized task at a time to a verified commit on main or to a clear blocker.
 
 ## What works
 
 Accepted on the local Podman/Kind installation.
 
-**Repository workflow** ([evidence](validation/poc-mvp-2026-09-21.md))
+**Repository workflow** ([cutover and landing evidence](validation/kint-11-land-01-2026-09-28.md),
+[failure cases](validation/kint-09-core-2026-09-28.md))
 
 ```text
-task and budget -> approved plan -> coding Job -> clean verification Job
-                -> pull request -> required CI at the same head -> evidence in Deck
+task and budget -> approved plan -> native Codex on kagent -> clean verification Job
+                -> task branch -> required CI on that commit -> fast-forward main
+                -> evidence in Deck
 ```
 
 - One repository, one active task, one implementation attempt and one separate
-  verification attempt.
-- It ends at a PR for human review or at a blocker. Failed checks, a changed or
-  closed PR, and requested changes block. Marina never merges or deploys.
+  verification attempt. Marina creates the attempt's own engine template and
+  removes it afterwards.
+- It ends with the verified commit on main or at a blocker. Failed verification,
+  failed CI, a moved base branch, a changed task branch and an exhausted budget
+  block. Marina never force-pushes, opens a pull request or deploys.
+- GitHub branch protection is not required: Marina lands only a commit whose
+  required checks passed on that exact commit (operator decision, 2026-09-27).
+- Restarts of Marina, the engine controller, the engine database and the egress
+  gateway during a model call recovered and landed. A lost worker blocks the
+  task truthfully, but only at its deadline.
+- Deck shows a landed task as Awaiting review until the operator accepts the
+  result; completing it on landing is LAND-02.
 
 The workflow uses task authorization, immutable profiles and context, leases
-and fences, budgets, cancellation, Kubernetes isolation, the model gateway,
-artifacts and evidence rules. Cancellation completes only after the worker has
-stopped. Without workflow configuration Marina runs in control-only mode.
-Disabling new intake does not pause executions that have already started.
+and fences, budgets, cancellation, sandbox isolation, the model gateway,
+artifacts and evidence rules. Cancellation completes only after the engine
+instance is gone. The `repository/v1` pull-request profile and the older Codex
+worker Job remain in the code until KINT-12. Without workflow configuration
+Marina runs in control-only mode. Disabling new intake does not pause
+executions that have already started.
+
+**Chat** ([evidence](validation/chat-04-10-2026-09-28.md))
+
+- The chat agent answers in the Deck thread where it was invoked, on kagent,
+  with no source, tool or write authority. Each turn gets its own engine
+  template.
+- It can ask one typed clarification question; Deck shows it in the thread and
+  the answer goes to the same waiting turn, also across a Marina restart or a
+  lost response.
+- It can create a Backlog draft, or a Ready task within a fixed delegation budget
+  when the request clearly asks for work. Results and blockers appear in the
+  originating thread, and feedback on a finished task creates a linked follow-up.
+- Publications survive lost responses and restarts without duplicate messages or
+  tasks.
 
 **Deck**: operator surface and ledger
 
@@ -73,16 +100,11 @@ Disabling new intake does not pause executions that have already started.
 
 **platformctl** is a stateless CLI over Deck's API.
 
-**Local chat engine** ([evidence](validation/kint-16-2026-09-26.md))
+**Engine** ([installation](../deploy/kubernetes/local-podman-kagent/README.md),
+[KINT-16](validation/kint-16-2026-09-26.md))
 
-- Pinned kagent and Substrate are permanently installed beside the existing
-  repository runtime. A prepared, bounded conversation turn produced a real
-  model reply in its Deck thread, and that thread survived a Deck restart.
-- Marina creates each chat turn's own AgentTemplate, ModelConfig and gateway
-  Secret and removes them after the reply is published, so consecutive turns
-  need no operator preparation or restart
-  ([installation guide](../deploy/kubernetes/local-podman-kagent/README.md)).
-  Repository tasks still use the existing runtime.
+- Pinned kagent and Substrate are installed permanently; both harness images come
+  from the installation's local registry.
 - The pinned local Marina release pair passed an image upgrade during an active
   kagent model call and a previous-image, retained-data-copy rollback while
   preserving the exact Deck reply and usage
@@ -90,14 +112,7 @@ Disabling new intake does not pause executions that have already started.
 
 ## Implemented but not yet accepted
 
-| Capability | Where it stands | Still missing |
-| --- | --- | --- |
-| Conversational agent with no write authority (CHAT-04) | Deterministic checks, installed model replies and [browser rendering](validation/chat-04-06-browser-2026-09-27.md) pass. | Negative/restart acceptance. |
-| Engine questions answered in the thread (CHAT-05) | Product checks and real-process conformance pass; an installed model clarification [rendered in the browser](validation/chat-04-06-browser-2026-09-27.md) across two turns. | Engine-typed question acceptance. |
-| Conversation delegation, result publication and linked follow-up (CHAT-06–08) | Product checks and real Deck conformance pass. A [local model-created Ready task](validation/chat-06-10-landing-2026-09-27.md) landed after verification and CI; its originating thread showed the result and a linked follow-up. A bounded earlier task posted a blocker there. | Remaining negative and restart cases before support. |
-| Conversation recovery and full path (CHAT-09–10) | A [complete local chat-to-result path](validation/chat-06-10-landing-2026-09-27.md) and duplicate-request replay passed. | Restart and response-loss cases for this path. |
-| Landing on main after clean verification and required CI (LAND-01) | The [versioned v2 workflow](validation/land-01-workflow-2026-09-27.md) passes product checks and conformance. [Direct](validation/land-01-private-local-2026-09-27.md) and [chat-created](validation/chat-06-10-landing-2026-09-27.md) private local Kind tasks landed after clean verification and observed GitHub CI. | Protected-CI enforcement proof, deferred for the private acceptance repository. |
-| kagent for repository work (KINT-01–11) | Isolated local trials passed a native Codex PR and a question round-trip. KINT-16 installed the engine permanently for chat; KINT-10 accepted the pinned local image transition. | Core repository failure cases (KINT-09), cutover (KINT-11), and legacy removal (KINT-12–15), per [decision 0023](decisions/0023-focus-kagent-cutover.md). New repository work still uses the existing runtime. |
+Nothing is waiting for acceptance.
 
 ## Not supported
 
@@ -109,9 +124,9 @@ Disabling new intake does not pause executions that have already started.
 - Independent semantic review before each commit. The policy is decided
   ([decision 0021](decisions/0021-semantic-review-gate.md)); the behavior is not
   built.
-- Landing on main as an accepted workflow. The normal local installation still
-  selects PR delivery; a v2 test run landed on main, but protected-CI proof is
-  deferred for the private acceptance repository.
+- Rebasing a task when main moved before landing (LAND-03); such a task blocks.
+- GitHub-side enforcement of required CI (branch protection). Marina enforces
+  the exact-commit gate itself.
 - PRDs drafted in the chat and committed to the project repository, and tasks
   derived from them. Tasks can be created by hand, promoted from messages, or
   delegated by the installed chat agent; PRD automation is still absent.
@@ -123,8 +138,9 @@ Disabling new intake does not pause executions that have already started.
 - Deployment, production signals and production remediation.
 - More than one active task, more than one repository per workflow, arbitrary
   tools, and general agent hosting.
-- Transparent recovery of an interrupted worker step. Active worker I/O can block
-  across outages.
+- Noticing a lost engine worker before the task deadline (KINT-17).
+- Rejecting a late answer: Deck accepts an answer to a question whose turn has
+  already ended, and Marina does not deliver it (KINT-17).
 - High availability, backups and restore drills. Each service is a single replica
   on SQLite and a persistent volume.
 
@@ -134,8 +150,12 @@ supported.
 ## Environment and use
 
 - Acceptance environment: local Podman/Kind (`kind-marina-local`) on the
-  operator's laptop, at `https://localhost:8443`. The GCP cluster is authorized
-  for tests; it is not an acceptance environment.
+  operator's laptop, at `https://localhost:8443`, with the Mac awake. After it
+  sleeps, the Podman VM clock needs a resync
+  ([local guide](../deploy/kubernetes/local-podman/README.md)). The GCP cluster is
+  authorized for tests; it is not an acceptance environment.
+- New task intake stays disabled until the operator enables it; one existing
+  Ready Context Lens task would otherwise be claimed.
 - Pilot services: GitHub/GHCR, OpenRouter, separate SQLite stores and artifact
   files on persistent volumes ([decision 0010](decisions/0010-initial-installation-services.md)).
 - First real use: the operator runs the Context Lens pilot personally through the

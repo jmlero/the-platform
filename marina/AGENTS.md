@@ -27,7 +27,7 @@ Marina is the execution side of the software factory described in [the vision](.
 - Use Kubernetes as Marina's native installation and first execution substrate, but do not expose Kubernetes-specific concepts as Marina's public product model.
 - Use Deck over HTTP/JSON as the supported work-control provider. Keep the core provider-neutral; alternative providers and headless packaging remain future work.
 - Keep work-control surfaces, agent harnesses, models, workflow engines, runtimes, context sources, policy and verification systems, delivery integrations, and platform services replaceable behind explicit governed contracts.
-- Today work stops at a pull request ready for human review. Landing directly on main after the platform check and GitHub CI is the accepted direction ([decision 0022](../docs/decisions/0022-autonomous-software-factory.md), LAND-01) and is not implemented yet. Marina never deploys.
+- Verified work lands directly on main after the clean verification Job and required GitHub CI on the exact commit ([decision 0022](../docs/decisions/0022-autonomous-software-factory.md), LAND-01). The `repository/v1` pull-request profile remains for installations that select it. Marina never deploys.
 
 ## Vocabulary and boundaries
 
@@ -124,12 +124,12 @@ second-device testing were removed from the local acceptance scope by the operat
 
 1. The operator creates a bounded task through Deck.
 2. Marina claims it with a lease and persists the plan and execution state.
-3. A runtime adapter starts an isolated Kubernetes workload at a pinned repository revision.
+3. Marina creates the attempt's own kagent template and starts native Codex at a pinned repository revision.
 4. The agent receives the frozen task, repository binding, and selected immutable context, then implements the change.
 5. A separate clean verification Job produces deterministic check evidence. Independent semantic review is future work.
-6. Marina creates a pull request and observes required CI at its current head. Failed checks or requested changes block; automatic revision loops remain future work.
-7. Deck shows truthful state, cost, decisions, artifacts, and evidence across restarts.
-8. The run stops at a PR ready for human review or reports a focused blocker. It does not merge or deploy.
+6. Marina pushes the exact commit to a task branch and observes required CI on it. Failed checks block; automatic repair loops remain future work.
+7. Marina fast-forwards main only if it still points at the task's base, then records evidence.
+8. Deck shows truthful state, cost, decisions, artifacts, and evidence across restarts. The run ends with the commit on main or a focused blocker. It never deploys.
 
 Prefer changes that strengthen this vertical slice or the next accepted backlog
 item over scaffolding for a hypothetical maturity stage.
