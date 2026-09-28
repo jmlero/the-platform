@@ -32,7 +32,15 @@ sh scripts/local-podman-start.sh
 When kagent is installed, its dashboard is available through the
 [localhost-only dashboard port-forward](../kagent-trial/README.md#dashboard).
 The [permanent kagent/chat installation guide](../local-podman-kagent/README.md)
-records the local overlay and the one-turn preparation procedure.
+records the local overlay.
+
+The Podman VM's clock stops while the Mac sleeps, and its chrony does not step
+large offsets afterwards. Deadlines, leases and CI observations then use a
+clock that is behind. After sleep, compare
+`podman --connection podman-machine-default-root exec marina-local-control-plane date -u`
+with `date -u`; if they differ, set the VM clock from the Mac's:
+`podman machine ssh podman-machine-default "sudo date -u -s '$(date -u +%Y-%m-%dT%H:%M:%SZ)'"`.
+While long work runs, keep the Mac awake on AC with `caffeinate -ims`.
 
 The optional LaunchAgent installed by
 `python3 scripts/install-local-podman-startup.py` starts the existing VM and

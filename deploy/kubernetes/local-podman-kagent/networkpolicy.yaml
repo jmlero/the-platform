@@ -65,3 +65,19 @@ spec:
           podSelector:
             matchLabels: {app: atenet-egress}
       ports: [{protocol: TCP, port: 8090}]
+---
+# Workers keep no image cache across restarts. atelet may pull harness images
+# from the installation's registry inside the Kind node, and nowhere else.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: atelet-local-registry
+  namespace: ate-system
+spec:
+  podSelector:
+    matchLabels: {app: atelet}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock: {cidr: 10.89.0.2/32}
+      ports: [{protocol: TCP, port: 5000}]

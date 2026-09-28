@@ -44,12 +44,15 @@ task intake disabled outside a selected exercise.
    the engine instance is gone. `Role/marina-engine-templates` grants exactly
    that in `kint-engine`; Marina refuses to adopt or delete resources without
    its `the-platform.dev/owner: marina` label.
-6. The harness images must already be cached in the worker node: template
-   preparation starts a golden actor without preparation egress. After changing
-   a Harness image in the local registry, allow atelet TCP egress to
-   `10.89.0.2:5000` only until the affected templates report Ready, then remove
-   that NetworkPolicy. Without it the golden actor retries the pull and stays in
-   `ACTOR_STATE_RESUMING`, holding a worker.
+6. Serve both harness images from the task-owned registry at `10.89.0.2:5000`,
+   because a replaced worker keeps no image cache and atelet has no internet
+   egress. Mirror the pinned native Codex image without changing its digest,
+   for example with
+   `skopeo copy --preserve-digests --dest-tls-verify=false docker://ghcr.io/kagent-dev/kagent/codex-harness@sha256:<digest> docker://10.89.0.2:5000/kagent-dev/codex-harness:<tag>`
+   inside the Podman VM, and pin `10.89.0.2:5000/kagent-dev/codex-harness@sha256:<digest>`
+   in the `kint-codex` Harness. The overlay's `atelet-local-registry` policy lets
+   atelet reach that registry only. Without it a golden actor retries the pull
+   and stays in `ACTOR_STATE_RESUMING`, holding a worker.
 7. Allow `atenet-egress` to reach Marina over TLS: create its `marina-gateway-ca`
    Secret from the private installation `ca.crt`, mount it read-only at
    `/run/marina-ca` in `atenet-egress`, and set the dynamic HTTPS backend's
