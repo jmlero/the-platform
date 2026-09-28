@@ -483,7 +483,9 @@ func (a *Adapter) AnswerQuestion(ctx context.Context, handle, questionID, answer
 	if err != nil {
 		return observation(r), err
 	}
-	request.Configuration = returnImmediately()
+	// The answer is not sent with ReturnImmediately: the pinned controller then
+	// never records what follows it, and a subscription to a task it still
+	// stores as waiting for input returns without reaching the engine.
 	response, err := a.tasks.SendMessage(route(ctx, r), request, grpc.MaxCallRecvMsgSize(artifacts.MaxBytes))
 	if err != nil {
 		return observation(r), rpcError("answer question (delivery uncertain)", err)

@@ -40,6 +40,9 @@ type engine struct {
 	immediate     []bool
 	subscriptions int
 	finishOnWatch bool
+	// stallAnswer models the pinned controller: an answer sent with
+	// ReturnImmediately leaves the stored task waiting for input.
+	stallAnswer bool
 }
 
 func (e *engine) SubscribeToTask(r *a2a.SubscribeToTaskRequest, stream grpc.ServerStreamingServer[a2a.StreamResponse]) error {
@@ -118,9 +121,12 @@ func (e *engine) SendMessage(_ context.Context, r *a2a.SendMessageRequest) (*a2a
 	e.immediate = append(e.immediate, r.GetConfiguration().GetReturnImmediately())
 	if r.Message.TaskId != "" {
 		e.task.History = append(e.task.History, r.Message)
-		if e.holdAnswer {
+		switch {
+		case e.stallAnswer && r.GetConfiguration().GetReturnImmediately():
+			// The stored task keeps waiting for input.
+		case e.holdAnswer:
 			e.task.Status.State = a2a.TaskState_TASK_STATE_WORKING
-		} else {
+		default:
 			e.task.Status.State = a2a.TaskState_TASK_STATE_COMPLETED
 		}
 		if e.loseAnswer {
@@ -164,6 +170,38 @@ func TestDuplicateAnswerIsRejectedWhileEngineContinues(t *testing.T) {
 	}
 	if _, err = f.adapter.AnswerQuestion(ctx, obs.ProviderHandle, "question-1", "SQLite"); !errors.Is(err, rt.ErrConflict) || e.sends != 2 {
 		t.Fatalf("duplicate answer accepted: %v; sends=%d", err, e.sends)
+	}
+}
+
+func TestAnsweredTaskEndsEvenWhenTheAnswerResponseIsLost(t *testing.T) {
+	// The pinned controller records what follows an answer only when the answer
+	// was not sent with ReturnImmediately, even if the response is then lost.
+	e := &engine{loseAnswer: true, stallAnswer: true}
+	f := setup(t, e)
+	ctx := context.Background()
+	obs, err := f.adapter.Start(ctx, f.spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	statusMessage := a2atype.NewMessage(a2atype.MessageRoleAgent, a2atype.NewTextPart("Answer required"))
+	if err := kagenta2a.AttachHITL(statusMessage, kagenta2a.AskUserRequest{Type: kagenta2a.HITLTypeAskUserRequest,
+		ID: "question-1", Questions: []kagenta2a.HITLQuestion{{Question: "Which database?", Choices: []string{"SQLite", "PostgreSQL"}}}}); err != nil {
+		t.Fatal(err)
+	}
+	converted, err := pbconv.ToProtoSendMessageRequest(&a2atype.SendMessageRequest{Message: statusMessage})
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.task.Status.State = a2a.TaskState_TASK_STATE_INPUT_REQUIRED
+	e.task.Status.Message = converted.Message
+	if obs, err = f.adapter.Inspect(ctx, obs.ProviderHandle); err != nil || obs.Question == nil {
+		t.Fatalf("question = %+v, %v", obs, err)
+	}
+	if _, err = f.adapter.AnswerQuestion(ctx, obs.ProviderHandle, "question-1", "SQLite"); err == nil {
+		t.Fatal("lost answer response reported delivery")
+	}
+	if obs, err = f.adapter.Inspect(ctx, obs.ProviderHandle); err != nil || obs.State != rt.StateSucceeded || e.sends != 2 || e.immediate[1] {
+		t.Fatalf("answered task = %+v %v sends=%d immediate=%v", obs, err, e.sends, e.immediate)
 	}
 }
 
