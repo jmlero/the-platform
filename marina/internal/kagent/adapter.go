@@ -223,7 +223,8 @@ func (a *Adapter) advance(ctx context.Context, s rt.Specification, r rt.EngineAt
 		if err != nil {
 			return observation(r), err
 		}
-		response, err := a.tasks.SendMessage(route(ctx, r), &a2a.SendMessageRequest{Message: &a2a.Message{MessageId: r.MessageID, ContextId: r.ContextID, Role: a2a.Role_ROLE_USER, Parts: []*a2a.Part{{Content: &a2a.Part_Text{Text: string(body)}}}}}, grpc.MaxCallRecvMsgSize(artifacts.MaxBytes))
+		response, err := a.tasks.SendMessage(route(ctx, r), &a2a.SendMessageRequest{Message: &a2a.Message{MessageId: r.MessageID, ContextId: r.ContextID, Role: a2a.Role_ROLE_USER, Parts: []*a2a.Part{{Content: &a2a.Part_Text{Text: string(body)}}}},
+			Configuration: returnImmediately()}, grpc.MaxCallRecvMsgSize(artifacts.MaxBytes))
 		if err != nil {
 			return observation(r), rpcError("send message (delivery uncertain)", err)
 		}
@@ -357,12 +358,45 @@ func (a *Adapter) bindTask(ctx context.Context, r rt.EngineAttempt, t *a2a.Task)
 		}
 		r, err = a.journal.GetEngineAttempt(ctx, r.AttemptID)
 	}
+	if err == nil && !settled(t.GetStatus().GetState()) {
+		a.follow(ctx, r)
+	}
 	result := observation(r)
 	result.EngineStatus = t.GetStatus().GetState().String()
 	if r.AnswerPhase == "" {
 		result.Question = question
 	}
 	return result, errors.Join(err, stateErr)
+}
+
+// returnImmediately keeps a send from waiting for the task to end. A waiting
+// send outlives Marina's operation deadline, and its cancellation leaves the
+// pinned engine without anything recording the task's progress.
+func returnImmediately() *a2a.SendMessageConfiguration {
+	return &a2a.SendMessageConfiguration{ReturnImmediately: true}
+}
+
+// follow asks the engine to record the task's events. The pinned controller
+// persists progress only from a subscription, which it keeps ingesting after
+// this call returns; GetTask alone returns the state saved at send time. A
+// controller restart drops that ingestion, so every observation follows again.
+func (a *Adapter) follow(ctx context.Context, r rt.EngineAttempt) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	stream, err := a.tasks.SubscribeToTask(route(ctx, r), &a2a.SubscribeToTaskRequest{Id: r.TaskID}, grpc.MaxCallRecvMsgSize(artifacts.MaxBytes))
+	if err == nil {
+		_, _ = stream.Recv()
+	}
+}
+
+// settled reports states in which the engine no longer produces events on its
+// own: terminal, or waiting for input or authorization.
+func settled(state a2a.TaskState) bool {
+	switch state {
+	case a2a.TaskState_TASK_STATE_SUBMITTED, a2a.TaskState_TASK_STATE_WORKING:
+		return false
+	}
+	return true
 }
 
 func pendingQuestion(message *a2a.Message) (*rt.Question, error) {
@@ -449,6 +483,7 @@ func (a *Adapter) AnswerQuestion(ctx context.Context, handle, questionID, answer
 	if err != nil {
 		return observation(r), err
 	}
+	request.Configuration = returnImmediately()
 	response, err := a.tasks.SendMessage(route(ctx, r), request, grpc.MaxCallRecvMsgSize(artifacts.MaxBytes))
 	if err != nil {
 		return observation(r), rpcError("answer question (delivery uncertain)", err)

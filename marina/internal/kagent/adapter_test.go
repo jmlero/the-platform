@@ -35,6 +35,22 @@ type engine struct {
 	creates, sends, deletes                                                        int
 	loseCreate, loseSend, loseDelete, hideTask, failDelete, loseAnswer, holdAnswer bool
 	revision                                                                       string
+	// immediate records each send's ReturnImmediately flag; a subscription lets
+	// the engine record the task's latest state, as the pinned controller does.
+	immediate     []bool
+	subscriptions int
+	finishOnWatch bool
+}
+
+func (e *engine) SubscribeToTask(r *a2a.SubscribeToTaskRequest, stream grpc.ServerStreamingServer[a2a.StreamResponse]) error {
+	e.subscriptions++
+	if e.task == nil || r.Id != e.task.Id {
+		return status.Error(codes.NotFound, "no task")
+	}
+	if e.finishOnWatch {
+		e.task.Status.State = a2a.TaskState_TASK_STATE_COMPLETED
+	}
+	return stream.Send(&a2a.StreamResponse{Payload: &a2a.StreamResponse_Task{Task: e.task}})
 }
 
 type admission struct {
@@ -99,6 +115,7 @@ func (e *engine) DeleteAgentInstance(context.Context, *api.DeleteAgentInstanceRe
 }
 func (e *engine) SendMessage(_ context.Context, r *a2a.SendMessageRequest) (*a2a.SendMessageResponse, error) {
 	e.sends++
+	e.immediate = append(e.immediate, r.GetConfiguration().GetReturnImmediately())
 	if r.Message.TaskId != "" {
 		e.task.History = append(e.task.History, r.Message)
 		if e.holdAnswer {
@@ -517,5 +534,30 @@ func TestPendingInteractionRetainsExactTaskIdentityWithoutResume(t *testing.T) {
 	}
 	if f.adapter.Capabilities().Resume || e.sends != 1 {
 		t.Fatal("interaction expanded runtime capabilities")
+	}
+}
+
+func TestLongEngineTaskIsFollowedUntilTheEngineRecordsItsEnd(t *testing.T) {
+	// The pinned controller records a task's progress only while something
+	// subscribes; a send that waits for the end outlives the caller's deadline.
+	e := &engine{}
+	f := setup(t, e)
+	observed, err := f.adapter.Start(context.Background(), f.spec)
+	if err != nil || observed.State != rt.StateRunning {
+		t.Fatalf("start = %+v, %v", observed, err)
+	}
+	if len(e.immediate) != 1 || !e.immediate[0] || e.subscriptions != 1 {
+		t.Fatalf("send waited or was not followed: immediate=%v subscriptions=%d", e.immediate, e.subscriptions)
+	}
+	if observed, err = f.adapter.Inspect(context.Background(), observed.ProviderHandle); err != nil || observed.State != rt.StateRunning || e.subscriptions != 2 {
+		t.Fatalf("working task not followed: %+v %v subscriptions=%d", observed, err, e.subscriptions)
+	}
+	e.finishOnWatch = true
+	if _, err = f.adapter.Inspect(context.Background(), observed.ProviderHandle); err != nil || e.subscriptions != 3 {
+		t.Fatalf("follow = %v subscriptions=%d", err, e.subscriptions)
+	}
+	observed, err = f.adapter.Inspect(context.Background(), observed.ProviderHandle)
+	if err != nil || observed.State != rt.StateSucceeded || e.subscriptions != 3 || e.sends != 1 {
+		t.Fatalf("recorded end = %+v %v subscriptions=%d sends=%d", observed, err, e.subscriptions, e.sends)
 	}
 }
