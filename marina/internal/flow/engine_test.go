@@ -44,7 +44,7 @@ func TestNativePromptBindsRepositoryAndStructuredResult(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, required := range []string{"https://marina.example/engine/git", input.SourceRevision, `"allowed_paths":["app"]`, "base64", "Do not push"} {
+	for _, required := range []string{"https://marina.example/engine/git", input.SourceRevision, `"allowed_paths":["app"]`, "text with the complete new file as a UTF-8 string", "Do not push"} {
 		if !strings.Contains(string(prompt), required) {
 			t.Fatalf("native prompt missing %q", required)
 		}

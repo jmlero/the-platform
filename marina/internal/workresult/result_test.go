@@ -68,6 +68,26 @@ func TestParseRejectsDisallowedOrUnboundedChanges(t *testing.T) {
 	}
 }
 
+func TestImplementationChangeMayCarryFileText(t *testing.T) {
+	head := strings.Repeat("a", 40)
+	expect := Expected{Stage: "implement", SourceRevision: head, AllowedPaths: []string{"app"}}
+	document := func(change string) []byte {
+		return []byte(`{"stage":"implement","source_revision":"` + head + `","summary":"s","observed_at":"` + time.Now().UTC().Format(time.RFC3339) + `","tokens":0,"changes":[` + change + `]}`)
+	}
+	result, err := Parse(document(`{"path":"app/main.js","mode":"100644","text":"const a = \"b\";\n"}`), expect)
+	if err != nil || string(result.Changes[0].Content) != "const a = \"b\";\n" || result.Changes[0].Text != nil {
+		t.Fatalf("text change: %+v %v", result.Changes, err)
+	}
+	for name, change := range map[string]string{
+		"text and content": `{"path":"app/main.js","mode":"100644","text":"a","content":"YQ=="}`,
+		"deleted text":     `{"path":"app/main.js","mode":"100644","text":"","delete":true}`,
+	} {
+		if _, err := Parse(document(change), expect); err == nil {
+			t.Fatalf("%s accepted", name)
+		}
+	}
+}
+
 func TestA2AResultRequiresBoundedInlineBytes(t *testing.T) {
 	head := strings.Repeat("a", 40)
 	result := Result{Stage: "implement", SourceRevision: head, ObservedAt: time.Now().UTC(), Changes: []Change{{Path: "app/main.go", Mode: "100644", Content: []byte("safe")}}}

@@ -79,7 +79,8 @@ func enginePrompt(input worker.Input) ([]byte, error) {
 		"Clone source_url into /data/workspace/repo and check out source_revision exactly. Use only allowed_paths for changes. " +
 		"Do not push, open a pull request, or use external network destinations. Marina publishes changes after validating your result. " +
 		"Your final response must be exactly one JSON object with stage=implement, source_revision, summary, observed_at (current UTC RFC3339), tokens=0, " +
-		"and changes. Each change has path, mode (100644 or 100755), and content as base64 of the complete new file bytes; deletions have delete=true and no content. " +
+		"and changes. Each change has path, mode (100644 or 100755), and text with the complete new file as a UTF-8 string; use content as base64 only for a file that is not UTF-8 text. " +
+		"Deletions have delete=true and neither text nor content. " +
 		"Do not include Markdown or a success claim outside this JSON. Task: " + string(encoded)
 	if len(prompt) > workresult.MaxResultBytes {
 		return nil, errors.New("engine task prompt exceeds bounded artifact size")

@@ -30,8 +30,11 @@ type Check struct {
 type Change struct {
 	Path    string `json:"path"`
 	Content []byte `json:"content,omitempty"`
-	Mode    string `json:"mode"`
-	Delete  bool   `json:"delete,omitempty"`
+	// Text is the complete file as UTF-8. A native engine writes it instead of
+	// base64 content; Parse turns it into Content.
+	Text   *string `json:"text,omitempty"`
+	Mode   string  `json:"mode"`
+	Delete bool    `json:"delete,omitempty"`
 }
 
 type CheckResult struct {
@@ -116,7 +119,14 @@ func Parse(data []byte, want Expected) (Result, error) {
 		}
 		seen := map[string]bool{}
 		total := 0
-		for _, change := range result.Changes {
+		for i := range result.Changes {
+			change := &result.Changes[i]
+			if change.Text != nil {
+				if len(change.Content) != 0 || change.Delete {
+					return Result{}, errors.New("change must carry either text or content")
+				}
+				change.Content, change.Text = []byte(*change.Text), nil
+			}
 			total += len(change.Content)
 			if seen[change.Path] || !AllowedPath(want.AllowedPaths, change.Path) || (change.Mode != "100644" && change.Mode != "100755") ||
 				(change.Delete && len(change.Content) != 0) || total > 2<<20 {
