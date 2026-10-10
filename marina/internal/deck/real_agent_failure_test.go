@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jmlero/the-platform/marina/internal/analysis"
 	"github.com/jmlero/the-platform/marina/internal/artifacts"
 	"github.com/jmlero/the-platform/marina/internal/execution"
 	"github.com/jmlero/the-platform/marina/internal/flow"
@@ -22,6 +21,7 @@ import (
 	"github.com/jmlero/the-platform/marina/internal/sourcecontrol/github"
 	"github.com/jmlero/the-platform/marina/internal/workcontrol"
 	"github.com/jmlero/the-platform/marina/internal/worker"
+	"github.com/jmlero/the-platform/marina/internal/workerapi"
 )
 
 // Both profiles cross real Deck HTTP and reopen the journal after each boundary.
@@ -30,7 +30,7 @@ func TestRealAgentFailureSemantics(t *testing.T) {
 	if os.Getenv("DECK_CONFORMANCE_URL") == "" {
 		t.Skip("run make conformance")
 	}
-	for _, workload := range []string{"repository", "analysis"} {
+	for _, workload := range []string{"repository"} {
 		for _, scenario := range []string{"lost_invocation", "lost_start", "lost_complete", "deck_outage", "active_cancel", "active_profile_change"} {
 			t.Run(workload+"/"+scenario, func(t *testing.T) {
 				ctx := context.Background()
@@ -57,11 +57,10 @@ func TestRealAgentFailureSemantics(t *testing.T) {
 				config := flow.Config{ProjectID: "prj_default", PublicURL: "https://marina.internal", PolicyVersion: "test", MaxTokens: 100000, BudgetMinutes: 5,
 					AllowedPaths: []string{"src"}, Checks: []worker.Check{{ID: "regression", Directory: ".", Command: []string{"go", "test", "./..."}}}, RequiredCI: []string{"required-test"},
 					Git: github.Config{Repository: "acme/repo", BaseBranch: "main", CloneURL: "https://git.internal/acme/repo.git"}}
+				config.Model = workerapi.Model{Endpoint: "https://model.internal/v1", Name: "producer", Currency: "EUR", MaxOutputTokens: 100}
+				config.ReviewerModel = &workerapi.Model{Endpoint: config.Model.Endpoint, Name: "reviewer", Currency: "EUR", MaxOutputTokens: 100}
+				config.RepositoryEngine, config.RepositoryEngineGatewayURL = workflowEngineProfile(), "https://marina.marina-system.svc"
 				config.Kubernetes.Image = "worker@sha256:" + strings.Repeat("a", 64)
-				if workload == "analysis" {
-					config.Git = github.Config{}
-					config.Analysis = &analysis.Profile{Version: 1, Revision: 1, Image: "analysis@sha256:" + strings.Repeat("b", 64), HarnessVersion: analysis.HarnessWithContext, Tools: []string{"read_context_source"}, MaxTokens: 20000, BudgetMinutes: 5, Fixture: analysis.DiagnosticFixture()}
-				}
 				binding, err := journal.EnsureProjectBinding(ctx, execution.ProjectBinding{ProjectID: "prj_default", Provider: "deck", Runtime: "test", PolicyVersion: "test", ContextConfig: config.Digest(), ArtifactConfig: "test", BudgetMinutes: 5, MaxConcurrency: 1})
 				if err != nil {
 					t.Fatal(err)
@@ -74,7 +73,7 @@ func TestRealAgentFailureSemantics(t *testing.T) {
 				if err = client.PublishWorkloads(ctx, "prj_default", workcontrol.WorkloadCatalog{Profiles: profiles, ExpiresAt: time.Now().Add(time.Minute).UnixMilli()}); err != nil {
 					t.Fatal(err)
 				}
-				input := map[string]any{"profile_id": profile.ID, "profile_digest": profile.Digest, "task": map[string]any{"title": "Shared failure " + workload + " " + scenario, "acceptance_criteria": "Bounded outcome with independent evidence", "budget": map[string]any{"time_minutes": 5, "max_attempts": 2, "max_tokens": 20000, "max_concurrency": 1, "authority": profile.Authority}}}
+				input := map[string]any{"profile_id": profile.ID, "profile_digest": profile.Digest, "task": map[string]any{"title": "Shared failure " + workload + " " + scenario, "acceptance_criteria": "Bounded outcome with independent evidence", "budget": map[string]any{"time_minutes": 5, "max_attempts": 3, "max_tokens": 20000, "max_concurrency": 1, "authority": profile.Authority}}}
 				var task, replay taskDTO
 				key := "shared:" + workload + ":" + scenario
 				endpoint := "/api/v1/operator/projects/prj_default/workloads/invoke"
@@ -90,14 +89,10 @@ func TestRealAgentFailureSemantics(t *testing.T) {
 					t.Fatal(err)
 				}
 				coding := &workflowRuntime{journal: journal, artifacts: store, observations: map[string]runtimeapi.Observation{}}
-				analyzing := &analysisRuntime{journal: journal, artifacts: store, observations: map[string]runtimeapi.Observation{}, provider: client}
 				var adapter runtimeapi.Adapter = coding
-				if workload == "analysis" {
-					adapter = analyzing
-				}
 				runtime := &agentFailureRuntime{Adapter: adapter, scenario: scenario, observations: map[string]runtimeapi.Observation{}}
 				source := &workflowSource{head: strings.Repeat("a", 40), main: strings.Repeat("a", 40)}
-				controller := &flow.Controller{Config: config, Journal: journal, Provider: client, Runtime: runtime, Artifacts: store, Source: func(execution.Execution) (sourcecontrol.Port, error) { return source, nil }}
+				controller := &flow.Controller{Config: config, Journal: journal, Provider: client, Runtime: runtime, EngineRuntime: runtime, EngineTemplates: workflowTemplates{}, PrepareEngine: func(context.Context, runtimeapi.Specification) error { return nil }, Artifacts: store, Source: func(execution.Execution) (sourcecontrol.Port, error) { return source, nil }}
 				var e execution.Execution
 				injected := false
 				for cycle := 0; cycle < 50; cycle++ {
@@ -105,7 +100,7 @@ func TestRealAgentFailureSemantics(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					result := control.WithIntakeEnabled(cycle == 0).WithIntakeWorkID(task.ID).WithExecutionLimits(2, 100000).WithCommandHandler(controller.Command).Cycle(ctx)
+					result := control.WithIntakeEnabled(cycle == 0).WithIntakeWorkID(task.ID).WithExecutionLimits(3, 100000).WithCommandHandler(controller.Command).Cycle(ctx)
 					for _, err := range result.Errors {
 						var conflict interface{ MutationConflict() bool }
 						staleAfterCompletion := transport.lost && errors.As(err, &conflict) && conflict.MutationConflict()
@@ -180,7 +175,7 @@ func TestRealAgentFailureSemantics(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					controller.Journal, coding.journal, analyzing.journal = journal, journal, journal
+					controller.Journal, coding.journal = journal, journal
 					e, err = journal.GetExecution(ctx, e.ID)
 					if err != nil {
 						t.Fatal(err)
@@ -191,7 +186,7 @@ func TestRealAgentFailureSemantics(t *testing.T) {
 				}
 				want, starts := execution.StateCompleted, 1
 				if workload == "repository" {
-					starts = 2
+					starts = 3
 				}
 				if scenario == "active_cancel" {
 					want, starts = execution.StateCancelled, 1

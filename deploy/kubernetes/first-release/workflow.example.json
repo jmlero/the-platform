@@ -1,4 +1,5 @@
 {
+  "version": 1,
   "project_id": "prj_default",
   "public_url": "https://marina.marina-system.svc:8090",
   "tls_cert_file": "/run/marina-tls/tls.crt",
@@ -11,9 +12,28 @@
     "namespace": "marina-workers",
     "token_file": "/var/run/secrets/kubernetes.io/serviceaccount/token",
     "ca_file": "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt",
-    "image": "YOUR_REGISTRY/marina-worker@sha256:REPLACE_WITH_BUILT_IMAGE_DIGEST",
+    "image": "YOUR_REGISTRY/marina-verifier@sha256:REPLACE_WITH_BUILT_IMAGE_DIGEST",
     "service_account": "marina-worker",
     "worker_ca_config_map": "marina-worker-ca"
+  },
+  "repository_engine": {
+    "backend": "kagent",
+    "version": "1.0.0-alpha1@850c464726881317997c32515f8b621b949d6ce1",
+    "endpoint": "kint-engine-controller.kint-engine.svc:8083",
+    "namespace": "kint-engine",
+    "harness": "kint-codex"
+  },
+  "repository_engine_gateway_url": "https://marina.marina-system.svc",
+  "conversation": {
+    "engine": {
+      "backend": "kagent",
+      "version": "1.0.0-alpha1@850c464726881317997c32515f8b621b949d6ce1",
+      "endpoint": "kint-engine-controller.kint-engine.svc:8083",
+      "namespace": "kint-engine",
+      "harness": "kint-conversation-byo"
+    },
+    "budget_minutes": 5,
+    "max_tokens": 20000
   },
   "git": {
     "api_url": "https://YOUR_GIT_HOST/api/v3",
@@ -27,6 +47,15 @@
   "model": {
     "endpoint": "https://openrouter.ai/api/v1",
     "name": "openai/gpt-6-luna",
+    "token_file": "/run/marina-secrets/model-token",
+    "max_output_tokens": 8192,
+    "input_micros_per_million": 100000,
+    "output_micros_per_million": 500000,
+    "currency": "USD"
+  },
+  "reviewer_model": {
+    "endpoint": "https://openrouter.ai/api/v1",
+    "name": "YOUR_DIFFERENT_REVIEWER_MODEL",
     "token_file": "/run/marina-secrets/model-token",
     "max_output_tokens": 8192,
     "input_micros_per_million": 100000,

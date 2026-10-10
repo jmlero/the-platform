@@ -4,6 +4,8 @@ package domain
 // invoked turn. Task intent comes from the operator's invocation; the caller
 // cannot change an existing task or broaden an active run.
 type ConversationOutcomeInput struct {
+	PRDTasks            *PRDTaskProposal `json:"prd_tasks,omitempty"`
+	PRD                 *PRDDraft        `json:"prd,omitempty"`
 	InvocationMessageID string           `json:"invocation_message_id"`
 	AgentID             string           `json:"agent_id"`
 	Status              string           `json:"status"`

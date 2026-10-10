@@ -215,6 +215,14 @@ func (s *Store) CompleteRunWithEvidence(
 	summary string,
 	evidenceIDs []string,
 ) error {
+	return s.completeRun(ctx, mutation, runID, summary, evidenceIDs, nil)
+}
+
+func (s *Store) CompleteLandedRun(ctx context.Context, mutation Mutation, runID, summary string, evidenceIDs []string, landing domain.LandingObservation) error {
+	return s.completeRun(ctx, mutation, runID, summary, evidenceIDs, &landing)
+}
+
+func (s *Store) completeRun(ctx context.Context, mutation Mutation, runID, summary string, evidenceIDs []string, landing *domain.LandingObservation) error {
 	summary = strings.TrimSpace(summary)
 	if summary == "" || len(evidenceIDs) == 0 {
 		return fmt.Errorf("summary and structured evidence are required: %w", domain.ErrInvalidInput)
@@ -231,11 +239,12 @@ func (s *Store) CompleteRunWithEvidence(
 	attempt, replayResult, replayed, err := beginIdempotentMutation(
 		ctx, tx, mutation, projectID, operationCompleteRun, runID,
 		struct {
-			RunID       string    `json:"run_id"`
-			Summary     string    `json:"summary"`
-			EvidenceIDs []string  `json:"evidence_ids"`
-			Guard       *RunGuard `json:"guard,omitempty"`
-		}{runID, summary, evidenceIDs, mutation.Guard},
+			RunID       string                     `json:"run_id"`
+			Summary     string                     `json:"summary"`
+			EvidenceIDs []string                   `json:"evidence_ids"`
+			Guard       *RunGuard                  `json:"guard,omitempty"`
+			Landing     *domain.LandingObservation `json:"landing,omitempty"`
+		}{runID, summary, evidenceIDs, mutation.Guard, landing},
 	)
 	if err != nil {
 		return err
@@ -297,6 +306,21 @@ func (s *Store) CompleteRunWithEvidence(
 	if len(items) == 0 {
 		return fmt.Errorf("no admissible evidence was supplied: %w", domain.ErrInvalidInput)
 	}
+	var delivered *domain.TaskLanding
+	if landing != nil {
+		task, err := getTaskTx(ctx, tx, run.TaskID)
+		if err != nil {
+			return err
+		}
+		criteria := sha256.Sum256([]byte(task.AcceptanceCriteria))
+		if hex.EncodeToString(criteria[:]) != run.AcceptanceCriteriaDigest {
+			return fmt.Errorf("acceptance criteria changed after authorization; a new verified run is required: %w", domain.ErrConflict)
+		}
+		if err = validateLanding(task, *landing, items, now); err != nil {
+			return err
+		}
+		delivered = &domain.TaskLanding{LandingObservation: *landing, RunID: run.ID, EvidenceIDs: ids}
+	}
 	report := renderVerificationReport(summary, revision, items)
 	digestValue := sha256.Sum256([]byte(report))
 	reportDigest := "sha256:" + hex.EncodeToString(digestValue[:])
@@ -320,8 +344,8 @@ func (s *Store) CompleteRunWithEvidence(
 	}
 	if _, err := tx.ExecContext(ctx, `
 		UPDATE tasks SET status = 'done', assigned_agent_id = NULL,
-			version = version + 1, updated_at = ? WHERE id = ?
-	`, now, run.TaskID); err != nil {
+			version = version + 1, updated_at = ?, landing_json = ? WHERE id = ?
+	`, now, marshalJSON(delivered), run.TaskID); err != nil {
 		return fmt.Errorf("complete task: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx,

@@ -50,35 +50,3 @@ func TestSpecificationIsBoundedAndContentAddressed(t *testing.T) {
 		t.Fatal("credential outliving the runtime was accepted")
 	}
 }
-
-func TestPlanRecoveryMakesAmbiguousRuntimeBehaviorExplicit(t *testing.T) {
-	now := time.Date(2026, time.August, 16, 10, 0, 0, 0, time.UTC)
-	tests := []struct {
-		name         string
-		attempt      Attempt
-		observation  Observation
-		request      RecoveryRequest
-		capabilities Capabilities
-		want         RecoveryAction
-	}{
-		{name: "start pending attempt", attempt: Attempt{State: StatePending}, want: RecoveryStart},
-		{name: "inspect lost start response", attempt: Attempt{State: StateStarting}, observation: Observation{Found: false}, want: RecoveryInspectByKey},
-		{name: "bind discovered orphan", attempt: Attempt{State: StateStarting}, observation: Observation{Found: true, ProviderHandle: "provider/job-1", State: StateRunning}, want: RecoveryBindDiscovered},
-		{name: "provider disappeared", attempt: Attempt{State: StateRunning, ProviderHandle: "provider/job-1"}, observation: Observation{Found: false}, want: RecoveryFailDisappeared},
-		{name: "unsupported resume", attempt: Attempt{State: StatePaused}, observation: Observation{Found: true, State: StatePaused}, request: RecoveryRequest{Resume: true}, want: RecoveryFailUnsupportedResume},
-		{name: "supported resume", attempt: Attempt{State: StatePaused}, observation: Observation{Found: true, State: StatePaused}, request: RecoveryRequest{Resume: true}, capabilities: Capabilities{Resume: true}, want: RecoveryResume},
-		{name: "graceful cancel", attempt: Attempt{State: StateRunning}, observation: Observation{Found: true, State: StateRunning}, request: RecoveryRequest{Cancel: true, CancelDeadline: now.Add(time.Minute)}, want: RecoveryCancel},
-		{name: "forced cancel", attempt: Attempt{State: StateRunning}, observation: Observation{Found: true, State: StateRunning}, request: RecoveryRequest{Cancel: true, CancelDeadline: now.Add(-time.Second)}, want: RecoveryForceCancel},
-		{name: "collect outputs", attempt: Attempt{State: StateSucceeded, CleanupState: CleanupPending}, want: RecoveryCollectArtifacts},
-		{name: "cleanup terminal attempt", attempt: Attempt{State: StateSucceeded, CleanupState: CleanupPending, OutputsCollected: true}, want: RecoveryCleanup},
-		{name: "no work after cleanup", attempt: Attempt{State: StateSucceeded, CleanupState: CleanupCompleted, OutputsCollected: true}, want: RecoveryNone},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			plan := PlanRecovery(test.attempt, test.observation, test.request, test.capabilities, now)
-			if plan.Action != test.want {
-				t.Fatalf("recovery action = %q, want %q (%s)", plan.Action, test.want, plan.Reason)
-			}
-		})
-	}
-}

@@ -1,197 +1,93 @@
 # Version 1 workload and harness profiles
 
-AGENT-02 defines two bounded workload types in the existing Marina service.
-The installation format accepts `version: 1`; an omitted version retains the
-existing repository configuration. Unknown fields and versions fail closed.
-Deck remains the task and authorization ledger. Marina owns profiles and worker
-inputs. AGENT-07 through AGENT-10 add an installed-profile catalog, operator
-API invocation, selected immutable context, one governed HTTP tool and shared
-inspection. See the [API client guide](api-v1.md).
+The installation format accepts `version: 1`. Unknown fields and versions fail
+closed. Deck owns task authorization; Marina owns repository bindings, installed
+profiles and immutable execution inputs. Current acceptance is recorded in
+[status](../../../docs/status.md); clients use the [public API guide](api-v1.md).
 
-| Property | Repository workflow | Diagnostic analysis |
+| Property | Repository workflow | Conversation |
 | --- | --- | --- |
-| Workload | `repository/v1` for PR delivery; `repository/v2` for guarded main landing (legacy runtime records omit this field) | `diagnostic-analysis/v1` |
-| Harness | Existing Codex CLI invocation in a pinned worker image | `langchain-create-agent/v1` (fixture only), `/v2` (selected context/tool), or `langchain-create-agent/kagent-byo-v1` (pinned BYO runtime); LangChain `create_agent` on LangGraph |
-| Configuration | `git`, `checks`, `allowed_paths`, `required_ci`, `kubernetes.image`; optional `delivery: "fast_forward"` selects the landing profile | Optional `analysis` object: version, revision, image, harness_version, max_tokens, budget_minutes, fixture, tools |
-| Inputs | Authorized task, exact repository commit, immutable context package | Authorized task, profile/input digests, frozen diagnostic sources and, for v2 or BYO, selected context package |
-| Output | Scoped source changes and separate deterministic verification result | JSON `summary` and `findings`, each with code, source_id, quote and explanation |
-| Completion | Separate clean verification Job; v1 observes the PR head and required CI, while v2 observes required CI on the task-branch commit and fast-forwards the exact commit to the unchanged base | Independent Go validator checks fixture findings and source quotes; evidence binds input, profile, output and v2 context digests |
-| Tools | Bounded coding harness; trusted verification commands | `DiagnosticReport` structured output; v2 and BYO optionally allow `read_context_source` through Marina |
-| Source authority | Explicit `source.read`, `source.write`, plus `pull_request.create` (v1) or `source.fast_forward` (v2) | None; Git gateway routes deny access |
-| Model | Installed Responses-compatible endpoint/name and file credential reference | Same governed endpoint; self-contained requests, no stored conversations or hosted tools |
-| Runtime | Isolated Kubernetes Job or selected kagent engine, one implementation and one verification attempt | Isolated Kubernetes Job or selected kagent BYO engine, one analysis attempt |
+| Identity | `repository/v1` for PR delivery; `repository/v2` for guarded main landing | Explicit Deck agent invocation, separate from task intake |
+| Harness | Native Codex on the pinned kagent engine | Pinned `kint-conversation-byo` Harness |
+| Configuration | `git`, `checks`, `allowed_paths`, `required_ci`, `kubernetes.image`, `repository_engine`, `repository_engine_gateway_url`, `reviewer_model`; optional `delivery: "fast_forward"` | Optional `conversation` with engine, token/time ceilings and fixed delegation budget |
+| Inputs | Authorized task, exact Git commit, versioned repository binding and selected immutable context | Frozen originating thread, repository binding/commit/file index and explicit project-source revisions |
+| Runtime | Native implementation; independent text-only review before every commit; native diagnosis before each repair; clean Kubernetes verification per commit | One attempt-exclusive BYO engine instance |
+| Completion | Exact-patch review, clean checks and required CI; v2 also requires guarded fast-forward | One canonical reply and optional bounded task in the originating thread |
+| Authority | `source.read`, `source.write`, plus `pull_request.create` (v1) or `source.fast_forward` (v2) | No repository mutation; Ready delegation needs separate installation limits and service capability |
 
-Both use the same persisted claims, leases, fences, task budgets, model admission,
-usage records, worker credentials, cancellation, artifact storage and recovery.
-No new service, database, workflow engine, vendor control plane or AWS dependency
-is introduced. Repository fields are optional for an analysis-only installation;
-analysis never checks out a repository or creates a commit or PR.
+The LangChain diagnostic profile is removed under
+[decision 0023](../../../docs/decisions/0023-focus-kagent-cutover.md).
+Historical specifications, profile digests, journal records and artifacts remain
+readable. They cannot select a new legacy agent Job. The Kubernetes image is a
+**verifier**, built from `marina/Dockerfile.verifier`; it contains trusted offline
+check dependencies and no Codex or Python agent harness.
 
-## Authorization and immutable identity
+## Immutable selection and authorization
 
-The analysis task's existing `budget.authority` contains exactly one scoped
-grant: `analysis.run.<digest>`. The digest is the SHA-256 of Marina's canonical
-JSON encoding of the complete analysis profile, model settings (including the
-credential *reference*, never its value), and policy version. It is available via
-`marina workload-profile --config /path/to/workflow.json` (local inspection,
-without reading credentials or contacting a service). Arbitrary
-or stale grants and combinations with source/mutation authority fail closed.
-This preserves the existing extensible authority field. The public invocation
-API additionally pins the selected profile metadata on the task; discovery alone
-does not confer permission. Legacy tasks without that field remain supported.
-
-A task must have acceptance criteria, a positive token limit within the profile,
-and a time limit within the profile. Installation ceilings still apply. Profile
-edits change the grant; they cannot authorize pending work against a different
-fixture, image, model destination or budget. Active work retains persisted inputs
-and profile identity. A changed installation blocks further execution instead of
-silently migrating a run. Restoring the original configuration permits recovery
-only while the original run still has authority. Cancelled/blocked work requires
-new authorization.
-
-New runtime specifications identify workload, profile digest, input digest and
-worker image. Only installed digest-pinned images may start. Old repository
-records and their digests retain their original representation. Unsupported
-workloads or repository fields on analysis specifications are rejected.
-
-## Synthetic diagnostic fixture
-
-[`blocked-runs-v1.json`](../../internal/analysis/fixtures/blocked-runs-v1.json),
-embedded by `analysis.DiagnosticFixture()`, is the authoritative `blocked-runs`
-revision 1 fixture. It contains three immutable text sources:
-
-| Source | Required result | Causal source evidence |
-| --- | --- | --- |
-| `model-outage` | `provider_unavailable` | `upstream HTTP 503` |
-| `token-limit` | `budget_exhausted` | `requested 12000 tokens; remaining budget 4000 tokens` |
-| `healthy-worker` | No finding | Successful worker and independently checked result |
-
-The report needs exactly the two expected findings, the matching source IDs,
-verbatim supporting quotes and bounded nonempty explanations and summary.
-Duplicate, missing, invented or mismatched findings fail validation. Expected
-answers are retained in Marina; workers receive only source records and output
-schema. Fixture contents are untrusted data and cannot alter task authority.
-This proves a narrow diagnostic report contract, not general semantic review or
-live production-feedback integration.
-
-The initial profile allows at most 20,000 tokens and five minutes. Acceptance
-uses a nonzero USD cost cap based on the existing configured rates and remains
-within the operator's existing EUR 5 total model-test authorization. There are
-no runtime dependency downloads or direct public destinations from the worker.
-Model requests use only Marina, which forwards to the installed OpenRouter
-endpoint with the existing private credential reference. The worker has neither
-an upstream model credential nor a Kubernetes service-account token.
-
-## Harness packaging and compatibility
-
-The analysis image packages the Go worker and Python harness together. Pinned
-and hash-checked dependencies are in
-[`requirements.txt`](../../harnesses/langchain/requirements.txt). The initial
-resolved libraries include LangChain 1.4.2, LangGraph 1.2.12 and
-langchain-openai 1.6.2. They execute locally; tracing is disabled. LangSmith's
-optional OSS client is a transitive dependency, but no LangSmith account, hosted
-service or tracing endpoint participates in execution.
-
-The implementation uses the documented
-[`create_agent`](https://docs.langchain.com/oss/python/langchain/agents) and
-[ChatOpenAI Responses integration](https://docs.langchain.com/oss/python/integrations/chat/openai).
-LangChain's [MIT license](https://github.com/langchain-ai/langchain/blob/master/LICENSE)
-permits local use. The worker has no delegation, filesystem, shell, search or MCP
-tools. V2 adds one HTTP tool: `read_context_source` accepts an exact URI from the
-immutable package and returns that recorded source with provenance and trust.
-The gateway validates the attempt credential, allowlist, arguments, live authority,
-expiry and revocation, and persists an audit decision. It cannot fetch arbitrary
-URLs or expose credentials. Python framework types stay inside the harness boundary.
-
-The `langchain-create-agent/kagent-byo-v1` profile packages the same pinned
-`run.py` and hash-checked Python dependencies with a small A2A server in
-[`Dockerfile.analysis-byo`](../../Dockerfile.analysis-byo). Marina sends the
-immutable fixture and selected context as one bounded message. The BYO server
-emits a bounded `marina-result.json` artifact; Marina checks the artifact against
-the frozen input and independently validates every finding and source quote.
-The BYO profile has its own revision and image digest. Historical `/v1` and
-`/v2` profile digests remain readable and keep their original runtime path.
-The BYO actor has no repository authority or publication step.
-
-Both workloads use the context assembler described by
-[decision 0014](../../../docs/decisions/0014-project-repository-and-knowledge.md).
-Active project source revisions and explicitly selected messages are captured at
-task authorization; recovery uses the persisted package. Revision changes do not
-replace it, while explicit revocation blocks further use. Git sources require an
-installed repository binding and exact commit. Trusted guidance remains bounded
-by structured task authority; diagnostic records and conversations stay untrusted.
-Additional selected context does not expand the fixed report validation contract.
-
-## Local installation and invocation
-
-Build `Dockerfile.analysis-worker` from the `marina/` context. Dependencies are
-installed at build time with hashes; load the image and use its registry/containerd
-manifest digest, not a mutable tag, in `analysis.image`. Add this profile object
-to a version-1 workflow configuration, using the fixture file above as the
-`fixture` value. Existing Git configuration can coexist with it or be omitted
-for an analysis-only installation. Replace both placeholders before loading:
+Repository configuration requires this engine selection:
 
 ```json
 {
-  "version": 1,
-  "revision": 1,
-  "image": "registry/analysis-worker@sha256:<64 hexadecimal characters>",
-  "harness_version": "langchain-create-agent/v2",
-  "tools": ["read_context_source"],
-  "max_tokens": 20000,
-  "budget_minutes": 5,
-  "fixture": "<replace with the fixture JSON object>"
-}
-```
-
-V2 requires an image built from this implementation. Merely changing the harness
-name on an older image does not upgrade it. Legacy `langchain-create-agent/v1`
-profiles remain valid with no tools; they cannot advertise selected context, and
-tasks that select project sources block with an upgrade explanation. Optional
-fields preserve old profile and runtime digests when absent.
-
-For the selected kagent BYO path, build `Dockerfile.analysis-byo` from
-`marina/`, make its digest-pinned image available to the Substrate actor image
-cache during preparation, and prepare a
-`kint-analysis-byo` Harness with that image and a `kint-analysis-task` compatible
-AgentTemplate. Pin the controller's **prepared revision** and the same image
-digest in a new analysis profile revision (at least 3). Set
-`harness_version` to `langchain-create-agent/kagent-byo-v1` and select the
-engine in the workflow configuration:
-
-```json
-{
-  "analysis_engine": {
+  "repository_engine": {
     "backend": "kagent",
     "version": "1.0.0-alpha1@850c464726881317997c32515f8b621b949d6ce1",
     "endpoint": "kint-engine-controller.kint-engine.svc:8083",
     "namespace": "kint-engine",
-    "harness": "kint-analysis-byo",
-    "template": "kint-analysis-task",
-    "revision": "<prepared revision digest>"
-  }
+    "harness": "kint-codex"
+  },
+  "repository_engine_gateway_url": "https://marina.marina-system.svc"
 }
 ```
 
-The template's OpenAI ModelConfig must point at Marina's governed HTTPS model
-gateway and reference an attempt-exclusive `gateway` Secret. Marina installs
-that Secret before dispatch or recovery. Substrate injects an inert API-key
-placeholder into the actor and substitutes the current Secret at the gateway;
-the actor never receives the real token. Give the BYO Harness only the pinned
-image, fixed entry command, isolated WorkerPool and private snapshot location.
-Keep preparation downloads separate from runtime network access. These
-settings change the analysis grant; previously authorized tasks retain their
-original profile digest and cannot silently move to the BYO runtime.
-The pinned actor mounts its egress trust bundle at
-`/run/kagent/egress/trust-bundle.pem`; the BYO image sets Python's TLS trust
-environment to that file. The router separately verifies Marina's HTTPS
-service certificate.
+No shared template or mutable revision belongs in this selection. Marina creates
+an attempt-exclusive AgentTemplate, ModelConfig and same-name gateway Secret,
+waits for preparation, then freezes the exact revision in the attempt. Resource
+names cannot be reused. Template/model/tool edits cannot replace an admitted
+instance's revision. Engine completion alone cannot complete the Deck task.
 
-## Optional read-only conversation profile (CHAT-04)
+Invocation pins the discovered profile ID/digest and explicit task authority.
+A task needs acceptance criteria, positive token/time limits within installation
+ceilings, one active task and at least three attempts for implementation, review
+and independent verification. Configure nonzero rates for both models in the
+task's currency for cost admission. Unknown model usage keeps its entire
+reservation across restart.
 
-Build `marina/Dockerfile.conversation-byo` as a pinned image and prepare a
-`kint-conversation-byo` Harness with no source, shell, browser, task or tool
-capabilities. The private workflow selects that Harness; it names no template:
+`max_attempts` counts runtime starts, including review, clean verification and
+repair diagnosis. Three starts cover an initial implementation, review and
+verification; seven can cover one complete repair; eleven can cover two. The
+installation caps starts at eleven, and a smaller frozen task budget remains
+smaller. Independently, three failed reviews or implementations block. All starts
+share the original time/token/cost budget; no repair or restart grants more. Chat
+delegation retains its explicitly configured budget and must offer at least three
+starts for this profile. The version-1 runtime-start meaning from
+[decision 0025](../../../docs/decisions/0025-repair-attempts-and-budget.md) is
+preserved; [0026](../../../docs/decisions/0026-read-only-review-and-exact-patch.md)
+adds review.
+
+`reviewer_model` uses the same fields as `model`: an explicit endpoint, different
+model ID, credential file reference, bounded output, currency and price rates.
+Build the current `Dockerfile.conversation-byo` and pin it in the existing
+`kint-conversation-byo` Harness even when conversation is disabled. Marina creates
+a fresh text-only review instance per candidate using this Harness. It receives
+complete old/new files, criteria, frozen context and repair history, with no Git
+or tool access. Inputs exceeding 256 KiB block rather than being truncated.
+Only a valid passing verdict for the exact candidate and base permits commit;
+review failures feed diagnosis, while disputed findings or invalid verdicts block.
+
+Active work retains its original task, binding, profile, context and attempt.
+Installation changes block further execution rather than silently selecting new
+inputs. Ordinary source edits do not replace frozen context; expiry or explicit
+revocation denies further use. Retrieved text cannot enlarge authority or budget.
+
+The gateway checks the exact live Deck lease/fence on every request and during
+long responses. When Deck cannot renew a lease, local expiry stops the recorded
+runtime even while Deck is offline. Recovery inspects recorded identities;
+it never blindly replaces an uncertain creation or message delivery.
+
+## Conversation selection
+
+Build `marina/Dockerfile.conversation-byo`, pin its OCI digest in the installed
+Harness and configure:
 
 ```json
 {
@@ -204,57 +100,70 @@ capabilities. The private workflow selects that Harness; it names no template:
       "harness": "kint-conversation-byo"
     },
     "budget_minutes": 5,
-    "max_tokens": 10000,
-    "delegation": {
-      "time_minutes": 30,
-      "max_attempts": 2,
-      "max_tokens": 20000,
-      "max_cost_minor": 0,
-      "currency": "USD",
-      "max_concurrency": 1,
-      "authority": ["source.read", "source.write", "pull_request.create"]
-    }
+    "max_tokens": 20000
   }
 }
 ```
 
-Omit `delegation` for reply-only operation; the illustrated grant also requires
-an enabled repository profile whose installed limits admit that budget. The
-service identity needs `conversation.outcome.publish` for terminal replies and
-Backlog drafts, plus `conversation.task.delegate` for Ready work, scoped to the
-project. An interpreted task cannot add its own budget or grants. The gateway URL is
-`https://marina.marina-system.svc/conversation/model/v1/responses`.
-Marina registers its stable agent with `conversation.invoke.{project_id}` only
-while this profile is configured. It scans the project channel ledger and runs
-one frozen, bounded turn through the pinned engine. For every turn Marina
-creates a `marina-` AgentTemplate, ModelConfig and same-name `gateway` Secret
-routed through its HTTPS conversation gateway, freezes the prepared revision in
-the turn's specification, and deletes the three resources after publication.
-No template or Secret serves two turns, and Marina never adopts or deletes a
-resource it did not label as its own. The actor may ask one typed clarification
-question (kagent's ask-user request with up to six choices) instead of replying.
-Deck shows it in the thread; the answer goes to the same waiting task, and the
-gateway then admits exactly one follow-up model call within the turn's token
-limit. The result stays in Marina's artifact
-store and its exact publication request is journaled before Deck receives a
-reply and optional task. Local model and engine proof is still required; see
-[CHAT-04 evidence](../../../docs/validation/chat-04-2026-09-23.md) and
-[CHAT-06–08 evidence](../../../docs/validation/chat-06-08-2026-09-25.md).
+Deck saves the repository binding and active explicitly registered project-source
+revisions with the invocation. Marina resolves that selection through
+`GET /api/v1/conversation/invocations/{id}/context`, then saves the exact branch
+commit, complete regular-file index and selected content before engine dispatch.
+Recovery uses these retained inputs; source edits and a moved branch do not
+replace them. Revocation, expired guidance and declared conflicting sources deny
+further use. Selected Git documents keep their explicitly registered commits,
+which may differ from the turn's repository commit. Guidance retains its trust
+and provenance; other repository files, thread text and tool results remain data
+and cannot grant authority. See
+[decision 0027](../../../docs/decisions/0027-read-only-repository-context-for-chat.md).
 
-Use the [public API](api-v1.md) to discover and invoke an installed profile, or
-`workload-profile` for offline inspection of the exact authority grant. A task
-needs that sole grant, explicit acceptance criteria, at least one attempt, a
-positive token/time budget within the profile limits, and a bounded cost in the
-configured currency. Retain the installed approval policy. For a controlled
-acceptance run, `serve --intake-task-id <task-id>` discovers only that task;
-`--intake-enabled=false` disables all new discovery. Both settings still
-reconcile already journaled work and cancellation.
+The actor calls only Marina's model gateway. The gateway fixes the instructions
+and validates the frozen transcript, then offers `list_repository_files` and
+`read_repository_file` for the recorded repository and commit. It lists at most
+100 files per page from a complete index of at most 10,000 tree entries. Reads
+accept regular UTF-8 files up to 256 KiB, returning at most 200 lines and 16 KiB
+per read. Tool results total at most 64 KiB per exchange. Links, submodules,
+incomplete trees, binary files, unsafe paths and unknown tools are rejected.
+The actor receives no Git or upstream model credential and has no source-write,
+shell, browser or arbitrary tool authority.
 
-The date-scoped [acceptance helper](../../../scripts/validate-agent-poc.py)
-captures the local installation proof. It is not a general deployment or public
-profile-selection API. The [AGENT-07 through AGENT-10 report](../../../docs/validation/agent-07-10-2026-09-21.md)
-records the implemented API/tool/context/inspection checks separately from the
-PoC's live model proof. The [AGENT-11 through AGENT-13 acceptance](../../../docs/validation/agent-11-13-2026-09-22.md)
-records the shared failure matrix and combined live v2 MVP proof. Use the
-[two-workload installation guide](../../../deploy/kubernetes/agent-platform/README.md)
-for pinned upgrades, context/profile compatibility, credential reuse and recovery limits.
+An initial model exchange permits up to four upstream requests, including read
+tool continuations. Every intermediate response and final answer counts against
+the original turn's token limit and deadline. Missing or uncertain usage retains
+the reservation and prevents replay. The actor can ask one typed question with
+up to six choices. Deck records the expiry and closes
+pending questions when the turn ends. An exact answer replay preserves the same
+human message; a changed, expired or closed pending answer conflicts. Marina
+sends the answer only to that recorded waiting operation and admits one bounded
+follow-up exchange of at most four upstream requests, using the same frozen
+repository, token limit and deadline. Uncertain delivery retains reservations
+and blocks instead of sending the answer again blindly.
+
+The service identity needs `conversation.invocation.list`, `channel.message.list`,
+`conversation.context.read`, `conversation.question.write` and
+`conversation.outcome.publish`, scoped to the project. Optional Ready delegation
+additionally needs `conversation.task.delegate`
+and a fixed `conversation.delegation` budget admitted by the repository profile.
+An interpreted task cannot invent limits or grants. Publications are journaled
+before Deck receives them and replay with their original identity.
+
+Invocations made before context capture was installed return missing context;
+they never acquire a new selection from current project sources. Previously
+published replies and retained active-turn artifacts remain historical inputs.
+
+## Installation and inspection
+
+Use the [installation guide](../../../deploy/kubernetes/agent-platform/README.md)
+and [permanent local engine guide](../../../deploy/kubernetes/local-podman-kagent/README.md).
+`marina check-config --config workflow.json` validates configuration without
+reading referenced credentials or contacting providers. It reports the selected
+profile digest. `scripts/check-installation.py` checks the private rendered
+installation, including exact engine wiring, digest pins and disabled intake.
+
+`serve --intake-task-id <id>` permits discovery of one selected task;
+`--intake-enabled=false` disables new discovery. Both continue recovery and
+cancellation for journaled work. These flags do not disable explicit chat
+invocations. Keep credentials in private files and references out of task text.
+Use `marina diagnostics` for redacted attempt, usage, cleanup and conversation
+metadata. Old schema records are retained for history and recovery; never drop
+records to repair an upgrade.

@@ -1,0 +1,25 @@
+{
+  "publication_task_id": "tsk_prd",
+  "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "tasks": [
+    {
+      "title": "Save filters",
+      "description": "Persist a named filter.",
+      "acceptance_criteria": "Saving survives reload; unit and browser checks pass."
+    }
+  ],
+  "source": {
+    "publication_task_id": "tsk_prd",
+    "plan_message_id": "msg_prd_tasks",
+    "path": "docs/prd/filters.md",
+    "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "repository": {
+      "version": 1,
+      "repository": "example/repo",
+      "clone_url": "https://github.com/example/repo.git",
+      "base_branch": "main"
+    }
+  },
+  "digest": "b021c0c61aa30de35c33c5d93552a843e7f8cad252cb3d950df64f528d97cb4c"
+}

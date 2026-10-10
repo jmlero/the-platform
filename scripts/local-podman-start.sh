@@ -10,3 +10,6 @@ fi
 if "$podman_bin" --connection podman-machine-default-root container exists marina-local-control-plane; then
   "$podman_bin" --connection podman-machine-default-root start marina-local-control-plane
 fi
+if "$podman_bin" --connection podman-machine-default-root container exists kint-local-registry; then
+  "$podman_bin" --connection podman-machine-default-root start kint-local-registry
+fi

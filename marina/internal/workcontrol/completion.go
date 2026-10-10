@@ -38,6 +38,24 @@ type Completion interface {
 	CompleteRun(context.Context, string, Mutation, string, []string) error
 }
 
+type LandingObservation struct {
+	Repository string `json:"repository"`
+	BaseBranch string `json:"base_branch"`
+	Commit     string `json:"commit"`
+	ObservedAt int64  `json:"observed_at"`
+}
+
+type TaskLanding struct {
+	LandingObservation
+	RunID       string   `json:"run_id"`
+	EvidenceIDs []string `json:"evidence_ids"`
+}
+
+// LandedCompletion is additive; ordinary v1 completion still requires human acceptance.
+type LandedCompletion interface {
+	CompleteLandedRun(context.Context, string, Mutation, string, []string, LandingObservation) error
+}
+
 func WorkerCapabilities() []string {
 	return append(MilestoneOneCapabilities(), CapabilityPlanSubmit, CapabilityDecisionInspect,
 		CapabilityRunStart, CapabilityRunVerify, CapabilityRunComplete, "evidence.record", CapabilityContextRead, CapabilityRepositoryRead, CapabilityRepositoryWrite)

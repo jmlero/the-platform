@@ -117,8 +117,8 @@ PRD level: does the product now do what the PRD describes?
 The order of work, with acceptance criteria, is in [backlog.md](backlog.md). In
 outline:
 
-1. **One agent engine.** kagent becomes the engine; replaced Marina runtime code
-   is deleted (KINT, [decision 0017](decisions/0017-kagent-core-engine.md)).
+1. **One agent engine.** kagent owns agent execution; Marina owns workflow and
+   governance ([decision 0017](decisions/0017-kagent-core-engine.md)).
 2. **Chat to results.** A request in the chat becomes a task; results and
    questions come back to the same thread (CHAT).
 3. **Land on main with feedback.** The two checks, bounded repair from their

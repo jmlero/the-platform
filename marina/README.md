@@ -21,27 +21,35 @@ engine lifecycle and durable correlation at the runtime boundary, with
 [isolated local recovery evidence](../docs/validation/kint-03-2026-09-22.md).
 A `repository_engine` profile selects native Codex on kagent for implementation;
 Marina creates each attempt's own template ([decision 0024](../docs/decisions/0024-per-attempt-engine-templates.md))
-and follows the engine task until the engine records its end. The
+and follows committed engine state with bounded observation recovery. The
 [KINT-04 gateway](internal/workerapi/README.md) adds governed admission and
 attempt-scoped access for engine model, Git read and context calls.
 The [KINT-05 result boundary](../docs/validation/kint-05-2026-09-23.md)
-validates legacy or collected kagent output against frozen attempt inputs and
+validates collected kagent output against frozen attempt inputs and
 retains the agent-free clean verifier.
 The local installation runs repository work on native Codex; see
 [status](../docs/status.md) for what is accepted.
 
 An optional pinned conversation profile now consumes Deck's ordered explicit
-agent invocation feed through a read-only kagent BYO actor. It freezes the selected thread
-context, permits one governed model call, and retains a bounded result artifact.
+agent invocation feed through a read-only kagent BYO actor. Deck captures the
+repository binding and selected project-source revisions with the invocation.
+Before dispatch, Marina freezes the thread, exact repository commit, complete
+regular-file index and selected context in retained artifacts. The model gateway
+offers only bounded file listing and reading at that commit; repository mutation
+and arbitrary tools remain unavailable. Model exchanges and the one
+clarification follow-up share the original turn's token limit and deadline.
+See [decision 0027](../docs/decisions/0027-read-only-repository-context-for-chat.md)
+and the [conversation profile](docs/workloads/profiles-v1.md#conversation-selection)
+for the input, trust and read limits.
 Marina creates and removes one attempt-exclusive engine template per turn. Engine questions
 are written to the originating Deck thread, and one answer is sent to the same
-waiting attempt. The service identity needs `conversation.question.write` in
-addition to invocation and channel read grants. Terminal turns publish one
+waiting attempt. The service identity needs `conversation.context.read` and
+`conversation.question.write` in addition to invocation and channel read grants.
+Terminal turns publish one
 canonical Deck reply and optional bounded task; the exact publication survives
 lost responses and restart. Ready delegation needs a separately configured
 repository budget and `conversation.task.delegate` grant. Replies and drafts
-need `conversation.outcome.publish`. Local engine/model and browser acceptance
-remain pending; see
+need `conversation.outcome.publish`. Acceptance and current limits are recorded in [status](../docs/status.md); see
 [CHAT-04 evidence](../docs/validation/chat-04-2026-09-23.md) and
 [CHAT-05 evidence](../docs/validation/chat-05-2026-09-23.md), and
 [CHAT-06–08 evidence](../docs/validation/chat-06-08-2026-09-25.md).
@@ -77,16 +85,26 @@ On service startup, Marina validates Deck's Milestone 1 capabilities, opens the 
 
 With `--config workflow.json` (or `MARINA_CONFIG_FILE`), the service enables the
 repository workflow: frozen task budget/authority, immutable plan, optional
-approval, an implementation attempt (native Codex on kagent, or the legacy Codex
-Job until KINT-12), scoped Git publication, an independent verification Job,
+approval, native Codex on kagent, a different model in a read-only kagent review,
+scoped Git publication, an independent verification Job,
 required CI on the exact commit and structured evidence completion. With
 `"delivery": "fast_forward"` (`repository/v2`) Marina then fast-forwards the base
-branch; without it (`repository/v1`) it opens a pull request. It supports one
-active task, one implementation and one verification attempt. Failed
-verification, failed CI or requested changes block the task. Cancellation waits for observed termination. Pause, resume, replan, retry and
+branch; without it (`repository/v1`) it opens a pull request. One active task
+shares its frozen intent and budget across implementation, review, verification
+and bounded repair. A rejected review, failed clean verification or required CI
+can feed a repair only after its diagnosis and different approach are recorded. Requested review changes
+block. The attempt limits are in the [profile contract](docs/workloads/profiles-v1.md);
+installation acceptance is in [status](../docs/status.md). Cancellation waits for observed termination. Pause, resume, replan, retry and
 reduce-authority commands are rejected in this workflow; ledger support for
 those command types is not an execution capability. The separate verification
-Job runs deterministic checks, not independent semantic review. Completion means
+Job runs deterministic checks. The text-only reviewer sees the exact candidate
+and original files, frozen criteria/context and repair history; it rejects weakened,
+removed or skipped tests. Only the reviewed patch can commit, and its verdict is
+recorded with the resulting commit and reviewer model/profile. Missing or invalid
+verdicts block; disputed findings escalate. Review model calls share the original
+budget and replay retained responses without new spend. See
+[decision 0026](../docs/decisions/0026-read-only-review-and-exact-patch.md).
+Completion means
 the verified commit landed (v2) or a PR is ready for review (v1). Marina never
 deploys.
 
@@ -97,27 +115,19 @@ artifacts survive worker cleanup on Marina-owned storage. This workflow uses
 fixed bounded repository rules and explicit immutable context; broader policy/plugin foundations
 remain available for later workflows.
 
-An optional version-1 `analysis` profile enables the bounded diagnostic PoC:
-one pinned LangChain `create_agent` worker consumes frozen synthetic records
-without a repository checkout and produces a structured report. The existing
-controller, journal, budgets, gateway and Kubernetes isolation are shared;
-an independent Go validator checks findings and source quotes and binds evidence
-to the input/profile/output digests. See the
-[profile contract](docs/workloads/profiles-v1.md) and
-[live proof for both harnesses](../docs/validation/agent-02-06-2026-09-21.md).
-`marina workload-profile --config workflow.json` prints the installed analysis
-identity and exact task authority grant without reading credentials. The
-[operator API guide](docs/workloads/api-v1.md) covers installed-profile discovery,
-pinned invocation and result retrieval. Harness v2 adds selected immutable
-context and one governed `read_context_source` HTTP tool. Shared progress includes
-confirmed usage and unresolved reservations; redacted diagnostics correlate
-attempts, model/tool calls and artifacts. See the
-[validation boundary](../docs/validation/agent-07-10-2026-09-21.md).
-The [two-workload installation guide](../deploy/kubernetes/agent-platform/README.md)
-and [combined MVP proof](../docs/validation/agent-11-13-2026-09-22.md) cover the
-deployed v2 harness, shared failure checks, preserved stores and live results.
-Interrupted worker I/O may still block; the harness does not checkpoint agent steps.
-Analysis-only configurations need no Git repository or delivery binding.
+Repository configuration requires a pinned `repository_engine` selection. The
+Kubernetes adapter only starts independent verification Jobs using
+`Dockerfile.verifier`; `marina verify` is its entry point. The diagnostic profile
+and custom Codex/Python hosting paths are removed. Existing journal records,
+artifacts and credential identities retain their historical representation.
+See the [profile contract](docs/workloads/profiles-v1.md),
+[API guide](docs/workloads/api-v1.md) and
+[installation guide](../deploy/kubernetes/agent-platform/README.md).
+
+`marina check-config --config workflow.json` validates the current configuration
+without reading credentials or contacting external services. Unknown retired
+settings fail closed. Both stores reject unknown applied schema migrations;
+rollback to an older release requires its compatible retained snapshot.
 
 Without a workflow configuration, the existing Milestone 1 control-only mode
 remains available. Use the [paired installation guide](../deploy/kubernetes/first-release/README.md)
@@ -249,14 +259,15 @@ Read the root [AGENTS.md](../AGENTS.md) and Marina [AGENTS.md](AGENTS.md) before
 
 The repository workflow assembles a content-addressed package before plan
 submission: the authorized task and budget, installed limits, pinned repository,
-worker image, selected Deck/Git sources and explicit conversation excerpts.
-It persists the package before worker dispatch and recovers those exact bytes on
-restart. Plans bind the package digest; both implementation and verification
-worker inputs include it. Deck receives a bounded derived snapshot for inspection.
+engine and verifier image identities, selected Deck/Git sources and explicit
+conversation excerpts. It persists the package before engine dispatch and
+recovers those exact bytes on restart. Plans bind the package digest; the native
+initial prompt and verifier input carry it. Deck receives a bounded derived
+snapshot for inspection.
 
 New source revisions affect newly authorized tasks. Explicit revocation and
-expired included inputs deny further worker-gateway access and stop the workflow
-for clarification, waiting for worker termination before reporting a blocker.
+expired included inputs deny further gateway access and stop the workflow
+for clarification, waiting for runtime termination before reporting a blocker.
 Expired reference data and known instruction overrides can be omitted at assembly;
 stale guidance and declared conflicts block. Conversation stays untrusted data.
 These checks do not claim general semantic conflict or prompt-injection detection;
@@ -271,3 +282,42 @@ review and newly authorized work; it cannot silently alter old execution policy.
 Grant the project-scoped service identity `context.read`, `repository.read`, and
 `repository.write` when upgrading an existing installation; the setup generator
 includes them for new installations. See [the context proof](../docs/validation/ctx-02-08-2026-09-21.md).
+
+## Publishing approved PRDs
+
+The conversation actor can propose a `docs/prd/` Markdown document without
+source authority. Deck owns its explicit approval and creates the bounded
+publication task. Marina retains the typed approved document in the frozen task
+and native input, rejects changed bytes or unrelated file operations before
+review and publication, and applies the same independent review, clean checks,
+CI and landing gates. Later conversation turns receive retained PRD text as
+untrusted thread data. See [decision 0029](../docs/decisions/0029-approved-prd-publication.md).
+
+Use matching Deck, Marina and conversation BYO releases. Conversation startup
+requires the provider's `conversation.prd.draft` capability; the existing
+`conversation.outcome.publish` grant permits drafting only. The installed
+repository scope must include `docs/prd/`; it is never expanded by model output.
+Current installation acceptance is in [status](../docs/status.md).
+
+## Explicit profiles for more projects
+
+`serve --config` and `check-config --config` accept either the original single
+workflow or `{"version":1,"projects":[...complete workflow profiles...]}`.
+Each project needs one explicit private profile and matching Deck service grants.
+Repository, checks, allowed paths, required CI, models, credential file references,
+engine and verifier remain specific to that project. Service TLS, signing and
+artifact settings must agree. Configuration is bounded to sixteen profiles.
+
+One durable intake controller admits work across the configured projects. An
+active execution or unresolved acquisition blocks any additional task. Workflow
+and command reconciliation use the recorded project's profile; gateway routing
+uses the durable attempt/turn identity and then validates the original credential
+and live authority. Removing a project never routes its work to another profile.
+The original single-project configuration retains its digest and behavior.
+See [decision 0031](../docs/decisions/0031-explicit-per-project-profiles.md) and
+[installation acceptance](../docs/status.md).
+
+Approved PRD implementation tasks retain a typed PRD source reference separately
+from the publication document. Marina requires that source commit on the execution
+base even if ordinary task dependencies have been edited. Matching conversation
+releases require `conversation.prd.tasks`; task proposals do not authorize work.

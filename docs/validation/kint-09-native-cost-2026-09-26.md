@@ -33,6 +33,6 @@ restored from the private saved workflow; `kint16-chat-11` remained selected.
 Deck restored `jmlero/context-lens` at revision 24, binding version 57.
 Marina and Deck were Ready with new task intake disabled. The temporary native
 template, ModelConfig, Secret, exact credential Role and RoleBinding were
-deleted. The [KINT-09 core matrix](../plans/kagent-integration.md#mandatory-failure-matrix)
+deleted. The [KINT-09 core matrix](https://github.com/jmlero/the-platform/blob/b7ccd54cdf79f3f669d23c75eb5c9840f43de953/docs/plans/kagent-integration.md#mandatory-failure-matrix)
 still has other cost/time/usage and repository failure cases, so KINT-11
 remains gated.

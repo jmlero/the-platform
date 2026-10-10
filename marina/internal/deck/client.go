@@ -946,6 +946,10 @@ func (agent agentDTO) toDomain() workcontrol.Agent {
 }
 
 type taskDTO struct {
+	PRDReference       *workcontrol.PRDReference    `json:"prd_reference,omitempty"`
+	PRD                *workcontrol.PRDDocument     `json:"prd,omitempty"`
+	Landing            *workcontrol.TaskLanding     `json:"landing,omitempty"`
+	DependsOn          []string                     `json:"depends_on,omitempty"`
 	Workload           *workcontrol.WorkloadProfile `json:"workload,omitempty"`
 	Context            *workcontrol.TaskContext     `json:"context,omitempty"`
 	ID                 string                       `json:"id"`
@@ -1008,6 +1012,10 @@ func (detail taskDetailDTO) toDomain() workcontrol.WorkDetail {
 
 func (task taskDTO) toDomain() workcontrol.WorkItem {
 	return workcontrol.WorkItem{
+		PRD:                task.PRD,
+		PRDReference:       task.PRDReference,
+		Landing:            task.Landing,
+		DependsOn:          task.DependsOn,
 		Context:            task.Context,
 		Workload:           task.Workload,
 		ID:                 task.ID,

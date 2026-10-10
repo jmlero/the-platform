@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
@@ -77,7 +78,7 @@ func (*Adapter) Resume(context.Context, string) (rt.Observation, error) {
 	return rt.Observation{}, rt.ErrUnsupportedResume
 }
 func observation(r rt.EngineAttempt) rt.Observation {
-	return rt.Observation{Found: true, ProviderHandle: "kagent:" + r.AttemptID, State: r.State}
+	return rt.Observation{Found: true, ProviderHandle: "kagent:" + r.AttemptID, State: r.State, FailureClass: r.FailureClass, FailureMessage: r.FailureMessage}
 }
 func (a *Adapter) save(ctx context.Context, r rt.EngineAttempt) (rt.EngineAttempt, error) {
 	return a.journal.UpdateEngineAttempt(ctx, r)
@@ -91,6 +92,9 @@ func (a *Adapter) selection(s rt.Specification) error {
 func (a *Adapter) Start(ctx context.Context, s rt.Specification) (rt.Observation, error) {
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
+	if s.Workload != "" && s.Workload != "repository/v1" && s.Workload != "repository/v2" && s.Workload != "conversation/v1" || len(s.Tools) != 0 {
+		return rt.Observation{}, fmt.Errorf("unsupported or retired engine workload: %w", rt.ErrInvalidInput)
+	}
 	if err := a.selection(s); err != nil {
 		return rt.Observation{}, err
 	}
@@ -229,12 +233,12 @@ func (a *Adapter) advance(ctx context.Context, s rt.Specification, r rt.EngineAt
 			return observation(r), rpcError("send message (delivery uncertain)", err)
 		}
 		if task := response.GetTask(); task != nil {
-			return a.bindTask(ctx, r, task)
+			return a.bindTask(ctx, s, r, task)
 		}
 		// Message-only replies are not success evidence. Recover the stored task.
 	}
 	if r.TaskID == "" {
-		return a.discoverTask(ctx, r)
+		return a.discoverTask(ctx, s, r)
 	}
 	task, err := a.tasks.GetTask(route(ctx, r), &a2a.GetTaskRequest{Id: r.TaskID}, grpc.MaxCallRecvMsgSize(artifacts.MaxBytes))
 	if status.Code(err) == codes.NotFound {
@@ -243,7 +247,7 @@ func (a *Adapter) advance(ctx context.Context, s rt.Specification, r rt.EngineAt
 	if err != nil {
 		return observation(r), rpcError("inspect task", err)
 	}
-	return a.bindTask(ctx, r, task)
+	return a.bindTask(ctx, s, r, task)
 }
 func matchesSelection(i *api.AgentInstance, s rt.Specification) bool {
 	return i.GetHarness().GetName() == s.Engine.Harness && i.GetHarness().GetNamespace() == s.Engine.Namespace && i.GetAgentTemplate().GetName() == s.Engine.Template && i.GetAgentTemplate().GetNamespace() == s.Engine.Namespace
@@ -258,7 +262,7 @@ func route(ctx context.Context, r rt.EngineAttempt) context.Context {
 func rpcError(action string, err error) error {
 	return fmt.Errorf("kagent %s: %s", action, status.Code(err))
 }
-func (a *Adapter) discoverTask(ctx context.Context, r rt.EngineAttempt) (rt.Observation, error) {
+func (a *Adapter) discoverTask(ctx context.Context, s rt.Specification, r rt.EngineAttempt) (rt.Observation, error) {
 	// This phase owns exactly one initial message and no continuations. Bounded
 	// pages with full history recover that message without replaying SendMessage.
 	var found *a2a.Task
@@ -283,7 +287,7 @@ func (a *Adapter) discoverTask(ctx context.Context, r rt.EngineAttempt) (rt.Obse
 			if found == nil {
 				return observation(r), ErrDeliveryUnknown
 			}
-			return a.bindTask(ctx, r, found)
+			return a.bindTask(ctx, s, r, found)
 		}
 		if token == out.NextPageToken {
 			return observation(r), ErrIdentity
@@ -292,7 +296,7 @@ func (a *Adapter) discoverTask(ctx context.Context, r rt.EngineAttempt) (rt.Obse
 	}
 	return observation(r), ErrDeliveryUnknown
 }
-func (a *Adapter) bindTask(ctx context.Context, r rt.EngineAttempt, t *a2a.Task) (rt.Observation, error) {
+func (a *Adapter) bindTask(ctx context.Context, s rt.Specification, r rt.EngineAttempt, t *a2a.Task) (rt.Observation, error) {
 	if t.GetId() == "" || t.GetContextId() != r.ContextID || r.TaskID != "" && t.Id != r.TaskID {
 		return observation(r), ErrIdentity
 	}
@@ -359,7 +363,22 @@ func (a *Adapter) bindTask(ctx context.Context, r rt.EngineAttempt, t *a2a.Task)
 		r, err = a.journal.GetEngineAttempt(ctx, r.AttemptID)
 	}
 	if err == nil && !settled(t.GetStatus().GetState()) {
-		a.follow(ctx, r)
+		watchErr := a.follow(ctx, r)
+		switch status.Code(watchErr) {
+		case codes.NotFound, codes.Unavailable, codes.Internal:
+			r.ObservationFailures++
+			if r.ObservationFailures >= 3 {
+				r.CancelRequested = true
+				r.FailureClass = "runtime_unavailable"
+				r.FailureMessage = "Engine compute could not be observed on three consecutive reconciliations; stopped without replacement work"
+			}
+		case codes.OK:
+			r.ObservationFailures = 0
+		}
+		r, err = a.save(ctx, r)
+		if err == nil && r.CancelRequested {
+			return a.cancel(ctx, s, r)
+		}
 	}
 	result := observation(r)
 	result.EngineStatus = t.GetStatus().GetState().String()
@@ -380,13 +399,28 @@ func returnImmediately() *a2a.SendMessageConfiguration {
 // persists progress only from a subscription, which it keeps ingesting after
 // this call returns; GetTask alone returns the state saved at send time. A
 // controller restart drops that ingestion, so every observation follows again.
-func (a *Adapter) follow(ctx context.Context, r rt.EngineAttempt) {
+func (a *Adapter) follow(ctx context.Context, r rt.EngineAttempt) error {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	stream, err := a.tasks.SubscribeToTask(route(ctx, r), &a2a.SubscribeToTaskRequest{Id: r.TaskID}, grpc.MaxCallRecvMsgSize(artifacts.MaxBytes))
-	if err == nil {
-		_, _ = stream.Recv()
+	if err != nil {
+		return err
 	}
+	// The first event may be the engine's stored snapshot. Read through it so
+	// a broken runtime route cannot masquerade as a healthy working task.
+	for range 64 {
+		_, err = stream.Recv()
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		if err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			return err
+		}
+	}
+	return nil
 }
 
 // settled reports states in which the engine no longer produces events on its
@@ -445,7 +479,7 @@ func (a *Adapter) AnswerQuestion(ctx context.Context, handle, questionID, answer
 		return observation(r), ErrIdentity
 	}
 	if r.AnswerPhase != "" {
-		return a.bindTask(ctx, r, task)
+		return a.bindTask(ctx, s, r, task)
 	}
 	if task.GetStatus().GetState() != a2a.TaskState_TASK_STATE_INPUT_REQUIRED {
 		return observation(r), rt.ErrConflict
@@ -496,7 +530,7 @@ func (a *Adapter) AnswerQuestion(ctx context.Context, handle, questionID, answer
 		return observation(r), err
 	}
 	if task := response.GetTask(); task != nil {
-		return a.bindTask(ctx, r, task)
+		return a.bindTask(ctx, s, r, task)
 	}
 	return observation(r), nil
 }

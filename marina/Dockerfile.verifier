@@ -1,0 +1,55 @@
+# Build from the repository root. Both native Codex and the independent
+# verifier use the same project-specific, offline test toolchain.
+FROM golang:1.27.1-bookworm@sha256:69a7b9788769bec032d238959b61854e9ae87f57be9029ec04e9885fabf99195 AS dependencies
+WORKDIR /src
+COPY go.work go.work.sum ./
+COPY deck/go.mod deck/go.sum ./deck/
+COPY marina/go.mod marina/go.sum ./marina/
+COPY cli/go.mod ./cli/
+RUN go -C deck mod download && go -C marina mod download && go -C cli mod download
+
+FROM dependencies AS build
+COPY marina/cmd ./marina/cmd
+COPY marina/internal ./marina/internal
+RUN CGO_ENABLED=0 GOOS=linux go build -buildvcs=false -trimpath -o /out/marina ./marina/cmd/marina
+
+FROM node:24-trixie-slim@sha256:8ec5d7557396cfe32d21c3f9c13072355ceab22b584578ca4bb28af31120cffe AS toolchain
+RUN apt-get update && apt-get install -y --no-install-recommends bash git ca-certificates make python3 openssl && \
+    rm -rf /var/lib/apt/lists/*
+COPY --from=dependencies /usr/local/go /usr/local/go
+COPY --from=dependencies /go/pkg/mod /opt/marina-cache/go
+ENV PATH="/usr/local/go/bin:${PATH}" \
+    PLAYWRIGHT_BROWSERS_PATH=/opt/marina-cache/playwright
+WORKDIR /opt/marina-cache/deck-web
+COPY deck/web/package.json deck/web/package-lock.json ./
+RUN npm ci --cache /opt/marina-cache/npm --no-audit --no-fund && \
+    ./node_modules/.bin/playwright install --with-deps chromium && \
+    rm -rf node_modules /var/lib/apt/lists/* /opt/marina-cache/npm/_logs && \
+    chmod -R a+rX /opt/marina-cache && \
+    mkdir -p /work /data/adapter /data/codex /data/workspace && \
+    chown -R 65532:65532 /work /data
+ENV LANG=C.UTF-8 GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off \
+    GOMODCACHE=/opt/marina-cache/go GOCACHE=/data/go-cache \
+    NPM_CONFIG_OFFLINE=true NPM_CONFIG_CACHE=/opt/marina-cache/npm \
+    NPM_CONFIG_AUDIT=false NPM_CONFIG_FUND=false NPM_CONFIG_LOGS_MAX=0 \
+    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+USER 65532:65532
+
+FROM ghcr.io/kagent-dev/kagent/codex-harness@sha256:91f69cef4d02e30c078f866167a103853c4446f315e2aa59e6c4db8696881c85 AS upstream-codex
+
+FROM toolchain AS native-codex
+# Keep the pinned upstream adapter, static Codex CLI and its resources. Only
+# the OS/toolchain changes; kagent still owns execution and sandboxing.
+COPY --from=upstream-codex /usr/local/bin/kagent-codex /usr/local/bin/codex /usr/local/bin/codex-code-mode-host /usr/local/bin/
+COPY --from=upstream-codex /usr/local/codex-package.json /usr/local/
+COPY --from=upstream-codex /usr/local/codex-path /usr/local/codex-path
+COPY --from=upstream-codex /usr/local/codex-resources /usr/local/codex-resources
+ENV HOME=/data
+WORKDIR /data/workspace
+EXPOSE 80 8081
+ENTRYPOINT ["/usr/local/bin/kagent-codex"]
+
+FROM toolchain AS verifier
+COPY --from=build /out/marina /marina
+WORKDIR /work
+ENTRYPOINT ["/marina", "verify"]

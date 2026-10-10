@@ -17,6 +17,7 @@ import (
 )
 
 type controlProviderStub struct {
+	healthError       error
 	listReadyCalls    int
 	work              workcontrol.WorkItem
 	unrelated         []workcontrol.WorkItem
@@ -32,7 +33,33 @@ type controlProviderStub struct {
 	listReadyOnce     sync.Once
 }
 
-func (provider *controlProviderStub) Health(context.Context) error { return nil }
+func (provider *controlProviderStub) Health(context.Context) error { return provider.healthError }
+
+func TestUnavailableProviderDefersControlBeforeHistoricalReads(t *testing.T) {
+	ctx := context.Background()
+	journal, err := sqlite.Open(ctx, filepath.Join(t.TempDir(), "outage.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer journal.Close()
+	identity, err := journal.EnsureInstallationIdentity(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding, err := journal.EnsureProjectBinding(ctx, execution.ProjectBinding{ProjectID: "project-1", Provider: "deck", Repository: "disabled://m1", Runtime: "disabled:m1", PolicyVersion: "m1", ContextConfig: "disabled:m1", ArtifactConfig: "disabled:m1", DeliveryConfig: "disabled:m1", BudgetMinutes: 20, MaxConcurrency: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider := &controlProviderStub{healthError: errors.New("Deck unavailable")}
+	controller, err := reconcile.NewControlController(provider, journal, binding, identity, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cycle := controller.Cycle(ctx)
+	if len(cycle.Errors) != 1 || provider.listReadyCalls != 0 {
+		t.Fatalf("unavailable provider entered ordinary control: %+v discovery=%d", cycle, provider.listReadyCalls)
+	}
+}
 func (provider *controlProviderStub) ListReadyWork(context.Context) ([]workcontrol.WorkItem, error) {
 	provider.listReadyCalls++
 	if provider.listReadyStarted != nil {
@@ -483,5 +510,45 @@ func TestControlControllerRejectsOverlappingCycles(t *testing.T) {
 	close(provider.listReadyRelease)
 	if first := <-firstDone; len(first.Errors) != 0 {
 		t.Fatalf("first cycle = %#v", first)
+	}
+}
+
+func TestOneActiveTaskAcrossConfiguredProjects(t *testing.T) {
+	ctx := context.Background()
+	journal, err := sqlite.Open(ctx, filepath.Join(t.TempDir(), "projects.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer journal.Close()
+	identity, err := journal.EnsureInstallationIdentity(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bindings := []execution.ProjectBinding{}
+	for _, id := range []string{"project-1", "project-2"} {
+		b, err := journal.EnsureProjectBinding(ctx, execution.ProjectBinding{ProjectID: id, Provider: "deck", Repository: "disabled://" + id, Runtime: "disabled:m1", PolicyVersion: "m1", ContextConfig: "disabled:m1", ArtifactConfig: "disabled:m1", DeliveryConfig: "disabled:m1", BudgetMinutes: 20, MaxConcurrency: 1})
+		if err != nil {
+			t.Fatal(err)
+		}
+		bindings = append(bindings, b)
+	}
+	provider := &controlProviderStub{events: map[string]workcontrol.ProjectedEvent{}, work: workcontrol.WorkItem{ID: "task-project-2", ProjectID: "project-2", Title: "Second project", Status: workcontrol.WorkReady, Version: 1, BudgetMinutes: 10, AcceptanceCriteria: "Bound to project 2"}}
+	controller, err := reconcile.NewControlController(provider, journal, bindings[0], identity, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	controller.WithProjectBinding(bindings[1])
+	cycle := controller.Cycle(ctx)
+	if len(cycle.Errors) > 0 || cycle.Acquisitions != 1 {
+		t.Fatalf("project 2 not acquired: %+v", cycle)
+	}
+	records, err := journal.ListActiveExecutions(ctx, 10)
+	if err != nil || len(records) != 1 || records[0].ProjectID != "project-2" || records[0].BindingVersion != bindings[1].Version {
+		t.Fatalf("wrong project binding: %+v %v", records, err)
+	}
+	provider.work = workcontrol.WorkItem{ID: "task-project-1", ProjectID: "project-1", Title: "First project", Status: workcontrol.WorkReady, Version: 1, BudgetMinutes: 10, AcceptanceCriteria: "Wait for second project"}
+	cycle = controller.Cycle(ctx)
+	if cycle.Acquisitions != 0 || provider.claimCalls != 1 {
+		t.Fatalf("second project bypassed global concurrency: %+v claims=%d", cycle, provider.claimCalls)
 	}
 }

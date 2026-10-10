@@ -18,7 +18,7 @@ func TestEngineCredentialWritesOnlyExclusiveSecretWithVersionPrecondition(t *tes
 	spec.Engine = &runtimeapi.EngineSelection{Backend: "kagent", Version: "pinned", Endpoint: "engine", Namespace: "trial", Harness: "codex", Template: "attempt-1", Revision: strings.Repeat("a", 64)}
 	spec.CredentialReferences = []runtimeapi.CredentialReference{{Kind: "engine-gateway", Reference: "secret://trial/attempt-1/gateway", ExpiresAt: spec.DeadlineAt}}
 	key := []byte(strings.Repeat("k", 32))
-	credential := spec.AttemptID + "." + Token(key, spec)
+	credential := spec.AttemptID + "." + runtimeapi.CredentialToken(key, spec)
 	data := base64.StdEncoding.EncodeToString([]byte("dummy"))
 	patches := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -115,29 +115,10 @@ func TestStartReusesExactJobAfterLostResponseAndRejectsChangedSpecification(t *t
 }
 
 func testSpecification() runtimeapi.Specification {
-	return runtimeapi.Specification{ExecutionID: "execution", AttemptID: "attempt", IdempotencyKey: "start:attempt",
+	return runtimeapi.Specification{ExecutionID: "execution", AttemptID: "attempt", IdempotencyKey: "execution:verify",
 		RepositoryURI: "https://git.example/repo.git", SourceRevision: strings.Repeat("a", 40),
 		ContextURI: "https://marina.internal/context", ContextDigest: "sha256:context", HarnessVersion: "worker/v1",
 		Limits:        runtimeapi.Limits{CPUMillis: 1000, MemoryBytes: 1073741824, EphemeralStorageBytes: 1073741824, WallTimeSeconds: 600, MaxProcesses: 128},
 		NetworkPolicy: "worker-restricted", FilesystemPolicy: "ephemeral", AuthorityFence: 1,
 		DeadlineAt: time.Now().UTC().Add(10 * time.Minute), PolicyVersion: "v1"}
-}
-
-func TestAnalysisWorkerUsesOnlyAnInstalledPinnedImage(t *testing.T) {
-	config := Config{ServerURL: "http://localhost:8080", Namespace: "workers", Image: "coding@sha256:" + strings.Repeat("a", 64), WorkerURL: "http://localhost:8090", ServiceAccount: "worker", SigningKey: []byte(strings.Repeat("k", 32)), AdditionalImages: []string{"analysis@sha256:" + strings.Repeat("b", 64)}}
-	adapter, err := New(config, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	spec := testSpecification()
-	spec.WorkerImage = config.AdditionalImages[0]
-	manifest := adapter.manifest(spec, "job", "digest")
-	pod := manifest["spec"].(map[string]any)["template"].(map[string]any)["spec"].(map[string]any)
-	if got := pod["containers"].([]any)[0].(map[string]any)["image"]; got != spec.WorkerImage {
-		t.Fatalf("analysis image=%v", got)
-	}
-	spec.WorkerImage = "unapproved@sha256:" + strings.Repeat("c", 64)
-	if _, err = adapter.Start(context.Background(), spec); err == nil {
-		t.Fatal("unapproved worker image admitted")
-	}
 }

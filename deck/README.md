@@ -5,18 +5,18 @@ by Marina. It stores human intent, budgets, runs, plans, decisions, commands,
 events, evidence metadata, project context, and conversation history in SQLite.
 It does not execute workers or own Marina's journal.
 
-The default workspace is a project conversation, with Tasks and Context tabs.
-Each new project has one channel and one GitHub repository association request.
-The compact task list shows Backlog, Ready, In progress and Done. Successful
-execution appears as Awaiting review until the operator accepts its result.
-Operators can create and authorize tasks, approve a plan, cancel a run, inspect
-its immutable inputs and usage, open its pull request, and download
-digest-checked evidence.
+The workspace has projects, a work overview and a project conversation, with
+task details and project context available alongside them. Each new project has
+one channel and one GitHub repository association request. An evidenced landing
+completes its task automatically and shows its exact commit. Other completed
+results retain their operator acceptance flow. Operators can create and
+authorize tasks, approve a plan, cancel a run, inspect immutable inputs and usage,
+and download digest-checked evidence.
 
 Use the [paired workflow guide](../deploy/kubernetes/first-release/README.md) for
 repository work and the
-[two-workload guide](../deploy/kubernetes/agent-platform/README.md) for the pinned
-diagnostic profile. [VISION.md](../docs/VISION.md) describes the direction,
+[native installation guide](../deploy/kubernetes/agent-platform/README.md) for
+the engine and prepackaged verification toolchain. [VISION.md](../docs/VISION.md) describes the direction,
 [status.md](../docs/status.md) the current state, and
 [ARCHITECTURE.md](../docs/ARCHITECTURE.md) the Deck–Marina boundary.
 
@@ -38,11 +38,11 @@ Deck provides:
 - deterministic project export/import; and
 - an embedded Svelte frontend in the Go binary.
 
-The repository workflow supports cancellation and ends at a verified PR for human
-review or a blocker. Deck can record additional command types, but the current
+The repository workflow supports cancellation and can finish with an evidenced
+commit on main, a verified PR under the legacy profile, or a blocker. Deck can record additional command types, but the current
 Marina workflow rejects pause/resume, replan, retry, and authority reduction.
 Deck also exposes installed workload discovery and idempotent invocation for the
-bounded repository and diagnostic profiles.
+bounded repository profile.
 
 ## Quick start
 
@@ -76,6 +76,14 @@ make build
 make image
 make manifests
 ```
+
+Run the browser suite with `make browser-test`. It builds the embedded frontend
+and starts a disposable Deck process with isolated stores and deterministic
+service-API fixtures. On macOS it uses installed Google Chrome. Linux setup uses
+`web/node_modules/.bin/playwright install --with-deps chromium`; CI performs this
+before testing, and verification images package the same browser during build.
+Tests never install browsers. `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` can select an
+existing executable; `PLAYWRIGHT_BROWSERS_PATH` selects the frozen browser cache.
 
 The frontend design tokens and interaction rules are in
 [web/DESIGN.md](web/DESIGN.md).
@@ -142,9 +150,10 @@ provide credentials or guarantee cluster/model readiness.
 
 Channel messages can become Backlog drafts before criteria are complete.
 Readiness remains the authorization point, with acceptance criteria, budgets and
-permissions checked before eligible repository execution. Dependencies must be
-accepted; code prerequisites also require explicit confirmation of base-branch
-availability. The composer can record explicit agent requests for the optional
+permissions checked before eligible repository execution. Evidenced landed
+prerequisites release dependent tasks without operator acceptance; Marina checks
+their commits remain on the authorized base branch. Other results retain human
+acceptance and code-availability confirmation. The composer can record explicit agent requests for the optional
 conversation profile. Automatic summary maintenance remains planned. Workload invocation
 similarly selects an installed immutable profile and creates one task through an
 idempotent operator request.
@@ -193,6 +202,16 @@ with `project_id` and an exclusive `after_id` event cursor. The service identity
 needs `conversation.invocation.list` and that project's grant. Event order also
 covers invoking a message posted earlier in the channel; each item includes the
 canonical message and invocation time.
+
+Each new invocation also freezes the selected active project-source revisions
+and safe repository binding in the same transaction. `GET
+/api/v1/conversation/invocations/{id}/context` resolves that snapshot through the
+`conversation.context.read` capability and exact project grant. Edits affect new
+invocations; explicit revocation remains visible on the original revisions.
+Restart, request replay and project export/import preserve the selection.
+Invocations created before this snapshot capability return 404 instead of
+silently resolving current project context. The wire shape is the existing
+`ResolvedContext`; thread messages remain canonical immutable data.
 
 Invocation is an operator intent record, not a task or model response. An
 optional Marina profile can consume it through a bounded read-only kagent turn
@@ -262,7 +281,7 @@ share the SQLite file between replicas.
 Deck stores artifact metadata and proxies authorized downloads; Marina owns
 workflow artifact bytes. Deck does not schedule runtimes, mutate source, call
 models, or read Marina's database. Multi-user permissions, federated identity,
-HA, automatic task decomposition, and merge/deploy authority are outside the
+HA, agent-maintained knowledge, and deployment authority are outside the
 current release.
 
 ## Layout
@@ -277,3 +296,43 @@ internal/webui/    embedded frontend
 web/               SvelteKit application
 api/               OpenAPI and canonical fixtures
 ```
+
+## PRD drafts and approval
+
+A conversation outcome may contain `prd: {title, path, content}` instead of a
+task. Deck binds the immutable draft to the invoked repository and displays its
+complete text in the originating thread. Review the draft, choose the time/token
+limits and use **Approve PRD and publish**. Approval authorizes publishing that
+exact document, not implementing its requirements.
+
+`POST /api/v1/operator/messages/{id}/prd/approve` takes `digest`,
+`profile_digest` and `budget`, with an `Idempotency-Key`. It requires an operator
+session (or local operator mode), rejects service bearer credentials and creates
+one thread-linked `repository/v2` task. Exact replay, including a new request key,
+returns the original task. Changed content, repository bindings or approval
+budgets conflict. Task details and the originating thread retain the landed
+commit through the normal workflow. See [decision 0029](../docs/decisions/0029-approved-prd-publication.md)
+and [acceptance status](../docs/status.md).
+
+## PRD tasks and product acceptance
+
+After publication lands, **Propose implementation tasks** records a chat request
+in the same thread. The agent returns an ordered proposal with observable criteria.
+Review the whole list and choose explicit limits per task; **Approve ordered tasks**
+creates all tasks atomically. Each task retains the PRD path and commit, and waits
+for its predecessor to land. The browser shows total limits before approval.
+
+The publication card shows the approved tasks and their landed commits. **Accept
+PRD** binds the current result set once every approved task has current evidence.
+Requested follow-ups invoke the same thread's agent to propose new work; those
+proposals need approval, and their landed results require fresh PRD acceptance.
+Earlier tasks and acceptance history remain readable. See
+[decision 0030](../docs/decisions/0030-ordered-prd-tasks-and-acceptance.md) and
+[current acceptance](../docs/status.md).
+
+The operator APIs are `POST /api/v1/operator/messages/{id}/prd/tasks/approve`,
+`GET /api/v1/operator/tasks/{publication}/prd`, and
+`POST /api/v1/operator/tasks/{publication}/prd/accept`. Mutations require an
+idempotency key and reject service bearer credentials. Matching provider/consumer
+releases advertise `conversation.prd.tasks`; proposals use the existing bounded
+conversation outcome route and grant no execution authority.

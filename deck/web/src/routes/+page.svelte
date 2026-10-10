@@ -10,7 +10,7 @@
  import CreateTaskModal from '$lib/components/CreateTaskModal.svelte';
  import { modal } from '$lib/dialog';
  import { api, subscribeToEvents, type OperatorSession } from '$lib/api';
- import { projectTasks, taskLabel } from '$lib/project-work';
+ import { projectTasks, taskLabel, taskStage } from '$lib/project-work';
  import type { Task, TaskDetail, Agent, Decision, CreateTaskInput, UpdateTaskInput, TaskStatus, AppEvent, ProjectChannel } from '$lib/types';
 
  let session:OperatorSession|null=null;
@@ -27,7 +27,7 @@
  $: project=projects.find(p=>p.project.id===selectedProjectID)??projects[0];
  $: tasks=projectTasks(allTasks,project?.project.id??'');
  $: projectDecisions=decisions.filter(d=>tasks.some(t=>t.id===d.task_id));
- $: attention=tasks.filter(t=>['blocked','failed','waiting_decision'].includes(t.status)||(t.status==='done'&&!t.review));
+ $: attention=tasks.filter(t=>['blocked','failed','waiting_decision'].includes(t.status)||(t.status==='done'&&taskStage(t)!=='done'));
  $: archive=allTasks.filter(t=>t.archived&&t.project_id===project?.project.id);
  $: repo=project?.repository.binding?.repository||project?.repository.repository;
 
@@ -51,7 +51,7 @@
   finally{loading=false;}
  }
  function handleEvent(event:AppEvent){
-  if(event.type.startsWith('channel.')||event.type.startsWith('conversation.')||event.type.startsWith('run.')||event.type.startsWith('command.')||event.type.startsWith('decision.')||event.type==='plan.changes_requested'||event.type==='task.promoted_from_channel')channelRefreshVersion++;
+  if(event.type.startsWith('channel.')||event.type.startsWith('conversation.')||event.type.startsWith('prd.')||event.type.startsWith('run.')||event.type.startsWith('command.')||event.type.startsWith('decision.')||event.type==='plan.changes_requested'||event.type==='task.promoted_from_channel')channelRefreshVersion++;
   if(event.type==='task.deleted'&&selectedDetail?.task.id===event.payload?.task_id)selectedDetail=null;
   if(timer)clearTimeout(timer);
   timer=setTimeout(async()=>{await load();if(selectedDetail&&event.task_id===selectedDetail.task.id)await refreshSelected();},150);

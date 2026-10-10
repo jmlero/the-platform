@@ -21,7 +21,7 @@ message ID. SQLite `integrity_check` returned `ok`.
 The restart request preceded this turn's journal creation. This establishes
 queued-turn delivery across a Marina restart; it does **not** establish a
 restart during a model call or the core repository-work restart row of the
-[failure matrix](../plans/kagent-integration.md#mandatory-failure-matrix).
+[failure matrix](https://github.com/jmlero/the-platform/blob/b7ccd54cdf79f3f669d23c75eb5c9840f43de953/docs/plans/kagent-integration.md#mandatory-failure-matrix).
 
 ## KINT-10: retained copy, image upgrade and rollback
 

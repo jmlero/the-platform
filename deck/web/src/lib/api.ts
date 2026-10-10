@@ -1,5 +1,5 @@
 import type {
-  ProjectChannel, ConversationThread, ConversationInvocation, ConversationQuestion, ContextSource, ContextSourceInput, ResolvedContext, RepositoryRequest, RepositoryRequestInput,
+  WorkloadProfile, PRDApproval, PRDProgress, ProjectChannel, ConversationThread, ConversationInvocation, ConversationQuestion, ContextSource, ContextSourceInput, ResolvedContext, RepositoryRequest, RepositoryRequestInput,
   AppEvent,
   Bootstrap,
   Channel,
@@ -63,6 +63,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+ workloads:(project:string)=>request<{profiles:WorkloadProfile[];expires_at:number}>(`/api/v1/operator/projects/${encodeURIComponent(project)}/workloads`),
+ approvePRDTasks:(message:string,input:PRDApproval,key:string)=>request<Task[]>(`/api/v1/operator/messages/${encodeURIComponent(message)}/prd/tasks/approve`,{method:'POST',headers:{'Idempotency-Key':key},body:JSON.stringify(input)}),
+ prdProgress:(task:string)=>request<PRDProgress>(`/api/v1/operator/tasks/${encodeURIComponent(task)}/prd`),
+ acceptPRD:(task:string,digest:string,key:string)=>request<PRDProgress>(`/api/v1/operator/tasks/${encodeURIComponent(task)}/prd/accept`,{method:'POST',headers:{'Idempotency-Key':key},body:JSON.stringify({results_digest:digest})}),
+ approvePRD:(message:string,input:PRDApproval,key:string)=>request<Task>(`/api/v1/operator/messages/${encodeURIComponent(message)}/prd/approve`,{method:'POST',headers:{'Idempotency-Key':key},body:JSON.stringify(input)}),
  projects: () => request<ProjectChannel[]>('/api/v1/operator/projects'),
  createProject: (repository:string, base_branch:string) => request<ProjectChannel>('/api/v1/operator/projects', {method:'POST',body:JSON.stringify({repository,base_branch})}),
  acceptTask: (task:Task, source_available:boolean) => request<Task>(`/api/v1/operator/tasks/${task.id}/accept`, {method:'POST',body:JSON.stringify({version:task.version,source_available})}),

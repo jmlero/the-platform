@@ -1,3 +1,4 @@
+import json
 import pathlib
 import re
 import subprocess
@@ -6,6 +7,18 @@ import unittest
 
 
 class LocalPreparationTest(unittest.TestCase):
+    def test_conversation_context_read_is_granted_only_for_the_bound_project(self):
+        root = pathlib.Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as directory:
+            output = pathlib.Path(directory) / "installation"
+            result = subprocess.run(
+                ["python3", str(root / "scripts/prepare-installation.py"),
+                 "--local-podman", str(output)], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            identity = json.loads((output / "service-auth.json").read_text())["identities"][0]
+            self.assertIn("conversation.context.read", identity["capabilities"])
+            self.assertEqual(identity["projects"], ["prj_default"])
+
     def test_local_deck_opens_without_operator_login_and_keeps_service_auth(self):
         root = pathlib.Path(__file__).resolve().parents[1]
         for profile in ("local-podman", "local-podman-workflow"):

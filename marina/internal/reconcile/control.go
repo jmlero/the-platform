@@ -58,9 +58,14 @@ type ControlCycle struct {
 }
 
 type ControlController struct {
-	provider          ControlProvider
-	journal           ControlJournal
-	binding           execution.ProjectBinding
+	provider        ControlProvider
+	journal         ControlJournal
+	binding         execution.ProjectBinding
+	projectBindings map[string]execution.ProjectBinding
+	projectLimits   map[string]struct {
+		Attempts int
+		Tokens   int64
+	}
 	identity          execution.InstallationIdentity
 	lease             time.Duration
 	operationTimeout  time.Duration
@@ -102,6 +107,36 @@ func (controller *ControlController) WithCommandHandler(handler func(context.Con
 	return controller
 }
 
+// WithProjectBinding admits one explicitly installed project, without granting
+// discovery for other projects or increasing the installation's concurrency.
+func (controller *ControlController) WithProjectBinding(binding execution.ProjectBinding) *ControlController {
+	if controller.projectBindings == nil {
+		controller.projectBindings = map[string]execution.ProjectBinding{controller.binding.ProjectID: controller.binding}
+	}
+	controller.projectBindings[binding.ProjectID] = binding
+	return controller
+}
+func (controller *ControlController) WithProjectExecutionLimits(project string, attempts int, tokens int64) *ControlController {
+	if controller.projectLimits == nil {
+		controller.projectLimits = map[string]struct {
+			Attempts int
+			Tokens   int64
+		}{}
+	}
+	controller.projectLimits[project] = struct {
+		Attempts int
+		Tokens   int64
+	}{attempts, tokens}
+	return controller
+}
+func (controller *ControlController) projectBinding(project string) (execution.ProjectBinding, bool) {
+	if controller.projectBindings != nil {
+		binding, ok := controller.projectBindings[project]
+		return binding, ok
+	}
+	return controller.binding, project == controller.binding.ProjectID
+}
+
 func NewControlController(provider ControlProvider, journal ControlJournal, binding execution.ProjectBinding,
 	identity execution.InstallationIdentity, lease time.Duration) (*ControlController, error) {
 	if provider == nil || journal == nil || binding.ProjectID == "" || binding.Version < 1 ||
@@ -123,6 +158,15 @@ func (controller *ControlController) Cycle(ctx context.Context) ControlCycle {
 		return cycle
 	}
 	defer controller.cycleMu.Unlock()
+	// An outage must not turn a scan of historical commands into hundreds of
+	// sequential network timeouts ahead of local lease-expiry enforcement.
+	healthCtx, cancel := context.WithTimeout(ctx, controller.operationTimeout)
+	err := controller.provider.Health(healthCtx)
+	cancel()
+	if err != nil {
+		cycle.Errors = append(cycle.Errors, err)
+		return cycle
+	}
 	controller.recoverAcquisitions(ctx, &cycle)
 	if !controller.intakeDisabled {
 		controller.intake(ctx, &cycle)
@@ -148,12 +192,20 @@ func (controller *ControlController) recoverAcquisitions(ctx context.Context, cy
 }
 
 func (controller *ControlController) intake(ctx context.Context, cycle *ControlCycle) {
-	active, err := controller.journal.CountActiveExecutionsForProject(ctx, controller.binding.ProjectID)
+	records, err := controller.journal.ListActiveExecutions(ctx, 1)
 	if err != nil {
 		cycle.Errors = append(cycle.Errors, err)
 		return
 	}
-	if active >= controller.binding.MaxConcurrency {
+	if len(records) > 0 {
+		return
+	}
+	pending, err := controller.journal.ListUnresolvedAcquisitions(ctx, 1)
+	if err != nil {
+		cycle.Errors = append(cycle.Errors, err)
+		return
+	}
+	if len(pending) > 0 {
 		return
 	}
 	operationCtx, cancel := context.WithTimeout(ctx, controller.operationTimeout)
@@ -167,7 +219,8 @@ func (controller *ControlController) intake(ctx context.Context, cycle *ControlC
 		if controller.intakeWorkID != "" && item.ID != controller.intakeWorkID {
 			continue
 		}
-		if item.ProjectID != controller.binding.ProjectID || active >= controller.binding.MaxConcurrency {
+		binding, configured := controller.projectBinding(item.ProjectID)
+		if !configured {
 			continue
 		}
 		digest := workDigest(item)
@@ -183,7 +236,7 @@ func (controller *ControlController) intake(ctx context.Context, cycle *ControlC
 			AcceptanceCriteriaDigest: hex.EncodeToString(acceptanceDigest[:]),
 			ClaimKey:                 fmt.Sprintf("claim:%s:%s:v%d", item.ProjectID, item.ID, item.Version),
 			AgentID:                  controller.identity.LogicalAgentID, LeaseSeconds: int(controller.lease / time.Second),
-			BudgetMinutes: min(item.BudgetMinutes, controller.binding.BudgetMinutes),
+			BudgetMinutes: min(item.BudgetMinutes, binding.BudgetMinutes),
 		})
 		if err != nil {
 			cycle.Errors = append(cycle.Errors, err)
@@ -194,10 +247,10 @@ func (controller *ControlController) intake(ctx context.Context, cycle *ControlC
 		}
 		if err := controller.processAcquisition(ctx, intent); err != nil {
 			cycle.Errors = append(cycle.Errors, err)
-			continue
+			return
 		}
 		cycle.Acquisitions++
-		active++
+		return
 	}
 }
 
@@ -214,6 +267,9 @@ func workDigest(item workcontrol.WorkItem) string {
 }
 
 func (controller *ControlController) processAcquisition(ctx context.Context, intent execution.AcquisitionIntent) error {
+	if _, configured := controller.projectBinding(intent.ProjectID); !configured {
+		return fmt.Errorf("acquisition project is not installed: %w", execution.ErrConflict)
+	}
 	if intent.Status == "pending" {
 		operationCtx, cancel := context.WithTimeout(ctx, controller.operationTimeout)
 		run, err := controller.provider.LookupClaim(operationCtx, intent.ProjectID, intent.ClaimKey)
@@ -282,15 +338,23 @@ func (controller *ControlController) processAcquisition(ctx context.Context, int
 	if err != nil {
 		return err
 	}
+	binding, configured := controller.projectBinding(intent.ProjectID)
+	if !configured {
+		return fmt.Errorf("acquisition project is not installed: %w", execution.ErrConflict)
+	}
+	attempts, tokens := controller.executionAttempts, controller.executionTokens
+	if limit, ok := controller.projectLimits[intent.ProjectID]; ok {
+		attempts, tokens = limit.Attempts, limit.Tokens
+	}
 	deadline := intent.CreatedAt.Add(time.Duration(intent.BudgetMinutes) * time.Minute)
 	budget := execution.Budget{DeadlineAt: deadline, MaxAttempts: controller.maxRetries, MaxTokens: 1}
-	if controller.executionTokens > 0 && controller.executionAttempts > 0 {
+	if tokens > 0 && attempts > 0 {
 		var task workcontrol.WorkItem
 		if err := json.Unmarshal([]byte(intent.TaskSnapshot), &task); err != nil {
 			return fmt.Errorf("runtime intake requires a frozen task snapshot: %w", err)
 		}
-		budget.MaxAttempts = controller.executionAttempts
-		budget.MaxTokens = controller.executionTokens
+		budget.MaxAttempts = attempts
+		budget.MaxTokens = tokens
 		if task.Budget.MaxAttempts > 0 {
 			budget.MaxAttempts = min(budget.MaxAttempts, task.Budget.MaxAttempts)
 		}
@@ -304,7 +368,7 @@ func (controller *ControlController) processAcquisition(ctx context.Context, int
 			budget.DeadlineAt = *task.Budget.DeadlineAt
 		}
 	}
-	bindingVersion := controller.binding.Version
+	bindingVersion := binding.Version
 	var boundTask workcontrol.WorkItem
 	if intent.TaskSnapshot != "" {
 		if err := json.Unmarshal([]byte(intent.TaskSnapshot), &boundTask); err != nil {
@@ -318,7 +382,7 @@ func (controller *ControlController) processAcquisition(ctx context.Context, int
 		}
 	}
 	record, _, err := controller.journal.EnsureExecution(ctx, execution.NewExecution{
-		WorkProvider: controller.binding.Provider, ProjectID: intent.ProjectID, ExternalWorkID: intent.WorkID,
+		WorkProvider: binding.Provider, ProjectID: intent.ProjectID, ExternalWorkID: intent.WorkID,
 		ExternalRunID: intent.ExternalRunID, AgentID: intent.AgentID, ExternalRunVersion: intent.ExternalVersion,
 		FenceToken: intent.FenceToken, TaskVersion: intent.TaskVersion, TaskDigest: intent.TaskDigest,
 		BindingVersion: bindingVersion, LeaseExpiresAt: *intent.LeaseExpiresAt,

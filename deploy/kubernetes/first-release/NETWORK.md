@@ -15,7 +15,7 @@ traffic, node image loading, and build/setup downloads.
 | Marina | `https://kubernetes.default.svc:443` and its observed API endpoint | Job/Pod/configuration lifecycle under Marina's service identity. The local endpoint is `10.89.0.2:6443`; the service is `10.96.0.1:443`. Workers have neither this access nor an API token. |
 | Marina | `https://api.github.com/repos/jmlero/marina-acceptance/...` | Git refs, trees/blobs, commits, PR publication, CI statuses and review observations. Controller-only credential, never mounted in workers. The local pilot uses the operator-approved [classic-token exception](../../../docs/validation/github-credential-2026-09-21.md). |
 | Marina source gateway | `https://github.com/jmlero/marina-acceptance.git/info/refs?service=git-upload-pack` and `/git-upload-pack` | Authenticated Git smart-HTTP reads of the pinned repository for workers. No Git LFS, submodule downloads or archive service is required by the fixture. |
-| Marina model gateway | `https://openrouter.ai/api/v1/responses` | Task/code/tool input, generated output and usage. OpenRouter credential stays in Marina. The local pilot uses `z-ai/glm-5.3-flash` within the €5 total test budget; [live evidence and accounting limits](../../../docs/validation/poc-mvp-2026-09-21.md). |
+| Marina model gateway | `https://openrouter.ai/api/v1/responses` | Task/code/tool input, generated output and usage. OpenRouter credential stays in Marina. The model and cap are explicit installation/test choices; [current local acceptance](../../../docs/validation/kint-12-17-2026-10-01.md) records `openai/gpt-6-luna` and the bounded test authorization. |
 | Platform Pods | Cluster DNS, UDP/TCP 53 in `kube-system` | Internal names and external DNS queries. This is a separate allowed channel, not a guarantee that workers cannot send data in DNS queries. |
 
 The source and GitHub API clients and model gateway reject redirects instead of
@@ -35,7 +35,7 @@ No model request was made during the local network probes.
 
 | Phase | Destinations | Treatment |
 | --- | --- | --- |
-| This local image installation | Host-to-Podman/Kind image archive import | All three application images are loaded locally and selected by imported manifest digest. No GHCR pull is needed for these checks. |
+| This local image installation | Host-to-Podman/Kind image archive import | Deck, Marina and verifier images are loaded locally and selected by imported manifest digest. No GHCR pull is needed for these checks. |
 | Future published image pulls | `ghcr.io:443`, including `/v2/` and token exchange; blob delivery can use `pkg-containers.githubusercontent.com:443` | Node/registry-client traffic, separate from Pod NetworkPolicy. Inspect the selected image's actual redirect chain before remote acceptance. No GHCR image publication or authenticated pull was validated here. |
 | Image build | Docker Hub base images, Debian package mirrors, npm registry, Go module proxy/checksum services as required by the existing Dockerfiles | Preparation traffic. Packages and tools are installed before workers start. |
 | Cluster setup | Kind/node images, Kubernetes image registry, Calico images/manifests and local-path storage components | Preparation traffic. Existing local components were reused. |
@@ -82,7 +82,7 @@ overlay with intake disabled and wait for Marina's rollout before probing.
 
 ```sh
 python3 scripts/verify-local-podman-acceptance.py \
-  localhost/the-platform/marina-worker@sha256:1f7217c2a81066b297a198daee855a3aabeee3469ed8726d8fac4765fc62b12b
+  localhost/the-platform/marina-verifier@sha256:YOUR_IMPORTED_VERIFIER_MANIFEST
 ```
 
 Three disposable Jobs establish an unrestricted baseline, test the actual

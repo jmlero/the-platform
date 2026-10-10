@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -13,7 +12,6 @@ import (
 
 	"github.com/jmlero/the-platform/marina/internal/execution"
 	"github.com/jmlero/the-platform/marina/internal/journal/sqlite"
-	"github.com/jmlero/the-platform/marina/internal/kubernetes"
 	runtimeapi "github.com/jmlero/the-platform/marina/internal/runtime"
 	"github.com/jmlero/the-platform/marina/internal/workcontrol"
 )
@@ -29,7 +27,7 @@ func (body interruptedModelBody) Read(p []byte) (int, error) {
 }
 
 func TestModelBudgetRequiresCompleteTerminalUsage(t *testing.T) {
-	for _, workload := range []string{"repository", "analysis"} {
+	for _, workload := range []string{"repository"} {
 		t.Run(workload, func(t *testing.T) {
 			for _, tc := range []struct {
 				name, payload              string
@@ -69,6 +67,7 @@ func TestModelBudgetRequiresCompleteTerminalUsage(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
+					bindEngineForCalls(t, journal, attempt.Specification)
 					input, _ := json.Marshal(gatewayWorkloadInput(workload, attempt.Specification))
 					_, _, _, err = journal.SaveCheckpoint(ctx, record.ID, record.Version, execution.CheckpointInput{Key: "worker-input:" + attempt.ID, Phase: "worker_input", Payload: map[string]any{"input": string(input)}})
 					if err != nil {
@@ -91,11 +90,8 @@ func TestModelBudgetRequiresCompleteTerminalUsage(t *testing.T) {
 						}
 						return &http.Response{StatusCode: status, Header: http.Header{"Content-Type": []string{contentType}}, Body: io.NopCloser(body)}, nil
 					})}
-					server := New(Config{SigningKey: key, Model: Model{Endpoint: "https://model.example/v1", Name: "fixture", MaxOutputTokens: 100, InputMicrosPerMillion: 1000000, OutputMicrosPerMillion: 1000000}}, journal, nil, p, client)
-					r := httptest.NewRequest("POST", "/workers/"+attempt.ID+"/model/v1/responses", strings.NewReader(`{"input":"hello"}`))
-					r.Header.Set("Authorization", "Bearer "+kubernetes.Token(key, attempt.Specification))
-					w := httptest.NewRecorder()
-					server.ServeHTTP(w, r)
+					server := New(Config{SigningKey: key, ContextCheck: func(context.Context, execution.Execution) error { return nil }, Model: Model{Endpoint: "https://model.example/v1", Name: "fixture", MaxOutputTokens: 100, InputMicrosPerMillion: 1000000, OutputMicrosPerMillion: 1000000}}, journal, nil, p, client)
+					w := engineRequest(server, "POST", "/engine/model/v1/responses", attempt.ID+"."+runtimeapi.CredentialToken(key, attempt.Specification), `{"input":"hello"}`)
 					wantStatus := 200
 					if tc.status == 503 {
 						wantStatus = 502

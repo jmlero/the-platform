@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/jmlero/the-platform/marina/internal/journal/sqlite"
-	"github.com/jmlero/the-platform/marina/internal/kubernetes"
 	rt "github.com/jmlero/the-platform/marina/internal/runtime"
 	"github.com/jmlero/the-platform/marina/internal/workcontrol"
 	"github.com/jmlero/the-platform/marina/internal/workerapi"
@@ -61,7 +60,7 @@ func TestGatewayDeniesToolsAndSecondModelCall(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 			t.Fatal(err)
 		}
-		if request.Text.Format.Type != "json_schema" || request.Text.Format.Name != "conversation_reply" || !request.Text.Format.Strict || len(request.Text.Format.Schema.Required) != 3 {
+		if request.Text.Format.Type != "json_schema" || request.Text.Format.Name != "conversation_reply" || !request.Text.Format.Strict || len(request.Text.Format.Schema.Required) != 5 {
 			t.Fatalf("conversation output format not constrained: %+v", request.Text.Format)
 		}
 		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"output":[{"type":"message","content":[{"type":"output_text","text":"Hello"}]}],"usage":{"input_tokens":10,"output_tokens":5}}`))}, nil
@@ -77,7 +76,7 @@ func TestGatewayDeniesToolsAndSecondModelCall(t *testing.T) {
 	call := func(body string) int {
 		r := httptest.NewRequest(http.MethodPost, "https://marina.example/conversation/model/v1/responses", bytes.NewBufferString(body))
 		r.TLS = &tls.ConnectionState{}
-		r.Header.Set("Authorization", "Bearer "+message.ID+"."+kubernetes.Token(key, spec))
+		r.Header.Set("Authorization", "Bearer "+message.ID+"."+rt.CredentialToken(key, spec))
 		w := httptest.NewRecorder()
 		gateway.ServeHTTP(w, r)
 		return w.Code

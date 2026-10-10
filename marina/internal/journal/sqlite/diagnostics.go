@@ -15,20 +15,41 @@ import (
 const diagnosticSchemaVersion = "marina-diagnostics/v1"
 
 type diagnosticExport struct {
-	ModelCalls       []diagnosticModelCall      `json:"model_calls"`
-	ToolDecisions    []diagnosticToolDecision   `json:"tool_decisions"`
-	RuntimeArtifacts []diagnosticArtifact       `json:"runtime_artifacts"`
-	SchemaVersion    string                     `json:"schema_version"`
-	GeneratedAt      time.Time                  `json:"generated_at"`
-	Counts           map[string]int64           `json:"counts"`
-	Executions       []diagnosticExecution      `json:"executions"`
-	Checkpoints      []diagnosticCheckpoint     `json:"checkpoints"`
-	Evidence         []diagnosticEvidence       `json:"evidence"`
-	Events           []diagnosticEvent          `json:"events"`
-	RuntimeAttempts  []diagnosticRuntimeAttempt `json:"runtime_attempts"`
-	ContextPackages  []diagnosticContextPackage `json:"context_packages"`
-	PolicySnapshots  []diagnosticPolicySnapshot `json:"policy_snapshots"`
-	Signals          []diagnosticSignal         `json:"signals"`
+	ConversationTurns []diagnosticConversationTurn `json:"conversation_turns"`
+	ModelCalls        []diagnosticModelCall        `json:"model_calls"`
+	ToolDecisions     []diagnosticToolDecision     `json:"tool_decisions"`
+	RuntimeArtifacts  []diagnosticArtifact         `json:"runtime_artifacts"`
+	SchemaVersion     string                       `json:"schema_version"`
+	GeneratedAt       time.Time                    `json:"generated_at"`
+	Counts            map[string]int64             `json:"counts"`
+	Executions        []diagnosticExecution        `json:"executions"`
+	Checkpoints       []diagnosticCheckpoint       `json:"checkpoints"`
+	Evidence          []diagnosticEvidence         `json:"evidence"`
+	Events            []diagnosticEvent            `json:"events"`
+	RuntimeAttempts   []diagnosticRuntimeAttempt   `json:"runtime_attempts"`
+	ContextPackages   []diagnosticContextPackage   `json:"context_packages"`
+	PolicySnapshots   []diagnosticPolicySnapshot   `json:"policy_snapshots"`
+	Signals           []diagnosticSignal           `json:"signals"`
+}
+
+// Conversation diagnostics expose durable accounting and publication identity,
+// never conversation text, prompts, or the engine's private configuration.
+type diagnosticConversationTurn struct {
+	MessageID           string `json:"message_id"`
+	ProjectID           string `json:"project_id"`
+	ChannelID           string `json:"channel_id"`
+	ThreadID            string `json:"thread_id"`
+	AgentID             string `json:"agent_id"`
+	Status              string `json:"status"`
+	SpecificationDigest string `json:"specification_digest"`
+	ResultDigest        string `json:"result_digest"`
+	DeadlineAt          int64  `json:"deadline_at_unix_milli"`
+	MaxTokens           int64  `json:"max_tokens"`
+	ReservedTokens      int64  `json:"reserved_tokens"`
+	UsedTokens          int64  `json:"used_tokens"`
+	ModelCallStatus     string `json:"model_call_status"`
+	PublishedMessageID  string `json:"published_message_id,omitempty"`
+	PublishedTaskID     string `json:"published_task_id,omitempty"`
 }
 
 type diagnosticExecution struct {
@@ -139,10 +160,12 @@ func (store *Store) ExportDiagnostics(ctx context.Context) ([]byte, error) {
 		Executions: []diagnosticExecution{}, Checkpoints: []diagnosticCheckpoint{}, Evidence: []diagnosticEvidence{},
 		Events: []diagnosticEvent{}, RuntimeAttempts: []diagnosticRuntimeAttempt{}, ContextPackages: []diagnosticContextPackage{},
 		PolicySnapshots: []diagnosticPolicySnapshot{}, Signals: []diagnosticSignal{},
+		ConversationTurns: []diagnosticConversationTurn{},
 	}
 	for _, table := range []string{
 		"executions", "checkpoints", "evidence", "events", "acquisition_intents", "provider_outbox",
 		"runtime_attempts", "runtime_artifacts", "context_packages", "policy_snapshots", "validated_signals",
+		"conversation_turns", "conversation_engine_attempts", "conversation_artifacts",
 	} {
 		var count int64
 		if err := store.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+table).Scan(&count); err != nil {
@@ -154,6 +177,7 @@ func (store *Store) ExportDiagnostics(ctx context.Context) ([]byte, error) {
 		store.exportDiagnosticExecutions, store.exportDiagnosticCheckpoints, store.exportDiagnosticEvidence,
 		store.exportDiagnosticEvents, store.exportDiagnosticRuntimeAttempts, store.exportDiagnosticContextPackages,
 		store.exportDiagnosticPolicies, store.exportDiagnosticSignals, store.exportDiagnosticModelCalls, store.exportDiagnosticToolDecisions, store.exportDiagnosticArtifacts,
+		store.exportDiagnosticConversationTurns,
 	}
 	for _, load := range loaders {
 		if err := load(ctx, &export); err != nil {
@@ -165,6 +189,26 @@ func (store *Store) ExportDiagnostics(ctx context.Context) ([]byte, error) {
 		return nil, fmt.Errorf("encode diagnostic export: %w", err)
 	}
 	return append(encoded, '\n'), nil
+}
+
+func (store *Store) exportDiagnosticConversationTurns(ctx context.Context, export *diagnosticExport) error {
+	rows, err := store.db.QueryContext(ctx, `SELECT message_id, project_id, channel_id, thread_id, agent_id, status,
+		specification_digest, result_digest, deadline_at, max_tokens, reserved_tokens, used_tokens, model_call_status,
+		published_message_id, published_task_id FROM conversation_turns ORDER BY message_id`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var item diagnosticConversationTurn
+		if err := rows.Scan(&item.MessageID, &item.ProjectID, &item.ChannelID, &item.ThreadID, &item.AgentID, &item.Status,
+			&item.SpecificationDigest, &item.ResultDigest, &item.DeadlineAt, &item.MaxTokens, &item.ReservedTokens,
+			&item.UsedTokens, &item.ModelCallStatus, &item.PublishedMessageID, &item.PublishedTaskID); err != nil {
+			return err
+		}
+		export.ConversationTurns = append(export.ConversationTurns, item)
+	}
+	return rows.Err()
 }
 
 func (store *Store) exportDiagnosticExecutions(ctx context.Context, export *diagnosticExport) error {

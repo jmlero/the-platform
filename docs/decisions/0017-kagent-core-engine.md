@@ -19,7 +19,7 @@ source publication, independent verification, evidence admission and durable
 cross-system reconciliation. kagent owns harness execution, engine interactions
 and runtime lifecycle. Integrate through public APIs and keep separate stores.
 
-The [implementation and removal plan](../plans/kagent-integration.md) defines
+The [implementation and removal plan](https://github.com/jmlero/the-platform/blob/b7ccd54cdf79f3f669d23c75eb5c9840f43de953/docs/plans/kagent-integration.md) defines
 dependencies, file-level removal candidates, acceptance, cutover and rollback.
 Its stable KINT tasks are tracked in [the backlog](../backlog.md). Reuse native Codex;
 preserve the chosen LangChain workload through BYO initially. A deterministic

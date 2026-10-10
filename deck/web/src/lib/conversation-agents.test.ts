@@ -18,3 +18,8 @@ describe('conversation agent selection', () => {
     expect(mentionedConversationAgent('@foreign investigate', agents, 'prj_default')).toBeUndefined();
   });
 });
+
+it('ignores a registered worker whose capabilities are null or absent', () => {
+ const missing = [{...agents[2],capabilities:null},{...agents[2],id:'missing',capabilities:undefined}] as unknown as Agent[];
+ expect(configuredConversationAgents([...missing,...agents],'prj_default').map(agent=>agent.id)).toEqual(['agt_codex']);
+});

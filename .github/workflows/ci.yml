@@ -38,8 +38,25 @@ jobs:
       - name: Install Deck frontend dependencies
         run: npm --prefix deck/web ci
 
+      - name: Install browser test toolchain
+        run: deck/web/node_modules/.bin/playwright install --with-deps chromium
+
       - name: Run independent product checks
         run: make check
+
+      - name: Run Deck browser end-to-end tests
+        run: make -C deck browser-test
+
+      - name: Retain browser failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deck-browser-failures
+          path: |
+            deck/web/test-results/
+            deck/web/playwright-report/
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Run real-process work-control conformance
         run: make conformance

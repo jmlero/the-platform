@@ -338,20 +338,27 @@ func (store *Store) RecordRuntimeObservation(
 	now := store.now()
 	result, err := transaction.ExecContext(ctx, `
 		UPDATE runtime_attempts SET provider_handle = ?, state = ?, heartbeat_at = ?,
-			usage_json = ?, output_refs_json = ?, outputs_collected = ?, version = version + 1, updated_at = ?
+			usage_json = ?, output_refs_json = ?, outputs_collected = ?, failure_class = ?, failure_message = ?, version = version + 1, updated_at = ?
 		WHERE id = ? AND version = ?
 	`, strings.TrimSpace(observation.ProviderHandle), observation.State, heartbeat, string(usage), string(outputs),
-		boolInt(outputsCollected), now.UnixMilli(), attemptID, expectedVersion)
+		boolInt(outputsCollected), observation.FailureClass, observation.FailureMessage, now.UnixMilli(), attemptID, expectedVersion)
 	if err != nil {
 		return runtimeapi.Attempt{}, fmt.Errorf("record runtime observation: %w", err)
 	}
 	if err := requireOneMutation(result); err != nil {
 		return runtimeapi.Attempt{}, err
 	}
+	tokens, cost := observation.Usage.Tokens, observation.Usage.CostMicros
+	if current.Specification.Engine != nil {
+		// The gateway records actual engine model usage in FinishModelCall.
+		// Runtime observations may include pending reservations; retain them on
+		// the attempt without promoting them to spent execution budget.
+		tokens, cost = 0, 0
+	}
 	if _, err := transaction.ExecContext(ctx, `
 		UPDATE executions SET used_tokens = MAX(used_tokens, ?), used_cost_micros = MAX(used_cost_micros, ?),
 			runtime_handle = ?, updated_at = ? WHERE id = ?
-	`, observation.Usage.Tokens, observation.Usage.CostMicros, strings.TrimSpace(observation.ProviderHandle),
+	`, tokens, cost, strings.TrimSpace(observation.ProviderHandle),
 		now.UnixMilli(), current.ExecutionID); err != nil {
 		return runtimeapi.Attempt{}, fmt.Errorf("record runtime usage: %w", err)
 	}

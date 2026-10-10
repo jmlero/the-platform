@@ -4,6 +4,7 @@ package workresult
 
 import (
 	"bytes"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,7 +15,6 @@ import (
 	"time"
 
 	a2a "github.com/a2aproject/a2a-go/v2/a2apb/v1"
-	"github.com/jmlero/the-platform/marina/internal/analysis"
 	"github.com/jmlero/the-platform/marina/internal/artifacts"
 	"google.golang.org/protobuf/encoding/protojson"
 )
@@ -47,27 +47,41 @@ type CheckResult struct {
 }
 
 type Result struct {
-	Analysis       *analysis.Report `json:"analysis,omitempty"`
-	InputDigest    string           `json:"input_digest,omitempty"`
-	ProfileDigest  string           `json:"profile_digest,omitempty"`
-	Stage          string           `json:"stage"`
-	SourceRevision string           `json:"source_revision"`
-	Summary        string           `json:"summary"`
-	Changes        []Change         `json:"changes,omitempty"`
-	Checks         []CheckResult    `json:"checks,omitempty"`
-	Tokens         int64            `json:"tokens"`
-	ObservedAt     time.Time        `json:"observed_at"`
+	BlockingReason string        `json:"blocking_reason,omitempty"`
+	InputDigest    string        `json:"input_digest,omitempty"`
+	ProfileDigest  string        `json:"profile_digest,omitempty"`
+	Stage          string        `json:"stage"`
+	SourceRevision string        `json:"source_revision"`
+	Summary        string        `json:"summary"`
+	Changes        []Change      `json:"changes,omitempty"`
+	Checks         []CheckResult `json:"checks,omitempty"`
+	Tokens         int64         `json:"tokens"`
+	ObservedAt     time.Time     `json:"observed_at"`
+	Repair         *RepairPlan   `json:"repair,omitempty"`
+	Review         *Review       `json:"review,omitempty"`
+}
+
+// RepairPlan is a proposal, not authority. Marina records it before starting
+// implementation and compares it with the exact failure and earlier attempts.
+type RepairPlan struct {
+	Diagnosis     string `json:"diagnosis"`
+	Approach      string `json:"approach"`
+	FailureDigest string `json:"failure_digest"`
+	CanRepair     bool   `json:"can_repair"`
+	Disputed      bool   `json:"disputed,omitempty"`
 }
 
 type Expected struct {
-	Stage          string
-	SourceRevision string
-	InputDigest    string
-	ProfileDigest  string
-	AllowedPaths   []string
-	Checks         []Check
-	NotBefore      time.Time
-	Now            time.Time
+	AllowBlockReason bool
+	Stage            string
+	SourceRevision   string
+	InputDigest      string
+	ProfileDigest    string
+	PatchDigest      string
+	AllowedPaths     []string
+	Checks           []Check
+	NotBefore        time.Time
+	Now              time.Time
 }
 
 func AllowedPath(scopes []string, name string) bool {
@@ -114,7 +128,13 @@ func Parse(data []byte, want Expected) (Result, error) {
 	}
 	switch want.Stage {
 	case "implement":
-		if result.Analysis != nil || result.InputDigest != "" || result.ProfileDigest != "" || len(result.Checks) != 0 || len(result.Changes) == 0 || len(result.Changes) > 30 {
+		if result.BlockingReason != "" {
+			if !want.AllowBlockReason || len(result.BlockingReason) > 4096 || strings.TrimSpace(result.BlockingReason) == "" || len(result.Changes) != 0 || len(result.Checks) != 0 || result.Review != nil || result.Repair != nil || result.InputDigest != "" || result.ProfileDigest != "" {
+				return Result{}, errors.New("only a pinned rebase may return a bounded blocker without changes")
+			}
+			return result, nil
+		}
+		if result.Review != nil || result.Repair != nil || result.InputDigest != "" || result.ProfileDigest != "" || len(result.Checks) != 0 || len(result.Changes) == 0 || len(result.Changes) > 30 {
 			return Result{}, errors.New("invalid implementation result")
 		}
 		seen := map[string]bool{}
@@ -135,7 +155,7 @@ func Parse(data []byte, want Expected) (Result, error) {
 			seen[change.Path] = true
 		}
 	case "verify":
-		if result.Analysis != nil || result.InputDigest != "" || result.ProfileDigest != "" || len(result.Changes) != 0 || len(result.Checks) != len(want.Checks) || len(want.Checks) == 0 {
+		if result.BlockingReason != "" || result.Review != nil || result.Repair != nil || result.InputDigest != "" || result.ProfileDigest != "" || len(result.Changes) != 0 || len(result.Checks) != len(want.Checks) || len(want.Checks) == 0 {
 			return Result{}, errors.New("incomplete verification result")
 		}
 		for index, check := range result.Checks {
@@ -145,10 +165,24 @@ func Parse(data []byte, want Expected) (Result, error) {
 				return Result{}, errors.New("verification result differs from trusted checks")
 			}
 		}
-	case "analyze":
-		if result.Analysis == nil || result.InputDigest != want.InputDigest || result.ProfileDigest != want.ProfileDigest ||
-			result.SourceRevision != "" || len(result.Changes) != 0 || len(result.Checks) != 0 {
-			return Result{}, errors.New("analysis result differs from frozen input and profile")
+	case "repair_plan":
+		if result.BlockingReason != "" || result.Review != nil || result.Repair == nil || result.InputDigest != "" || result.ProfileDigest != "" || len(result.Changes) != 0 || len(result.Checks) != 0 || result.Tokens != 0 {
+			return Result{}, errors.New("repair planning must return only a diagnosis and proposal")
+		}
+		plan := result.Repair
+		digest, err := hex.DecodeString(strings.TrimPrefix(plan.FailureDigest, "sha256:"))
+		if err != nil || len(digest) != 32 || !strings.HasPrefix(plan.FailureDigest, "sha256:") ||
+			strings.TrimSpace(plan.Diagnosis) == "" || len(plan.Diagnosis) > 4096 || len(plan.Approach) > 4096 ||
+			(plan.CanRepair && strings.TrimSpace(plan.Approach) == "") {
+			return Result{}, errors.New("repair planning requires bounded diagnosis, failure digest and a new approach")
+		}
+	case "review":
+		if result.BlockingReason != "" || result.Review == nil || result.Repair != nil || len(result.Changes) != 0 || len(result.Checks) != 0 || result.Tokens != 0 ||
+			result.InputDigest != want.InputDigest || result.ProfileDigest != want.ProfileDigest {
+			return Result{}, errors.New("review must contain only verdicts bound to immutable inputs")
+		}
+		if err := result.Review.Validate(want.PatchDigest); err != nil {
+			return Result{}, err
 		}
 	default:
 		return Result{}, errors.New("unsupported result stage")

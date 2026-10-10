@@ -160,7 +160,6 @@ func TestEngineAdmissionAndEveryRouteUseCurrentAuthority(t *testing.T) {
 				{"GET", "/engine/input", ""}, {"GET", "/engine/authority", ""},
 				{"POST", "/engine/model/v1/responses", `{"input":"hello"}`},
 				{"GET", "/engine/git/info/refs?service=git-upload-pack", ""},
-				{"POST", "/engine/tools/read-context-source", `{"uri":"context://external"}`},
 			} {
 				w := engineRequest(s, route.method, route.path, token, route.body)
 				if w.Code != tc.want {

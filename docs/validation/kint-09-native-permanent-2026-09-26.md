@@ -73,7 +73,7 @@ disabled. No KINT-11 cutover was performed.
 
 ## Remaining gate
 
-The [core matrix](../plans/kagent-integration.md#mandatory-failure-matrix)
+The [core matrix](https://github.com/jmlero/the-platform/blob/b7ccd54cdf79f3f669d23c75eb5c9840f43de953/docs/plans/kagent-integration.md#mandatory-failure-matrix)
 still needs real repository checks for lost instance-create and send responses,
 restarts of Marina, gateway, compute and engine database during work, tool-call
 and waiting-input cancellation, time/cost and missing-usage cases, failed

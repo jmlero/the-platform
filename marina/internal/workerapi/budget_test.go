@@ -11,13 +11,12 @@ import (
 
 	"github.com/jmlero/the-platform/marina/internal/execution"
 	"github.com/jmlero/the-platform/marina/internal/journal/sqlite"
-	"github.com/jmlero/the-platform/marina/internal/kubernetes"
 	runtimeapi "github.com/jmlero/the-platform/marina/internal/runtime"
 	"github.com/jmlero/the-platform/marina/internal/workcontrol"
 )
 
 func TestDeniedModelBudgetLeavesOneDurableExplanation(t *testing.T) {
-	for _, workload := range []string{"repository", "analysis"} {
+	for _, workload := range []string{"repository"} {
 		t.Run(workload, func(t *testing.T) {
 			for _, limit := range []string{"token", "cost"} {
 				t.Run(limit, func(t *testing.T) {
@@ -43,6 +42,7 @@ func TestDeniedModelBudgetLeavesOneDurableExplanation(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
+					bindEngineForCalls(t, journal, attempt.Specification)
 					input, _ := json.Marshal(gatewayWorkloadInput(workload, attempt.Specification))
 					_, _, _, err = journal.SaveCheckpoint(ctx, e.ID, e.Version, execution.CheckpointInput{Key: "worker-input:" + attempt.ID, Phase: "worker_input", Payload: map[string]any{"input": string(input)}})
 					if err != nil {
@@ -53,12 +53,9 @@ func TestDeniedModelBudgetLeavesOneDurableExplanation(t *testing.T) {
 					calls := 0
 					upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { calls++; w.WriteHeader(500) }))
 					defer upstream.Close()
-					s := New(Config{SigningKey: key, Model: Model{Endpoint: upstream.URL, Name: "fixture", MaxOutputTokens: 100, InputMicrosPerMillion: 1000000, OutputMicrosPerMillion: 1000000}}, journal, nil, p, nil)
+					s := New(Config{SigningKey: key, ContextCheck: func(context.Context, execution.Execution) error { return nil }, Model: Model{Endpoint: upstream.URL, Name: "fixture", MaxOutputTokens: 100, InputMicrosPerMillion: 1000000, OutputMicrosPerMillion: 1000000}}, journal, nil, p, nil)
 					for range 2 {
-						r := httptest.NewRequest("POST", "/workers/"+attempt.ID+"/model/v1/responses", strings.NewReader(`{"input":"bounded task"}`))
-						r.Header.Set("Authorization", "Bearer "+kubernetes.Token(key, attempt.Specification))
-						w := httptest.NewRecorder()
-						s.ServeHTTP(w, r)
+						w := engineRequest(s, "POST", "/engine/model/v1/responses", attempt.ID+"."+runtimeapi.CredentialToken(key, attempt.Specification), `{"input":"bounded task"}`)
 						if w.Code != 429 {
 							t.Fatalf("denied model request returned %d: %s", w.Code, w.Body.String())
 						}
@@ -69,6 +66,10 @@ func TestDeniedModelBudgetLeavesOneDurableExplanation(t *testing.T) {
 					}
 					if len(items[0].IdempotencyKey) > 128 || strings.ContainsAny(items[0].IdempotencyKey, " \t\r\n") {
 						t.Fatalf("denial cannot be published through the provider contract: %q", items[0].IdempotencyKey)
+					}
+					reason, err := journal.ModelBudgetDenial(ctx, e.ID, attempt.ID)
+					if err != nil || !strings.Contains(reason, limit+" budget") {
+						t.Fatalf("workflow cannot explain budget block: %q %v", reason, err)
 					}
 					if calls != 0 {
 						t.Fatalf("denied requests reached model: %d", calls)

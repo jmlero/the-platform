@@ -1,0 +1,8 @@
+{
+  "repository": "example/repo",
+  "base_branch": "main",
+  "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "observed_at": 1784376000000,
+  "run_id": "run_example",
+  "evidence_ids": ["evd_review", "evd_test", "evd_landing"]
+}

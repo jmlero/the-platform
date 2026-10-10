@@ -265,13 +265,22 @@
       </section>
 
       </details>
-      {#if task.status === 'done' && !task.archived}
+      {#if task.status === 'done' && task.landing}
+        <section class="review-result">
+          <h2>Landed on {task.landing.base_branch}</h2>
+          <p>This task completed after independent review, tests and required CI passed and its commit landed.</p>
+          <a href={`${(task.context?.repository?.clone_url ?? `https://github.com/${task.landing.repository}`).replace(/\.git$/, '')}/commit/${task.landing.commit}`} target="_blank" rel="noopener noreferrer">Open landed commit</a>
+        </section>
+      {:else if task.status === 'done' && !task.archived}
         <section class="review-result">
           <h2>{task.review ? 'Result accepted' : 'Awaiting your review'}</h2>
           <p>{task.review ? 'Your acceptance is recorded with this run.' : 'Review the result and evidence, then accept it to mark this task Done.'}</p>
           {#if task.budget.authority.includes('source.write')}<label><input type="checkbox" bind:checked={sourceAvailable} disabled={Boolean(task.review?.source_available)}/><span>I confirm the accepted code is merged and available on the project base branch.<small>This confirmation releases tasks that depend on this code.</small></span></label>{/if}
           {#if !task.review || (sourceAvailable && !task.review.source_available)}<button type="button" disabled={busy || detail.display_state === 'stale-evidence'} on:click={acceptResult}>{task.review ? 'Confirm code available' : 'Accept result · Done'}</button>{/if}
         </section>
+      {/if}
+      {#if task.prd_reference}
+       <section class="dependencies"><h2>PRD source</h2><p><a href={`${task.prd_reference.repository.clone_url.replace(/\.git$/,'')}/blob/${task.prd_reference.revision}/${task.prd_reference.path}`} target="_blank" rel="noreferrer">{task.prd_reference.path}</a></p><small>Revision {task.prd_reference.revision}</small></section>
       {/if}
       <section class="dependencies"><h2>Dependencies</h2>
         {#each task.depends_on ?? [] as id}<p>{projectTasks.find(t=>t.id===id)?.title ?? id} <small>{projectTasks.find(t=>t.id===id) ? taskLabel(projectTasks.find(t=>t.id===id)!) : 'Archived or unavailable'}</small></p>{/each}

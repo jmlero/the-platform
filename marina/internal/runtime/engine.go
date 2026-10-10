@@ -124,25 +124,28 @@ func (s Specification) EngineGatewayReference() (CredentialReference, error) {
 // EngineAttempt stores correlation and side-effect intent, not engine history.
 // The runtime attempt retains the selected backend/version and input digests.
 type EngineAttempt struct {
-	AttemptID         string `json:"attempt_id"`
-	SpecificationHash string `json:"specification_digest"`
-	MessageID         string `json:"message_id"`
-	InstanceID        string `json:"instance_id"`
-	Revision          string `json:"revision"`
-	Route             string `json:"route"`
-	ContextID         string `json:"context_id"`
-	TaskID            string `json:"task_id"`
-	QuestionID        string `json:"question_id,omitempty"`
-	AnswerMessageID   string `json:"answer_message_id,omitempty"`
-	AnswerDigest      string `json:"answer_digest,omitempty"`
-	AnswerPhase       string `json:"answer_phase,omitempty"`
-	Phase             string `json:"phase"`
-	CancelRequested   bool   `json:"cancel_requested"`
-	DeleteRequested   bool   `json:"delete_requested"`
-	Deleted           bool   `json:"deleted"`
-	Collected         bool   `json:"collected"`
-	State             State  `json:"state"`
-	Version           int64  `json:"version"`
+	AttemptID           string `json:"attempt_id"`
+	SpecificationHash   string `json:"specification_digest"`
+	MessageID           string `json:"message_id"`
+	InstanceID          string `json:"instance_id"`
+	Revision            string `json:"revision"`
+	Route               string `json:"route"`
+	ContextID           string `json:"context_id"`
+	TaskID              string `json:"task_id"`
+	QuestionID          string `json:"question_id,omitempty"`
+	AnswerMessageID     string `json:"answer_message_id,omitempty"`
+	AnswerDigest        string `json:"answer_digest,omitempty"`
+	AnswerPhase         string `json:"answer_phase,omitempty"`
+	Phase               string `json:"phase"`
+	CancelRequested     bool   `json:"cancel_requested"`
+	DeleteRequested     bool   `json:"delete_requested"`
+	Deleted             bool   `json:"deleted"`
+	Collected           bool   `json:"collected"`
+	State               State  `json:"state"`
+	ObservationFailures int    `json:"observation_failures,omitempty"`
+	FailureClass        string `json:"failure_class,omitempty"`
+	FailureMessage      string `json:"failure_message,omitempty"`
+	Version             int64  `json:"version"`
 }
 
 // AllowsCalls fails closed before message delivery and as soon as durable
@@ -152,6 +155,9 @@ func (r EngineAttempt) AllowsCalls() bool {
 }
 
 func (r EngineAttempt) CanUpdate(n EngineAttempt) bool {
+	if n.ObservationFailures < 0 || n.ObservationFailures > 3 || r.FailureClass != "" && (r.FailureClass != n.FailureClass || r.FailureMessage != n.FailureMessage) {
+		return false
+	}
 	if r.AttemptID != n.AttemptID || r.SpecificationHash != n.SpecificationHash || r.MessageID != n.MessageID || r.Version != n.Version {
 		return false
 	}

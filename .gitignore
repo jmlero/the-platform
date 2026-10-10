@@ -13,4 +13,5 @@
 **/*.db-shm
 **/*.db-wal
 
-.groma
+deck/web/test-results/
+deck/web/playwright-report/

@@ -2,6 +2,24 @@
   "protocol_version": "1.0",
   "fixtures": [
     {
+      "kind": "prd_task_plan",
+      "schema": "PRDTaskPlan",
+      "path": "prd-task-plan.json",
+      "implementation_status": "implemented"
+    },
+    {
+      "kind": "prd_document",
+      "schema": "PRDDocument",
+      "path": "prd-document.json",
+      "implementation_status": "implemented"
+    },
+    {
+      "kind": "task_landing",
+      "schema": "TaskLanding",
+      "path": "task-landing.json",
+      "implementation_status": "implemented"
+    },
+    {
       "kind": "provider_info",
       "schema": "ProviderInfo",
       "path": "provider-info.json",
@@ -125,6 +143,12 @@
     },
     {
       "kind": "context",
+      "schema": "ResolvedContext",
+      "path": "context.json",
+      "implementation_status": "implemented"
+    },
+    {
+      "kind": "conversation_context",
       "schema": "ResolvedContext",
       "path": "context.json",
       "implementation_status": "implemented"

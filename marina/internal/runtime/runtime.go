@@ -103,6 +103,7 @@ type CredentialReference struct {
 type Specification struct {
 	Engine *EngineSelection `json:"engine,omitempty"`
 	Tools  []string         `json:"tools,omitempty"`
+	Stage  string           `json:"stage,omitempty"`
 	// Empty Workload preserves the original repository specification and digest.
 	Workload             string                `json:"workload,omitempty"`
 	InputDigest          string                `json:"input_digest,omitempty"`
@@ -126,6 +127,10 @@ type Specification struct {
 }
 
 func (specification Specification) Validate(now time.Time) error {
+	if specification.Stage != "" && ((specification.Stage != "repair_plan" && specification.Stage != "review") || specification.Engine == nil ||
+		(specification.Workload != "" && specification.Workload != "repository/v1" && specification.Workload != "repository/v2")) {
+		return fmt.Errorf("unsupported runtime stage: %w", ErrInvalidInput)
+	}
 	if specification.Engine != nil {
 		if err := specification.Engine.Validate(); err != nil {
 			return err
@@ -265,6 +270,8 @@ type Observation struct {
 	OutputReferences []OutputReference `json:"output_references"`
 	Question         *Question         `json:"question,omitempty"`
 	EngineStatus     string            `json:"engine_status,omitempty"`
+	FailureClass     string            `json:"failure_class,omitempty"`
+	FailureMessage   string            `json:"failure_message,omitempty"`
 }
 
 type Question struct {
@@ -304,75 +311,4 @@ type Adapter interface {
 	CollectArtifacts(context.Context, string) ([]Artifact, error)
 	Cleanup(context.Context, string) error
 	Capabilities() Capabilities
-}
-
-type RecoveryAction string
-
-const (
-	RecoveryNone                  RecoveryAction = "none"
-	RecoveryStart                 RecoveryAction = "start"
-	RecoveryInspect               RecoveryAction = "inspect"
-	RecoveryInspectByKey          RecoveryAction = "inspect_by_key"
-	RecoveryBindDiscovered        RecoveryAction = "bind_discovered"
-	RecoveryFailDisappeared       RecoveryAction = "fail_provider_disappeared"
-	RecoveryResume                RecoveryAction = "resume"
-	RecoveryFailUnsupportedResume RecoveryAction = "fail_unsupported_resume"
-	RecoveryCancel                RecoveryAction = "cancel"
-	RecoveryForceCancel           RecoveryAction = "force_cancel"
-	RecoveryCollectArtifacts      RecoveryAction = "collect_artifacts"
-	RecoveryCleanup               RecoveryAction = "cleanup"
-)
-
-type RecoveryRequest struct {
-	Resume         bool
-	Cancel         bool
-	CancelDeadline time.Time
-}
-
-type RecoveryPlan struct {
-	Action RecoveryAction
-	Reason string
-}
-
-func PlanRecovery(attempt Attempt, observation Observation, request RecoveryRequest, capabilities Capabilities, now time.Time) RecoveryPlan {
-	if attempt.CleanupState == CleanupCompleted {
-		return RecoveryPlan{Action: RecoveryNone, Reason: "runtime cleanup is complete"}
-	}
-	if request.Cancel && !attempt.State.Terminal() {
-		if !request.CancelDeadline.IsZero() && !now.Before(request.CancelDeadline) {
-			return RecoveryPlan{Action: RecoveryForceCancel, Reason: "graceful cancellation deadline expired"}
-		}
-		return RecoveryPlan{Action: RecoveryCancel, Reason: "cancellation was requested"}
-	}
-	if attempt.State.Terminal() {
-		if !attempt.OutputsCollected {
-			return RecoveryPlan{Action: RecoveryCollectArtifacts, Reason: "terminal runtime outputs have not been collected"}
-		}
-		return RecoveryPlan{Action: RecoveryCleanup, Reason: "terminal runtime requires idempotent cleanup"}
-	}
-	if request.Resume && attempt.State == StatePaused {
-		if !capabilities.Resume {
-			return RecoveryPlan{Action: RecoveryFailUnsupportedResume, Reason: "adapter does not support safe resume"}
-		}
-		return RecoveryPlan{Action: RecoveryResume, Reason: "paused runtime can be resumed"}
-	}
-	if observation.Found && attempt.ProviderHandle == "" {
-		return RecoveryPlan{Action: RecoveryBindDiscovered, Reason: "provider object was discovered by the persisted start key"}
-	}
-	switch attempt.State {
-	case StatePending:
-		return RecoveryPlan{Action: RecoveryStart, Reason: "persisted runtime attempt has not started"}
-	case StateStarting:
-		if !observation.Found {
-			return RecoveryPlan{Action: RecoveryInspectByKey, Reason: "start response may have been lost; inspect by idempotency key"}
-		}
-		return RecoveryPlan{Action: RecoveryInspect, Reason: "runtime start is still converging"}
-	case StateRunning, StatePaused:
-		if attempt.ProviderHandle != "" && !observation.Found {
-			return RecoveryPlan{Action: RecoveryFailDisappeared, Reason: "previously bound provider runtime disappeared"}
-		}
-		return RecoveryPlan{Action: RecoveryInspect, Reason: "active runtime must be inspected"}
-	default:
-		return RecoveryPlan{Action: RecoveryNone, Reason: "runtime has no recovery action"}
-	}
 }

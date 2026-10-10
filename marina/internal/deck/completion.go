@@ -60,3 +60,13 @@ func (client *Client) CompleteRun(ctx context.Context, id string, guard workcont
 	body := map[string]any{"summary": summary, "evidence_ids": evidenceIDs}
 	return client.mutateRun(ctx, id, "complete", guard, body, nil)
 }
+
+func (client *Client) CompleteLandedRun(ctx context.Context, id string, guard workcontrol.Mutation, summary string, evidenceIDs []string, landing workcontrol.LandingObservation) error {
+	if _, err := client.CheckCompatibility(ctx, []string{workcontrol.CapabilityRunCompleteLanded}); err != nil {
+		return err
+	}
+	if len(evidenceIDs) == 0 {
+		return errors.New("landing requires structured evidence IDs")
+	}
+	return client.mutateRun(ctx, id, "complete", guard, map[string]any{"summary": summary, "evidence_ids": evidenceIDs, "landing": landing}, nil)
+}

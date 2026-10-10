@@ -1037,9 +1037,10 @@ func (s *Server) completeRun(w http.ResponseWriter, r *http.Request) {
 	}
 	var input struct {
 		store.RunGuard
-		Summary     string   `json:"summary"`
-		Evidence    string   `json:"evidence"`
-		EvidenceIDs []string `json:"evidence_ids"`
+		Summary     string                     `json:"summary"`
+		Evidence    string                     `json:"evidence"`
+		EvidenceIDs []string                   `json:"evidence_ids"`
+		Landing     *domain.LandingObservation `json:"landing,omitempty"`
 	}
 	if err := readJSON(r, &input); err != nil {
 		s.writeError(w, err)
@@ -1055,9 +1056,13 @@ func (s *Server) completeRun(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, fmt.Errorf("evidence_ids must reference current structured evidence; Markdown evidence is no longer a completion gate: %w", domain.ErrInvalidInput))
 		return
 	}
-	if err := s.store.CompleteRunWithEvidence(
-		r.Context(), mutation, r.PathValue("id"), input.Summary, input.EvidenceIDs,
-	); err != nil {
+	var completeErr error
+	if input.Landing != nil {
+		completeErr = s.store.CompleteLandedRun(r.Context(), mutation, r.PathValue("id"), input.Summary, input.EvidenceIDs, *input.Landing)
+	} else {
+		completeErr = s.store.CompleteRunWithEvidence(r.Context(), mutation, r.PathValue("id"), input.Summary, input.EvidenceIDs)
+	}
+	if err := completeErr; err != nil {
 		s.writeError(w, err)
 		return
 	}

@@ -10,14 +10,21 @@ import (
 	"github.com/jmlero/the-platform/deck/internal/domain"
 )
 
-const conversationQuestionColumns = "id,project_id,channel_id,thread_id,invocation_message_id,agent_id,question_id,message_id,text,choices_json,status,answer_message_id,answer,answer_request_id,answered_by,created_at,answered_at"
+const conversationQuestionColumns = "id,project_id,channel_id,thread_id,invocation_message_id,agent_id,question_id,message_id,text,choices_json,status,answer_message_id,answer,answer_request_id,answered_by,created_at,answered_at,expires_at,closed_at"
+
+func nullableQuestionTime(value int64) any {
+	if value == 0 {
+		return nil
+	}
+	return value
+}
 
 func scanConversationQuestion(row interface{ Scan(...any) error }) (domain.ConversationQuestion, error) {
 	var q domain.ConversationQuestion
 	var choices string
 	var answerMessageID, answerRequestID sql.NullString
-	var answeredAt sql.NullInt64
-	err := row.Scan(&q.ID, &q.ProjectID, &q.ChannelID, &q.ThreadID, &q.InvocationMessageID, &q.AgentID, &q.QuestionID, &q.MessageID, &q.Text, &choices, &q.Status, &answerMessageID, &q.Answer, &answerRequestID, &q.AnsweredBy, &q.CreatedAt, &answeredAt)
+	var answeredAt, expiresAt, closedAt sql.NullInt64
+	err := row.Scan(&q.ID, &q.ProjectID, &q.ChannelID, &q.ThreadID, &q.InvocationMessageID, &q.AgentID, &q.QuestionID, &q.MessageID, &q.Text, &choices, &q.Status, &answerMessageID, &q.Answer, &answerRequestID, &q.AnsweredBy, &q.CreatedAt, &answeredAt, &expiresAt, &closedAt)
 	if err != nil {
 		return q, normalizeStoreError(err)
 	}
@@ -25,6 +32,7 @@ func scanConversationQuestion(row interface{ Scan(...any) error }) (domain.Conve
 		return q, err
 	}
 	q.AnswerMessageID, q.AnswerRequestID, q.AnsweredAt = answerMessageID.String, answerRequestID.String, answeredAt.Int64
+	q.ExpiresAt, q.ClosedAt = expiresAt.Int64, closedAt.Int64
 	return q, nil
 }
 
@@ -56,7 +64,7 @@ func (s *Store) EnsureConversationQuestion(ctx context.Context, in domain.Conver
 	in.AgentID = strings.TrimSpace(in.AgentID)
 	in.QuestionID = strings.TrimSpace(in.QuestionID)
 	in.Text = strings.TrimSpace(in.Text)
-	if in.InvocationMessageID == "" || in.AgentID == "" || in.QuestionID == "" || len(in.QuestionID) > 160 || in.Text == "" || len(in.Text) > 2000 || len(in.Choices) > 10 {
+	if in.InvocationMessageID == "" || in.AgentID == "" || in.QuestionID == "" || len(in.QuestionID) > 160 || in.Text == "" || len(in.Text) > 2000 || len(in.Choices) > 10 || in.ExpiresAt < 0 {
 		return domain.ConversationQuestion{}, fmt.Errorf("invalid conversation question: %w", domain.ErrInvalidInput)
 	}
 	for _, choice := range in.Choices {
@@ -84,7 +92,7 @@ func (s *Store) EnsureConversationQuestion(ctx context.Context, in domain.Conver
 	}
 	prior, err := scanConversationQuestion(tx.QueryRowContext(ctx, "SELECT "+conversationQuestionColumns+" FROM conversation_questions WHERE invocation_message_id=? AND question_id=?", in.InvocationMessageID, in.QuestionID))
 	if err == nil {
-		if prior.AgentID != in.AgentID || prior.Text != in.Text || marshalJSON(prior.Choices) != marshalJSON(in.Choices) {
+		if prior.AgentID != in.AgentID || prior.Text != in.Text || marshalJSON(prior.Choices) != marshalJSON(in.Choices) || prior.ExpiresAt != in.ExpiresAt {
 			return domain.ConversationQuestion{}, fmt.Errorf("question replay changed: %w", domain.ErrConflict)
 		}
 		return prior, nil
@@ -92,14 +100,21 @@ func (s *Store) EnsureConversationQuestion(ctx context.Context, in domain.Conver
 	if err != domain.ErrNotFound {
 		return domain.ConversationQuestion{}, err
 	}
-	q := domain.ConversationQuestion{ID: newID("cq"), ProjectID: invocation.ProjectID, ChannelID: invocation.ChannelID, ThreadID: invocation.ThreadID, InvocationMessageID: invocation.ID, AgentID: in.AgentID, QuestionID: in.QuestionID, MessageID: newID("msg"), Text: in.Text, Choices: in.Choices, Status: "pending", CreatedAt: nowMillis()}
+	var ended bool
+	if err := tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM conversation_outcomes WHERE invocation_message_id=?)", invocation.ID).Scan(&ended); err != nil {
+		return domain.ConversationQuestion{}, err
+	}
+	if ended || in.ExpiresAt > 0 && in.ExpiresAt <= nowMillis() {
+		return domain.ConversationQuestion{}, fmt.Errorf("conversation question authority ended: %w", domain.ErrConflict)
+	}
+	q := domain.ConversationQuestion{ID: newID("cq"), ProjectID: invocation.ProjectID, ChannelID: invocation.ChannelID, ThreadID: invocation.ThreadID, InvocationMessageID: invocation.ID, AgentID: in.AgentID, QuestionID: in.QuestionID, MessageID: newID("msg"), Text: in.Text, Choices: in.Choices, Status: "pending", CreatedAt: nowMillis(), ExpiresAt: in.ExpiresAt}
 	if q.Choices == nil {
 		q.Choices = []string{}
 	}
-	if _, err := tx.ExecContext(ctx, "INSERT INTO channel_messages ("+channelMessageColumns+") VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", q.MessageID, q.ChannelID, q.ProjectID, "agent", q.AgentID, q.Text, "{}", nil, q.CreatedAt, q.ThreadID, "", nil); err != nil {
+	if _, err := tx.ExecContext(ctx, "INSERT INTO channel_messages ("+channelMessageColumns+") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)", q.MessageID, q.ChannelID, q.ProjectID, "agent", q.AgentID, q.Text, "{}", nil, q.CreatedAt, q.ThreadID, "", nil, "null", "null"); err != nil {
 		return domain.ConversationQuestion{}, err
 	}
-	if _, err := tx.ExecContext(ctx, "INSERT INTO conversation_questions ("+conversationQuestionColumns+") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", q.ID, q.ProjectID, q.ChannelID, q.ThreadID, q.InvocationMessageID, q.AgentID, q.QuestionID, q.MessageID, q.Text, marshalJSON(q.Choices), q.Status, nil, "", nil, "", q.CreatedAt, nil); err != nil {
+	if _, err := tx.ExecContext(ctx, "INSERT INTO conversation_questions ("+conversationQuestionColumns+") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", q.ID, q.ProjectID, q.ChannelID, q.ThreadID, q.InvocationMessageID, q.AgentID, q.QuestionID, q.MessageID, q.Text, marshalJSON(q.Choices), q.Status, nil, "", nil, "", q.CreatedAt, nil, nullableQuestionTime(q.ExpiresAt), nil); err != nil {
 		return domain.ConversationQuestion{}, err
 	}
 	event, err := insertEventTx(ctx, tx, nil, nil, nil, "conversation.question.created", "Conversation question asked", map[string]any{"project_id": q.ProjectID, "channel_id": q.ChannelID, "thread_id": q.ThreadID, "question_id": q.ID, "message_id": q.MessageID})
@@ -136,6 +151,13 @@ func (s *Store) AnswerConversationQuestion(ctx context.Context, id, answer, auth
 		}
 		return domain.ConversationQuestion{}, fmt.Errorf("question already answered: %w", domain.ErrConflict)
 	}
+	var ended bool
+	if err := tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM conversation_outcomes WHERE invocation_message_id=?)", q.InvocationMessageID).Scan(&ended); err != nil {
+		return domain.ConversationQuestion{}, err
+	}
+	if ended || q.ClosedAt > 0 || q.ExpiresAt > 0 && q.ExpiresAt <= nowMillis() {
+		return domain.ConversationQuestion{}, fmt.Errorf("conversation question authority ended: %w", domain.ErrConflict)
+	}
 	var usedID string
 	err = tx.QueryRowContext(ctx, "SELECT id FROM conversation_questions WHERE answer_request_id=?", requestID).Scan(&usedID)
 	if err != nil && err != sql.ErrNoRows {
@@ -145,7 +167,7 @@ func (s *Store) AnswerConversationQuestion(ctx context.Context, id, answer, auth
 		return domain.ConversationQuestion{}, fmt.Errorf("answer request already used: %w", domain.ErrConflict)
 	}
 	q.AnswerMessageID, q.Answer, q.AnswerRequestID, q.AnsweredBy, q.AnsweredAt, q.Status = newID("msg"), answer, requestID, authorID, nowMillis(), "answered"
-	if _, err := tx.ExecContext(ctx, "INSERT INTO channel_messages ("+channelMessageColumns+") VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", q.AnswerMessageID, q.ChannelID, q.ProjectID, "human", authorID, answer, "{}", nil, q.AnsweredAt, q.ThreadID, "", nil); err != nil {
+	if _, err := tx.ExecContext(ctx, "INSERT INTO channel_messages ("+channelMessageColumns+") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)", q.AnswerMessageID, q.ChannelID, q.ProjectID, "human", authorID, answer, "{}", nil, q.AnsweredAt, q.ThreadID, "", nil, "null", "null"); err != nil {
 		return domain.ConversationQuestion{}, err
 	}
 	if _, err := tx.ExecContext(ctx, "UPDATE conversation_questions SET status='answered',answer_message_id=?,answer=?,answer_request_id=?,answered_by=?,answered_at=? WHERE id=? AND status='pending'", q.AnswerMessageID, answer, requestID, authorID, q.AnsweredAt, q.ID); err != nil {

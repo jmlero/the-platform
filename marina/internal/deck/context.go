@@ -2,10 +2,19 @@ package deck
 
 import (
 	"context"
-	"github.com/jmlero/the-platform/marina/internal/workcontrol"
 	"net/http"
 	"net/url"
+
+	"github.com/jmlero/the-platform/marina/internal/workcontrol"
 )
+
+var _ workcontrol.ConversationContextInspection = (*Client)(nil)
+
+func (c *Client) GetConversationContext(ctx context.Context, invocationMessageID string) (workcontrol.ResolvedContext, error) {
+	var result workcontrol.ResolvedContext
+	err := c.do(ctx, http.MethodGet, "/api/v1/conversation/invocations/"+url.PathEscape(invocationMessageID)+"/context", nil, &result)
+	return result, err
+}
 
 func (c *Client) GetRunContext(ctx context.Context, runID string) (workcontrol.ResolvedContext, error) {
 	var result workcontrol.ResolvedContext

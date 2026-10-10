@@ -49,7 +49,7 @@ cat >"${service_auth_file}" <<EOF
         "agent.register",
         "command.ack",
         "command.list",
-        "context.read", "repository.read", "repository.write", "workload.publish",
+        "context.read", "conversation.context.read", "conversation.outcome.publish", "channel.message.list", "repository.read", "repository.write", "workload.publish",
         "decision.answer",
         "decision.request",
         "decision.inspect",
@@ -96,9 +96,10 @@ deck_pid=$!
 
 if ! DECK_CONFORMANCE_URL="${conformance_url}" \
   DECK_CONFORMANCE_TOKEN_FILE="${service_token_file}" \
+  DECK_CONFORMANCE_AUTH_FILE="${service_auth_file}" \
   DECK_FIXTURES_DIR="${deck_repository}/api/fixtures/v1" \
   GOCACHE="${temporary_directory}/go-cache" \
-  go test ./internal/deck -run '^TestReal(DeckConformance|RepositoryWorkflow|AnalysisWorkflow|AgentFailureSemantics|OutboxRecovery)$' -count=1 -v; then
+  go test ./internal/deck -run '^TestReal(DeckConformance|ConversationContext|RepositoryWorkflow|ProjectProfiles|AnalysisWorkflow|AgentFailureSemantics|OutboxRecovery)$' -count=1 -v; then
   echo "Deck process log:" >&2
   sed -n '1,240p' "${deck_log}" >&2
   exit 1

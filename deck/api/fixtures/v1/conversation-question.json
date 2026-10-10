@@ -15,5 +15,6 @@
   "answer_request_id": "answer-example",
   "answered_by": "operator:example",
   "created_at": 1784376000000,
-  "answered_at": 1784376001000
+  "answered_at": 1784376001000,
+  "expires_at": 1784376300000
 }

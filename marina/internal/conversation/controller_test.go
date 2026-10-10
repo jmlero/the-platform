@@ -227,10 +227,10 @@ func TestDelegatedResultRetriesOneFrozenPublicationAfterLostResponse(t *testing.
 		Delegation: &workcontrol.ConversationBudget{TimeMinutes: 30, MaxAttempts: 2, MaxTokens: 20000, MaxConcurrency: 1, Authority: []string{"source.read", "source.write", "pull_request.create"}}}
 	tooManyAttempts := profile
 	copyBudget := *profile.Delegation
-	copyBudget.MaxAttempts = 3
+	copyBudget.MaxAttempts = 4
 	tooManyAttempts.Delegation = &copyBudget
 	if err := tooManyAttempts.Validate(model); err == nil {
-		t.Fatal("three-attempt conversation grant exceeds the repository workflow")
+		t.Fatal("conversation grant exceeds the repository workflow")
 	}
 	controller := Controller{ProjectID: "prj_1", AgentID: "agt_1", PolicyVersion: "test", Source: source, Journal: journal, Blobs: blobs, Engine: engine, Templates: &fakeTemplates{},
 		Profile: profile, Model: model, DelegationProfileDigest: strings.Repeat("b", 64), Gateway: NewGateway(journal, []byte(strings.Repeat("k", 32)), model, profile.Digest(model), "test", nil), InstallCredential: func(context.Context, rt.Specification, string) error { return nil }}
@@ -257,6 +257,66 @@ func TestDelegatedResultRetriesOneFrozenPublicationAfterLostResponse(t *testing.
 	turn, err = reopened.GetConversationTurn(ctx, message.ID)
 	if err != nil || turn.PublishedMessageID != "msg_published" || turn.PublishedTaskID != "tsk_published" || source.calls != 2 || engine.starts != 1 || source.seen.Task == nil || source.seen.Task.Status != "ready" {
 		t.Fatalf("recovered outcome: turn=%+v calls=%d starts=%d seen=%+v err=%v", turn, source.calls, engine.starts, source.seen, err)
+	}
+}
+
+func TestPRDDraftRetriesExactPublicationWithoutAuthorizingTask(t *testing.T) {
+	ctx := context.Background()
+	journalPath := t.TempDir() + "/journal.db"
+	journal, err := sqlite.Open(ctx, journalPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer journal.Close()
+	blobs, err := artifacts.New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	message := workcontrol.ConversationMessage{ID: "msg_delegate", ProjectID: "prj_1", ChannelID: "chn_1", ThreadID: "thr_1", AuthorType: "human", Body: "Fix login", InvokedAgentID: "agt_1", InvocationRequestID: "req_delegate", CreatedAt: time.Now().UnixMilli()}
+	source := &publicationSource{testSource: testSource{message: message}, lost: true}
+	engine := &testEngine{blobs: blobs, result: conversationbyo.Result{Answer: "I will handle it.", PRD: &workcontrol.PRDDraft{Title: "Login", Path: "docs/prd/login.md", Content: "# Login\n\nPreserve login.\n"}}}
+	model := workerapi.Model{Name: "fixture", MaxOutputTokens: 100, Currency: "USD"}
+	profile := Profile{Engine: rt.EngineSelection{Backend: "kagent", Version: kagent.Version, Endpoint: "kint-engine-controller.kint-engine.svc:8083", Namespace: "kint-engine", Harness: "kint-conversation-byo"}, MaxTokens: 5000, BudgetMinutes: 5,
+		Delegation: &workcontrol.ConversationBudget{TimeMinutes: 30, MaxAttempts: 2, MaxTokens: 20000, MaxConcurrency: 1, Authority: []string{"source.read", "source.write", "pull_request.create"}}}
+	controller := Controller{ProjectID: "prj_1", AgentID: "agt_1", PolicyVersion: "test", Source: source, Journal: journal, Blobs: blobs, Engine: engine, Templates: &fakeTemplates{},
+		Profile: profile, Model: model, DelegationProfileDigest: strings.Repeat("b", 64), Gateway: NewGateway(journal, []byte(strings.Repeat("k", 32)), model, profile.Digest(model), "test", nil), InstallCredential: func(context.Context, rt.Specification, string) error { return nil }}
+	if failures := controller.Cycle(ctx); len(failures) != 1 {
+		t.Fatalf("lost response should leave terminal unpublished: %v", failures)
+	}
+	turn, err := journal.GetConversationTurn(ctx, message.ID)
+	if err != nil || turn.Status != "completed" || turn.PublishedMessageID != "" || turn.PublicationJSON == "" {
+		t.Fatalf("publication intent: %+v %v", turn, err)
+	}
+	if err := journal.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := sqlite.Open(ctx, journalPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	controller.Journal = reopened
+	controller.Profile.Delegation = nil // a changed local policy cannot alter the recorded request
+	if failures := controller.Cycle(ctx); len(failures) != 0 {
+		t.Fatalf("publication recovery: %v", failures)
+	}
+	turn, err = reopened.GetConversationTurn(ctx, message.ID)
+	if err != nil || turn.PublishedMessageID != "msg_published" || turn.PublishedTaskID != "" || source.calls != 2 || engine.starts != 1 || source.seen.Task != nil || source.seen.PRD == nil || source.seen.PRD.Content != "# Login\n\nPreserve login.\n" {
+		t.Fatalf("recovered outcome: turn=%+v calls=%d starts=%d seen=%+v err=%v", turn, source.calls, engine.starts, source.seen, err)
+	}
+}
+
+func TestDelegationSupportsAnExplicitReviewBudgetWithoutChangingLegacyGrants(t *testing.T) {
+	model := workerapi.Model{Name: "fixture", MaxOutputTokens: 100, Currency: "USD"}
+	profile := Profile{Engine: rt.EngineSelection{Backend: "kagent", Version: kagent.Version, Endpoint: "kint-engine-controller.kint-engine.svc:8083", Namespace: "kint-engine", Harness: "kint-conversation-byo"}, MaxTokens: 5000, BudgetMinutes: 5,
+		Delegation: &workcontrol.ConversationBudget{TimeMinutes: 30, MaxAttempts: 2, MaxTokens: 20000, MaxConcurrency: 1, Authority: []string{"source.read", "source.write", "pull_request.create"}}}
+	if err := profile.Validate(model); err != nil || profile.Delegation.MaxAttempts != 2 {
+		t.Fatalf("legacy grant changed: %+v %v", profile.Delegation, err)
+	}
+	legacy := profile.Digest(model)
+	profile.Delegation.MaxAttempts = 3
+	if err := profile.Validate(model); err != nil || profile.Digest(model) == legacy {
+		t.Fatalf("explicit review budget rejected or not revisioned: %v", err)
 	}
 }
 

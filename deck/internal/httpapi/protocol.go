@@ -24,14 +24,18 @@ const (
 	capabilityChannelMessage       = "channel.message.append"
 	capabilityChannelRead          = "channel.message.list"
 	capabilityConversationList     = "conversation.invocation.list"
+	capabilityConversationContext  = "conversation.context.read"
 	capabilityConversationDelegate = "conversation.task.delegate"
 	capabilityConversationOutcome  = "conversation.outcome.publish"
+	capabilityConversationPRDTasks = "conversation.prd.tasks"
+	capabilityConversationPRD      = "conversation.prd.draft"
 	capabilityConversationQuestion = "conversation.question.write"
 	capabilityEvidenceRecord       = "evidence.record"
 	capabilityOperationReport      = "operation.report"
 	capabilityProviderInfo         = "provider.info"
 	capabilityRunBlock             = "run.block"
 	capabilityRunComplete          = "run.complete"
+	capabilityRunCompleteLanded    = "run.complete.landed"
 	capabilityLeaseRenew           = "run.lease.renew"
 	capabilityPlanSubmit           = "run.plan.submit"
 	capabilityProgressAppend       = "run.progress.append"
@@ -64,8 +68,11 @@ var protocolCapabilities = []string{
 	capabilityCommandAck,
 	capabilityCommandList,
 	capabilityContextRead,
+	capabilityConversationContext,
 	capabilityConversationList,
 	capabilityConversationOutcome,
+	capabilityConversationPRD,
+	capabilityConversationPRDTasks,
 	capabilityConversationQuestion,
 	capabilityConversationDelegate,
 	capabilityDecisionAnswer,
@@ -83,6 +90,7 @@ var protocolCapabilities = []string{
 	capabilityAssignedRuns,
 	capabilityRunBlock,
 	capabilityRunComplete,
+	capabilityRunCompleteLanded,
 	capabilityLeaseRenew,
 	capabilityPlanSubmit,
 	capabilityProgressAppend,

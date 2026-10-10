@@ -14,6 +14,32 @@ type portableRunContext struct {
 	Selection *domain.TaskContext `json:"selection"`
 }
 
+type portableConversationContext struct {
+	InvocationMessageID string              `json:"invocation_message_id"`
+	Selection           *domain.TaskContext `json:"selection"`
+}
+
+func (s *Store) exportConversationContexts(ctx context.Context, projectID string) ([]portableConversationContext, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT c.invocation_message_id, c.context_json FROM conversation_context c JOIN channel_messages m ON m.id = c.invocation_message_id WHERE m.project_id = ? ORDER BY c.invocation_message_id`, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var result []portableConversationContext
+	for rows.Next() {
+		var item portableConversationContext
+		var encoded string
+		if err := rows.Scan(&item.InvocationMessageID, &encoded); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(encoded), &item.Selection); err != nil {
+			return nil, err
+		}
+		result = append(result, item)
+	}
+	return result, rows.Err()
+}
+
 func (s *Store) exportRunContexts(ctx context.Context, projectID string) ([]portableRunContext, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT c.run_id, c.context_json FROM run_context c JOIN runs r ON r.id = c.run_id JOIN tasks t ON t.id = r.task_id WHERE t.project_id = ? ORDER BY c.run_id`, projectID)
 	if err != nil {
@@ -62,6 +88,18 @@ func importContext(ctx context.Context, tx *sql.Tx, bundle portableBundle) error
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, "INSERT INTO run_context(run_id, context_json) VALUES (?, ?)", item.RunID, marshalJSON(item.Selection)); err != nil {
+			return err
+		}
+	}
+	for _, item := range bundle.ConversationContexts {
+		var projectID, agentID string
+		if err := tx.QueryRowContext(ctx, "SELECT project_id, invoked_agent_id FROM channel_messages WHERE id = ?", item.InvocationMessageID).Scan(&projectID, &agentID); err != nil || projectID != bundle.Project.ID || agentID == "" {
+			return domain.ErrInvalidInput
+		}
+		if _, err := resolveContext(ctx, tx, projectID, item.Selection); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO conversation_context(invocation_message_id, context_json) VALUES (?, ?)", item.InvocationMessageID, marshalJSON(item.Selection)); err != nil {
 			return err
 		}
 	}

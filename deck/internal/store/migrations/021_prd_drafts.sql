@@ -1,0 +1,2 @@
+ALTER TABLE channel_messages ADD COLUMN prd_json TEXT NOT NULL DEFAULT 'null';
+ALTER TABLE tasks ADD COLUMN prd_json TEXT NOT NULL DEFAULT 'null';

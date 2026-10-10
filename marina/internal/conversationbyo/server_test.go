@@ -112,3 +112,26 @@ func TestAnswerResumesFromTheQuestionInTaskHistory(t *testing.T) {
 		t.Fatal("an answer to another question resumed the turn")
 	}
 }
+
+func TestRunDraftsPRDWithoutDelegatingExecution(t *testing.T) {
+	in := Input{Version: 1, ProjectID: "prj", ChannelID: "chn", ThreadID: "thr", MessageID: "msg", Messages: []Message{{ID: "msg", Role: "human", Body: "Draft a PRD for filters"}}}
+	in.InputDigest = DigestInput(in)
+	raw, _ := json.Marshal(in)
+	result, _, err := run(context.Background(), raw, "credential", nil, func(context.Context, Input, string) (string, error) {
+		return `{"answer":"Review the draft.","prd":{"title":"Filters","path":"docs/prd/filters.md","content":"# Filters\n\nSave filters.\n"}}`, nil
+	})
+	if err != nil || result.PRD == nil || result.Delegation != nil {
+		t.Fatalf("draft: %+v %v", result, err)
+	}
+	for _, path := range []string{"../AGENTS.md", "docs/prd/../../AGENTS.md", "/docs/prd/file.md", "docs/prd/file.md\n"} {
+		result.PRD.Path = path
+		if ValidateResult(result) == nil {
+			t.Fatalf("unsafe PRD path %q", path)
+		}
+	}
+	result.PRD.Path = "docs/prd/filters.md"
+	result.Delegation = &Delegation{Title: "Publish", AcceptanceCriteria: "Landed", Mode: "ready"}
+	if ValidateResult(result) == nil {
+		t.Fatal("draft granted execution")
+	}
+}

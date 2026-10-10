@@ -169,12 +169,18 @@ func (s *Store) validateCanonicalReferences(ctx context.Context, projectID strin
 
 func scanChannelMessage(scanner interface{ Scan(...any) error }) (domain.ChannelMessage, error) {
 	var message domain.ChannelMessage
-	var references string
+	var references, prdJSON, prdTasksJSON string
 	var promotedTaskID, threadID, requestID sql.NullString
 	if err := scanner.Scan(
 		&message.ID, &message.ChannelID, &message.ProjectID, &message.AuthorType,
-		&message.AuthorID, &message.Body, &references, &promotedTaskID, &message.CreatedAt, &threadID, &message.InvokedAgentID, &requestID,
+		&message.AuthorID, &message.Body, &references, &promotedTaskID, &message.CreatedAt, &threadID, &message.InvokedAgentID, &requestID, &prdJSON, &prdTasksJSON,
 	); err != nil {
+		return domain.ChannelMessage{}, err
+	}
+	if err := json.Unmarshal([]byte(prdTasksJSON), &message.PRDTasks); err != nil {
+		return domain.ChannelMessage{}, err
+	}
+	if err := json.Unmarshal([]byte(prdJSON), &message.PRD); err != nil {
 		return domain.ChannelMessage{}, err
 	}
 	message.ThreadID = threadID.String
@@ -228,7 +234,7 @@ func (s *Store) pageChannelMessages(ctx context.Context, channelID, threadID str
 		}
 	}
 	rows, err := s.db.QueryContext(ctx, `
- SELECT id, channel_id, project_id, author_type, author_id, body, references_json, promoted_task_id, created_at, thread_id, invoked_agent_id, invocation_request_id
+ SELECT id, channel_id, project_id, author_type, author_id, body, references_json, promoted_task_id, created_at, thread_id, invoked_agent_id, invocation_request_id, prd_json, prd_tasks_json
  FROM channel_messages WHERE channel_id = ? AND (? = '' OR thread_id = ?) AND rowid > ? ORDER BY rowid LIMIT ?`, channelID, threadID, threadID, after, limit+1)
 	if err != nil {
 		return ChannelMessagePage{}, fmt.Errorf("list channel messages: %w", err)
@@ -255,7 +261,7 @@ func (s *Store) pageChannelMessages(ctx context.Context, channelID, threadID str
 func (s *Store) PromoteChannelMessage(ctx context.Context, messageID string, input domain.CreateTaskInput) (domain.Task, error) {
 	message, err := scanChannelMessage(s.db.QueryRowContext(ctx, `
 		SELECT id, channel_id, project_id, author_type, author_id, body,
-			references_json, promoted_task_id, created_at, thread_id, invoked_agent_id, invocation_request_id
+			references_json, promoted_task_id, created_at, thread_id, invoked_agent_id, invocation_request_id, prd_json, prd_tasks_json
 		FROM channel_messages WHERE id = ?
 	`, messageID))
 	if err != nil {

@@ -5,10 +5,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jmlero/the-platform/marina/internal/analysis"
+	"github.com/jmlero/the-platform/marina/internal/conversation"
 	"github.com/jmlero/the-platform/marina/internal/kagent"
 	runtimeapi "github.com/jmlero/the-platform/marina/internal/runtime"
 	"github.com/jmlero/the-platform/marina/internal/sourcecontrol/github"
+	"github.com/jmlero/the-platform/marina/internal/workcontrol"
 	"github.com/jmlero/the-platform/marina/internal/workerapi"
 	"github.com/jmlero/the-platform/marina/internal/workresult"
 )
@@ -29,16 +30,32 @@ func TestRepositoryEngineAcceptsOnlyPinnedLocalNativeProfile(t *testing.T) {
 	c := Config{ProjectID: "project", PublicURL: "http://localhost:8090", SigningKeyFile: "/secrets/signing", ArtifactTokenFile: "/secrets/artifacts", ArtifactDirectory: "/artifacts", PolicyVersion: "v1", MaxTokens: 20000, BudgetMinutes: 5,
 		AllowedPaths: []string{"app"}, Checks: []workresult.Check{{ID: "check", Directory: ".", Command: []string{"go", "test", "./..."}}}}
 	c.Model = workerapi.Model{Endpoint: "https://openrouter.ai/api/v1", Name: "fixture", MaxOutputTokens: 2000, Currency: "USD", InputMicrosPerMillion: 100, OutputMicrosPerMillion: 100}
+	reviewer := c.Model
+	reviewer.Name = "independent-fixture"
+	c.ReviewerModel = &reviewer
 	c.Git = github.Config{APIURL: "https://api.github.com", CloneURL: "https://github.com/owner/repo.git", Repository: "owner/repo", AuthorName: "Test", AuthorEmail: "test@example.com", BaseBranch: "main"}
 	c.RepositoryEngine = &runtimeapi.EngineSelection{Backend: "kagent", Version: kagent.Version, Endpoint: "kint-engine-controller.kint-engine.svc:8083", Namespace: "kint-engine", Harness: "kint-codex"}
 	c.RepositoryEngineGatewayURL = "https://marina.marina-system.svc"
 	if err := c.Validate(); err != nil {
 		t.Fatal(err)
 	}
+	if c.WorkloadProfiles()[0].MinAttempts != 3 {
+		t.Fatal("repository invocation can omit its review budget")
+	}
 	legacy := c.WorkloadProfiles()[0]
 	if legacy.ID != "repository/v1" || !slices.Equal(legacy.Authority, []string{"source.read", "source.write", "pull_request.create"}) {
 		t.Fatalf("legacy repository grant changed: %+v", legacy)
 	}
+	c.Conversation = &conversation.Profile{Engine: runtimeapi.EngineSelection{Backend: "kagent", Version: kagent.Version, Endpoint: "kint-engine-controller.kint-engine.svc:8083", Namespace: "kint-engine", Harness: "kint-conversation-byo"}, MaxTokens: 10000, BudgetMinutes: 5,
+		Delegation: &workcontrol.ConversationBudget{TimeMinutes: 5, MaxAttempts: 3, MaxTokens: 20000, MaxConcurrency: 1, Authority: legacy.Authority}}
+	if err := c.Validate(); err != nil {
+		t.Fatalf("explicit review delegation: %v", err)
+	}
+	c.Conversation.Delegation.MaxAttempts = 2
+	if err := c.Validate(); err == nil || c.Conversation.Delegation.MaxAttempts != 2 {
+		t.Fatal("undersized delegation accepted or silently expanded")
+	}
+	c.Conversation = nil
 	c.RequiredCI = []string{"ci"}
 	c.Delivery = "fast_forward"
 	if err := c.Validate(); err != nil {
@@ -77,45 +94,34 @@ func TestRepositoryEngineAcceptsOnlyPinnedLocalNativeProfile(t *testing.T) {
 	}
 }
 
-func TestAnalysisConfigurationDoesNotRequireRepositorySettings(t *testing.T) {
-	c := Config{ProjectID: "project", PublicURL: "http://localhost:8090", SigningKeyFile: "/secrets/signing", ArtifactTokenFile: "/secrets/artifacts", ArtifactDirectory: "/artifacts", PolicyVersion: "v1", MaxTokens: 20000, BudgetMinutes: 5}
-	c.Model = workerapi.Model{Endpoint: "https://openrouter.ai/api/v1", Name: "fixture", MaxOutputTokens: 2000, Currency: "USD", InputMicrosPerMillion: 100, OutputMicrosPerMillion: 100}
-	c.Analysis = &analysis.Profile{Version: 1, Revision: 1, Image: "analysis@sha256:" + strings.Repeat("a", 64), HarnessVersion: analysis.Harness, MaxTokens: 20000, BudgetMinutes: 5, Fixture: analysis.DiagnosticFixture()}
-	if err := c.Validate(); err != nil {
+func TestReviewerRequiresAnIndependentModelAndPreservesItsProfileIdentity(t *testing.T) {
+	model := workerapi.Model{Endpoint: "https://models.example/v1", Name: "producer", Currency: "USD", MaxOutputTokens: 100}
+	for _, test := range []struct {
+		name     string
+		reviewer *workerapi.Model
+	}{
+		{"missing", nil},
+		{"same model", &model},
+		{"same normalized model", &workerapi.Model{Endpoint: model.Endpoint, Name: " PRODUCER ", Currency: "USD", MaxOutputTokens: 100}},
+		{"cleartext destination", &workerapi.Model{Endpoint: "http://remote.example", Name: "reviewer", Currency: "USD", MaxOutputTokens: 100}},
+		{"currency change", &workerapi.Model{Endpoint: model.Endpoint, Name: "reviewer", Currency: "EUR", MaxOutputTokens: 100}},
+		{"unbounded output", &workerapi.Model{Endpoint: model.Endpoint, Name: "reviewer", Currency: "USD", MaxOutputTokens: 65537}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if (Config{Model: model, ReviewerModel: test.reviewer}).ValidateReviewer() == nil {
+				t.Fatal("invalid independent reviewer admitted")
+			}
+		})
+	}
+	reviewer := model
+	reviewer.Name = "reviewer"
+	c := Config{Model: model, ReviewerModel: &reviewer}
+	if err := c.ValidateReviewer(); err != nil {
 		t.Fatal(err)
 	}
-	authority := c.AnalysisAuthority()
-	c.Model.Endpoint = "https://different.example/v1"
-	if c.AnalysisAuthority() == authority {
-		t.Fatal("model destination change did not invalidate task authorization")
-	}
-	c.Analysis.Version = 2
-	if c.Validate() == nil {
-		t.Fatal("unsupported profile version accepted")
-	}
-}
-
-func TestAnalysisEnginePinsBYOProfileWithoutChangingLegacyGrant(t *testing.T) {
-	c := Config{ProjectID: "project", PublicURL: "http://localhost:8090", SigningKeyFile: "/secrets/signing", ArtifactTokenFile: "/secrets/artifacts", ArtifactDirectory: "/artifacts", PolicyVersion: "v1", MaxTokens: 20000, BudgetMinutes: 5}
-	c.Model = workerapi.Model{Endpoint: "https://openrouter.ai/api/v1", Name: "fixture", MaxOutputTokens: 2000, Currency: "USD", InputMicrosPerMillion: 100, OutputMicrosPerMillion: 100}
-	c.Analysis = &analysis.Profile{Version: 1, Revision: 3, Image: "analysis@sha256:" + strings.Repeat("a", 64), HarnessVersion: analysis.HarnessBYO, MaxTokens: 20000, BudgetMinutes: 5, Fixture: analysis.DiagnosticFixture(), Tools: []string{"read_context_source"}}
-	if err := c.Validate(); err == nil {
-		t.Fatal("BYO profile without a selected engine was accepted")
-	}
-	legacy := c.AnalysisDigest()
-	c.AnalysisEngine = &runtimeapi.EngineSelection{Backend: "kagent", Version: kagent.Version, Endpoint: "kint-engine-controller.kint-engine.svc:8083", Namespace: "kint-engine", Harness: "kint-analysis-byo", Template: "kint-analysis-task", Revision: strings.Repeat("b", 64)}
-	if err := c.Validate(); err != nil {
-		t.Fatal(err)
-	}
-	profiles := c.WorkloadProfiles()
-	if len(profiles) != 1 || !slices.Contains(profiles[0].ContextKinds, "document") {
-		t.Fatalf("BYO context was not discoverable: %#v", profiles)
-	}
-	if c.AnalysisDigest() == legacy {
-		t.Fatal("BYO engine selection did not change the exact analysis grant")
-	}
-	c.AnalysisEngine.Harness = "kint-codex"
-	if err := c.Validate(); err == nil {
-		t.Fatal("native Codex harness accepted for analysis")
+	digest := c.Digest()
+	reviewer.Name = "replacement"
+	if c.Digest() == digest {
+		t.Fatal("reviewer model changed without a new installed profile")
 	}
 }

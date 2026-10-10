@@ -9,12 +9,12 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"slices"
 	"strings"
 	"time"
 
 	"github.com/jmlero/the-platform/marina/internal/artifacts"
 	"github.com/jmlero/the-platform/marina/internal/execution"
+	rt "github.com/jmlero/the-platform/marina/internal/runtime"
 )
 
 func forbiddenModelInput(value any) bool {
@@ -75,16 +75,16 @@ func (server *Server) model(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	input, err := server.Input(r.Context(), attempt)
-	if err != nil || (input.Stage != "implement" && input.Stage != "analyze") {
+	if err != nil || ((input.Stage != "implement" && input.Stage != "repair_plan" && input.Stage != "review") || attempt.Specification.Engine == nil) {
 		http.Error(w, "this worker has no model authority", 403)
 		return
 	}
 	model := server.config.Model
-	if model.Endpoint == "" || model.Name == "" || model.MaxOutputTokens < 1 {
-		http.Error(w, "model endpoint is not configured", 503)
-		return
+	limit := int64(256 << 10)
+	if input.Stage == "review" {
+		limit = (256 << 11) + 4096
 	}
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 256<<10))
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, limit))
 	if err != nil {
 		http.Error(w, "model input exceeds 256 KiB", 413)
 		return
@@ -94,8 +94,27 @@ func (server *Server) model(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid model input", 400)
 		return
 	}
-	if attempt.Specification.Engine != nil && input.Stage == "implement" {
+	if input.Stage == "review" {
+		model, requestBody, err = server.reviewRequest(attempt, requestBody)
+		if err != nil {
+			http.Error(w, "immutable read-only review input required", 403)
+			return
+		}
+		if response, err := server.reviewResponse(r.Context(), attempt); err != nil {
+			http.Error(w, "review response unavailable", 503)
+			return
+		} else if response != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Cache-Control", "no-store")
+			_, _ = w.Write(response)
+			return
+		}
+	} else if attempt.Specification.Engine != nil {
 		normalizeNativeModel(requestBody)
+	}
+	if model.Endpoint == "" || model.Name == "" || model.MaxOutputTokens < 1 {
+		http.Error(w, "model endpoint is not configured", 503)
+		return
 	}
 	if forbiddenModelInput(requestBody) || !localTools(requestBody["tools"]) {
 		http.Error(w, "only self-contained text and local tools are supported", 400)
@@ -103,10 +122,6 @@ func (server *Server) model(w http.ResponseWriter, r *http.Request) {
 	}
 	if attempt.Specification.Engine != nil && !engineModelFields(requestBody) {
 		http.Error(w, "unsupported engine Responses field", 400)
-		return
-	}
-	if input.Stage == "analyze" && !analysisTools(requestBody["tools"], attempt.Specification.Tools) {
-		http.Error(w, "analysis tool is not in the frozen profile allowlist", 403)
 		return
 	}
 	requestBody["model"] = model.Name
@@ -241,11 +256,39 @@ func (server *Server) model(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
-		payload, err := io.ReadAll(io.LimitReader(response.Body, 16<<20))
-		if err != nil {
+		responseLimit := int64(16 << 20)
+		if input.Stage == "review" {
+			responseLimit = 128 << 10
+		}
+		payload, err := io.ReadAll(io.LimitReader(response.Body, responseLimit+1))
+		if err != nil || int64(len(payload)) > responseLimit {
 			return
 		}
 		observe(payload)
+		if input.Stage == "review" {
+			if !known {
+				http.Error(w, "review usage is unknown; reservation retained", 502)
+				return
+			}
+			accountCtx, finish := context.WithTimeout(context.WithoutCancel(r.Context()), 5*time.Second)
+			defer finish()
+			if err := server.journal.FinishModelCall(accountCtx, callID, usage.Input+usage.Output, price(usage.Input, model.InputMicrosPerMillion)+price(usage.Output, model.OutputMicrosPerMillion)); err != nil {
+				http.Error(w, "review usage could not be recorded", 503)
+				return
+			}
+			known = false // Already accounted before saving a replayable response.
+			digest, err := server.artifacts.Put(payload)
+			if err == nil {
+				_, _, err = server.journal.RecordRuntimeArtifact(accountCtx, rt.Artifact{ID: "review-response:" + attempt.ID, ExecutionID: record.ID,
+					RuntimeAttemptID: attempt.ID, Name: "review-model-response.json", Kind: "review_model_response", Digest: digest,
+					URI:       strings.TrimRight(server.config.PublicURL, "/") + "/artifacts/" + digest,
+					SizeBytes: int64(len(payload)), CreatedAt: time.Now().UTC()})
+			}
+			if err != nil {
+				http.Error(w, "review response could not be retained", 503)
+				return
+			}
+		}
 		_, _ = w.Write(payload)
 	}
 }
@@ -298,19 +341,3 @@ func engineModelFields(body map[string]any) bool {
 
 // DiagnosticReport is an output schema, not a tool with external side effects.
 // HTTP context reads require the immutable runtime allowlist as well.
-func analysisTools(value any, allowed []string) bool {
-	if value == nil {
-		return true
-	}
-	items, ok := value.([]any)
-	if !ok || len(items) > 1+len(allowed) {
-		return false
-	}
-	for _, item := range items {
-		tool, ok := item.(map[string]any)
-		if !ok || tool["type"] != "function" || (tool["name"] != "DiagnosticReport" && !(tool["name"] == "read_context_source" && slices.Contains(allowed, "read_context_source"))) {
-			return false
-		}
-	}
-	return true
-}

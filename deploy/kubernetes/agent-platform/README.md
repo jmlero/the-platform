@@ -1,170 +1,179 @@
-# Two-workload agent-platform installation
+# Native agent and verifier installation
 
-This profile combines the existing Codex repository workflow and the bounded
-LangChain diagnostic workload. It reuses the [local workflow overlay](../local-podman-workflow/kustomization.yaml),
-separate Deck/Marina PVCs and identities, attempt credentials, TLS, RBAC and worker
-network policy. No third service, store or deployment controller is needed.
-The supported local environment is `kind-marina-local` on Podman's
-`podman-machine-default-root` connection, with the Mac running and Deck at
-`https://localhost:8443`.
-
-Repository work uses one implementation and one clean verification attempt,
-ending at a PR ready for human review. Analysis uses one isolated attempt and
-an independent Go validator over the fixed synthetic diagnostic fixture.
-`langchain-create-agent/v2` adds selected immutable context and the single
-`read_context_source` gateway tool. It does not provide general semantic review,
-an arbitrary tool catalog, source mutation, pause/resume, merge or deployment.
-See the [profile contract](../../../marina/docs/workloads/profiles-v1.md).
+Use the [local Podman/Kind guide](../local-podman/README.md) and
+[permanent engine guide](../local-podman-kagent/README.md). This configuration
+selects native Codex for repository work, a text-only independent reviewer,
+a separate clean verifier, and optional conversation using the same BYO image.
+The retired diagnostic profile and custom
+Codex/Python worker images are removed. Current acceptance belongs in
+[status](../../../docs/status.md).
 
 ## Build and pin
-
-Run the repository checks before building:
 
 ```sh
 make check
 make conformance
-make check-installation
 make -C marina build
 podman --connection podman-machine-default-root build -f deck/Dockerfile -t localhost/the-platform/deck:RELEASE deck
 podman --connection podman-machine-default-root build -f marina/Dockerfile -t localhost/the-platform/marina:RELEASE marina
-podman --connection podman-machine-default-root build -f marina/Dockerfile.worker --build-arg CODEX_VERSION=0.153.4 -t localhost/the-platform/marina-worker:RELEASE marina
-podman --connection podman-machine-default-root build -f marina/Dockerfile.analysis-worker -t localhost/the-platform/marina-analysis:RELEASE marina
+podman --connection podman-machine-default-root build --ignorefile marina/Dockerfile.verifier.dockerignore -f marina/Dockerfile.verifier -t localhost/the-platform/marina-verifier:RELEASE .
+podman --connection podman-machine-default-root build --ignorefile marina/Dockerfile.verifier.dockerignore -f marina/Dockerfile.verifier --target native-codex -t localhost/the-platform/marina-codex:RELEASE .
+podman --connection podman-machine-default-root build -f marina/Dockerfile.conversation-byo -t localhost/the-platform/marina-conversation-byo:RELEASE marina
 ```
 
-Choose a release tag and replace `RELEASE`. Each image is independent. Both
-workers package their Go worker and all execution dependencies at build time.
-Analysis pins Python libraries and verifies package hashes in
-[requirements.txt](../../../marina/harnesses/langchain/requirements.txt).
-The coding fixture uses the image's Node interpreter and built-in test runner.
-No package installation is allowed from a running worker.
+Replace `RELEASE`. Import Deck, Marina and verifier OCI archives into the existing
+Kind node and pin their **containerd manifest digests**. A Podman image ID or an
+imported archive index is not that digest. Keep prior releases for rollback.
+Serve the pinned native Codex and BYO images through the local registry as the
+permanent engine guide describes. The verifier and `native-codex` target share
+the same project toolchain: pinned Node.js 24 and Go 1.27.1, frozen Go module and
+Deck npm caches, and Chromium matching the locked Playwright version. The native
+target retains the pinned upstream kagent adapter and Codex CLI, entry point and
+unprivileged identity. It still runs through kagent's isolated runtime.
 
-For each image, save an OCI archive, copy it to the existing Kind node and import
-it into containerd. Use the same explicit Podman connection for every command:
+All dependency and browser downloads happen during the image build. Runtime
+defaults disable Go/npm downloads and Playwright browser installation. In a fresh
+checkout run `npm --prefix deck/web ci --offline` before the frontend checks; the
+npm cache and browser binaries are readable by the non-root user with a read-only
+root filesystem. Changing a lockfile requires rebuilding both images. For another
+project, package its frozen test dependencies in its own image and give its native
+Harness the same toolchain; this image's caches are for The Platform.
+
+Before installation, run the selected unit and browser checks in each image with
+`podman --connection podman-machine-default-root run --network=none`, a writable
+test-owned `/work` and `/tmp`, `--read-only --user 65532:65532`, and
+`-e GOCACHE=/tmp/go-cache` (or a writable test-owned `/data`). Verify
+`node --version`, `go version`, `git --version`, and `codex --version` in the native
+image. The verifier has no Codex executable. Chromium must launch and the checks
+must pass from the frozen caches; a missing dependency fails instead of downloading.
+
+## Fresh installation or data-preserving upgrade
+
+Prepare a new private directory once with `scripts/prepare-installation.py`.
+Existing installations reuse their directory, CA, credentials, service identity,
+Deck/Marina PVCs and site egress configuration. Use the permanent local engine
+overlay and the version-1 [workflow example](../first-release/workflow.example.json).
+Configure the repository, producer and different reviewer models, explicit
+credential references, offline checks, allowed paths, required CI, approval
+policy and bounded model rates.
+While work is drained, update the installed `kint-codex` Harness's
+`spec.workload.image` to the registry digest of the newly built `native-codex`
+target. Keep the existing `codex` configuration, worker pool and snapshot policy.
+Let the engine prepare that image before admitting a task, close any temporary
+setup egress, and refresh Deck's repository association for the new profile.
+`reviewer_model` has the same fields as `model`; choose its own model ID and
+actual price rates in the same currency. Update the installed
+`kint-conversation-byo` Harness to the newly built BYO image digest, even when
+conversation is disabled. Older BYO images do not implement repository review.
+For configured conversation, use matching Deck/Marina/BYO releases that implement
+the frozen repository and selected-context protocol from
+[decision 0027](../../../docs/decisions/0027-read-only-repository-context-for-chat.md).
+Conversation receives only the fixed bounded read tools described in the
+[profile contract](../../../marina/docs/workloads/profiles-v1.md#conversation-selection).
+The [profile contract](../../../marina/docs/workloads/profiles-v1.md) owns the
+runtime-start budgets and complete-input boundary. Existing tasks keep their
+frozen budget; the upgrade does not add review starts to it.
+
+Before upgrading, disable new intake and drain active work. Save private
+configuration, exact release image references and complete consistent stores,
+including SQLite WALs and Marina artifacts. Preserve the engine's PostgreSQL and
+snapshot storage. Never reinitialize a PVC to repair an upgrade.
+
+Before enabling conversation on an upgraded release, verify Deck advertises
+`conversation.context.read` and add that capability to the existing project
+service identity in private `service-auth.json`. Preserve its identity, token
+hashes and project scope. New directories from `scripts/prepare-installation.py`
+already include the grant; existing directories require this explicit update.
+`scripts/check-installation.py` rejects a configured conversation profile without
+the project grant. Install Deck's context-capture protocol before accepting new
+invocations: an older invocation without a snapshot returns missing context
+rather than using today's repository or sources.
+
+Preview the configuration removal with the current Marina validator:
 
 ```sh
-podman --connection podman-machine-default-root save --format oci-archive -o /private/tmp/marina-analysis.tar localhost/the-platform/marina-analysis:RELEASE
-podman --connection podman-machine-default-root cp /private/tmp/marina-analysis.tar marina-local-control-plane:/tmp/marina-analysis.tar
-podman --connection podman-machine-default-root exec marina-local-control-plane ctr -n k8s.io images import /tmp/marina-analysis.tar
-podman --connection podman-machine-default-root exec marina-local-control-plane ctr -n k8s.io images ls
-podman --connection podman-machine-default-root exec marina-local-control-plane ctr -n k8s.io images tag localhost/the-platform/marina-analysis:RELEASE localhost/the-platform/marina-analysis@sha256:IMPORTED_DIGEST
+python3 scripts/prepare-kagent-installation.py ~/.local/share/the-platform/marina-local/installation --verifier-image localhost/the-platform/marina-verifier@sha256:IMPORTED_DIGEST --marina-binary marina/bin/marina
 ```
 
-Repeat for Deck, Marina and the coding worker. Pin the **imported containerd
-manifest digest**, which can differ from the Podman image/config digest. Retain
-the previous images until upgrade acceptance is complete.
+The helper requires the already selected native repository engine. It removes
+retired diagnostic settings, replaces the verifier image and preserves repository,
+model, budgets, approvals, credentials and service identity. It keeps a private
+backup when `--apply` is supplied. It does not touch a database, deploy resources,
+rotate a credential or enable intake. Replace `IMPORTED_DIGEST` before use.
 
-## Prepare or upgrade
-
-For a fresh installation, first use the [local installation guide](../local-podman/README.md)
-and [repository configuration](../first-release/README.md). Configure the selected
-model, nonzero admission price rates, private credential references, repository,
-offline checks and required CI. Switch to the local workflow overlay with intake
-disabled. An existing installation must reuse its private directory, CA,
-credentials, service identity, `appdeck-data` override where present, Marina PVC,
-and site-specific egress/host-alias configuration.
-
-Before an upgrade, disable new intake, allow already journaled work to settle,
-and verify that no active worker remains. Disabling intake alone does not stop
-active work. Changing a pinned profile during execution blocks that execution;
-drain first to preserve its progress. Keep old Ready tasks pinned: they must
-block if their selected profile is unavailable, never silently adopt the upgrade.
-
-Set the new Deck and Marina digest references in the existing private
-`kustomization.yaml`; set the coding image in `workflow.json`'s `kubernetes.image`.
-Then preview the analysis upgrade (paths below use the existing local install):
-
-```sh
-python3 scripts/prepare-agent-installation.py ~/.local/share/the-platform/marina-local/installation --analysis-image localhost/the-platform/marina-analysis@sha256:IMPORTED_DIGEST
-```
-
-This invokes the current Go configuration validator without reading credentials
-or contacting any provider. It retains existing fixture, limits, Git/model
-settings and approval policy, upgrades the analysis harness/tools, increments
-its revision when changed, and adds required capabilities to the existing
-project-scoped service identity. Repeating the same input is idempotent.
-
-Save the reviewed configuration with the same command plus `--apply`. Private
-originals are retained under `agent-upgrade-<digest>/` in the installation
-directory. No credential is rotated, database touched, intake enabled or resource
-deployed. Use `--identity` for a differently named existing service identity and
-`--marina-binary` for an alternate current validator binary.
+Set current Deck/Marina image pins in the private Kustomization, apply the reviewed
+configuration with `--apply`, then check and render it privately:
 
 ```sh
 python3 scripts/check-installation.py ~/.local/share/the-platform/marina-local/installation
-kubectl kustomize ~/.local/share/the-platform/marina-local/installation > /private/tmp/agent-installation-rendered.yaml
-```
-
-Keep the render private: it contains Secrets. Verify digest pins, unchanged PVCs,
-single replicas with Recreate updates, scoped identities and egress, and effective
-Marina arguments `[serve, --intake-enabled=false]`. Apply only to the authorized
-local test environment:
-
-```sh
+kubectl kustomize ~/.local/share/the-platform/marina-local/installation > /private/tmp/kint-installation-rendered.yaml
 kubectl --context kind-marina-local apply -k ~/.local/share/the-platform/marina-local/installation
 kubectl --context kind-marina-local -n marina-system rollout restart deployment/marina
 kubectl --context kind-marina-local -n marina-system rollout status deployment/deck --timeout=60s
 kubectl --context kind-marina-local -n marina-system rollout status deployment/marina --timeout=60s
 ```
 
-Deck applies additive migrations in its own store; Marina retains its separate
-journal. Restart Marina even when only `workflow.json` changed: its stable-name
-ConfigMap does not trigger a rollout or reload configuration. Verify historical tasks, evidence downloads, stable Marina identity and
-both bound PVC identities after the upgrade. Binary rollback across a new schema
-is not established by this procedure; restore the previous configuration only
-with a compatible binary. Never remove or reinitialize PVCs to repair an upgrade.
+The render contains Secrets. A stable-name workflow ConfigMap does not trigger a
+restart, so restart Marina after a workflow-only change. Verify historical tasks,
+conversation IDs, model reservations and digest-checked artifacts. Both services
+reject applied migrations unknown to their binary. An older release must use a
+compatible retained snapshot; follow the permanent guide's schema rollback gate.
+Refresh the versioned repository association through Deck after changing profile
+settings. Stale tasks retain their original inputs and must block rather than
+silently adopting a new profile.
 
-After changing execution-profile settings, refresh the repository association in
-Deck before invoking new coding work. Submit the same installed repository and
-branch with the current request/binding versions. If Marina reports that the
-binding changed during upgrade, refresh and resubmit with the returned version.
-Wait for the association's `connected` status before discovery/invocation. This explicit
-version check preserves old task inputs; a stale selection must block. Historical
-completed work and its evidence remain accessible.
+## Acceptance and operation
 
-## Invoke and inspect
+Discover the installed profile through the [operator API](../../../marina/docs/workloads/api-v1.md),
+retain its exact ID/digest and invocation JSON/key, and authorize only the selected
+budget and scope. Temporarily use `serve --intake-task-id <id>`, then restore
+`serve --intake-enabled=false` after claim. Preserve the plan approval policy.
+Explicit chat invocations are independent of repository intake.
 
-Use the [operator API client](../../../marina/docs/workloads/api-v1.md) to discover
-both profiles, retain the exact invocation JSON/key, submit it, replay it and
-inspect the same task. A catalog expires without Marina refresh; ensure
-`workload.publish` is granted to the configured service identity. Invocation
-does not enable intake. For controlled acceptance, temporarily select only the
-new task with `[serve, --intake-task-id, TASK_ID]`, then restore disabled intake
-as soon as it is claimed. Preserve the installed plan-approval policy.
+Repeat live native repository work, a conversation reply and the affected failure
+cases after a change. Exact-patch review is required before every commit;
+independent verifier checks and exact-commit CI are required before guarded main
+landing. Missing artifacts, lost authority or
+unknown model usage cannot count as success. Engine cancellation must remain
+available during a Deck outage; cleanup failures remain visible and retryable.
+Inspect the same recorded instance before recovery instead of resending work.
+Use the [operations runbook](../first-release/OPERATIONS.md) for certificates,
+credentials, diagnostics and artifact retention. Backup automation remains deferred.
 
-Inspect task context, workload/harness identity, progress, commands, confirmed
-usage, unresolved reservations and downloaded evidence. Analysis validation must
-bind fixture/profile/output/context digests. Repository evidence must bind the
-separate verifier and required CI to the current PR head. Never treat a model
-report, submitted cancel command, or pending usage reservation as completion.
+### PRD publication preparation
 
-## Isolation, recovery and acceptance
+PRD-01 requires matching Deck, Marina and conversation BYO images. Deck migration
+`021_prd_drafts.sql` adds durable proposal/approval fields; retain the compatible
+pre-upgrade stores for rollback. The provider advertises `conversation.prd.draft`
+and Marina requires it when conversation is configured. Draft publication uses
+the existing `conversation.outcome.publish` grant; service credentials still
+cannot approve.
 
-Workers have no Kubernetes token, upstream model token or Git write credential.
-Only the attempt gateway and cluster DNS are reachable under the installed
-network policies; node administrators and DNS remain trusted boundaries. This
-is Pod/network isolation, not a VM sandbox. The tool accepts only an exact URI
-from the frozen package and checks live authority, allowlist, expiry and explicit
-revocation outside LangChain. Source revisions do not replace active inputs.
+Before enabling PRD publication, explicitly include `docs/prd` in the repository's
+`allowed_paths`, retain `delivery: fast_forward`, review the configured checks,
+prepare the image snapshots, and refresh the repository/profile association.
+These changes do not authorize model calls, Git writes or task intake on their
+own. An operator approves the exact draft and a bounded publication budget in its
+thread. Use the ordinary selected-task acceptance procedure and verify the exact
+approved bytes at the landed commit. See [current acceptance](../../../docs/status.md).
 
-For outages, keep the original task/run/attempt IDs and inspect retained state.
-Restart each control service separately; inspect the existing Job before any
-new start. Cancellation acknowledges only observed worker termination. Missing
-or invalid evidence, expired authority and exhausted budgets must never yield
-success. Unknown model usage retains its reservation. A blocked or cancelled
-run requires newly authorized work; do not edit either database.
+### Ordered PRD tasks and project profiles
 
-Use the existing [operations runbook](../first-release/OPERATIONS.md) for
-certificate/credential rotation, diagnostics and stuck workers. The offline
-`marina diagnostics` export correlates execution, attempt, model/tool and artifact
-records without exposing credentials or source text. Artifact retention remains
-an explicit maintenance operation, and pilot backup/restore drills remain deferred.
+The matching follow-up release applies Deck migration `022_prd_tasks.sql` and
+advertises `conversation.prd.tasks`. Upgrade Deck, Marina and BYO together; retain
+the compatible stores and the previous release pins before replacing images.
+The conversation gateway's strict response schema must include both `prd` and
+`prd_tasks`. Approving a task proposal grants a bounded budget for each task;
+it does not expand the installed repository file scope or concurrency.
 
-The [AGENT-11 through AGENT-13 acceptance](../../../docs/validation/agent-11-13-2026-09-22.md)
-records passing `make check`, `make conformance`, `make check-installation`, live
-API-invoked Jobs for both profiles, and failure/recovery evidence. The date-scoped
-[acceptance helper](../../../scripts/validate-agent-poc.py) accepts `--mvp` for the
-2026-09-22 proof, with explicit image loading, installation, source registration,
-task invocation, restart/cancel/budget exercises and result capture. It is a
-bounded local test utility, not the installation interface. Restore intake to
-disabled, deactivate only test-created context sources, and verify test runtime
-cleanup at the end.
+For more projects, the private workflow file can contain
+`{"version":1,"projects":[...complete workflow profiles...]}`. Configure each
+project's Git/model credential references, repository, checks, scope, required CI
+and packaged toolchains explicitly. Mount each referenced credential file and add
+that project to the existing Marina service policy's appropriate grants. Shared
+service TLS, signing and artifact settings must agree across profiles. Run the
+current `marina check-config` and installation preflight before applying. The
+legacy upgrade helper accepts one profile; prepare a multi-profile upgrade by
+editing and validating that complete private document. Keep intake disabled until
+the selected project's bounded acceptance case is authorized. One repository task
+runs across the whole installation. See [decision 0031](../../../docs/decisions/0031-explicit-per-project-profiles.md).

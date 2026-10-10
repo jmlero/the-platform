@@ -13,7 +13,6 @@ import (
 	"github.com/jmlero/the-platform/marina/internal/artifacts"
 	"github.com/jmlero/the-platform/marina/internal/execution"
 	"github.com/jmlero/the-platform/marina/internal/journal/sqlite"
-	"github.com/jmlero/the-platform/marina/internal/kubernetes"
 	runtimeapi "github.com/jmlero/the-platform/marina/internal/runtime"
 	"github.com/jmlero/the-platform/marina/internal/workcontrol"
 )
@@ -28,7 +27,7 @@ func (p *provider) GetWork(context.Context, string) (workcontrol.WorkDetail, err
 }
 
 func TestWorkerCredentialCannotOutliveProviderFence(t *testing.T) {
-	for _, workload := range []string{"repository", "analysis"} {
+	for _, workload := range []string{"verification"} {
 		t.Run(workload, func(t *testing.T) {
 			ctx := context.Background()
 			journal, err := sqlite.Open(ctx, ":memory:")
@@ -66,7 +65,7 @@ func TestWorkerCredentialCannotOutliveProviderFence(t *testing.T) {
 			server := New(Config{ContextCheck: func(context.Context, execution.Execution) error { return contextErr }, PublicURL: "https://marina.example", SigningKey: key}, journal, store, p, nil)
 			request := func() int {
 				r := httptest.NewRequest(http.MethodGet, "/workers/"+attempt.ID+"/input", nil)
-				r.Header.Set("Authorization", "Bearer "+kubernetes.Token(key, attempt.Specification))
+				r.Header.Set("Authorization", "Bearer "+runtimeapi.CredentialToken(key, attempt.Specification))
 				w := httptest.NewRecorder()
 				server.ServeHTTP(w, r)
 				return w.Code
@@ -74,6 +73,11 @@ func TestWorkerCredentialCannotOutliveProviderFence(t *testing.T) {
 			if status := request(); status != 200 {
 				t.Fatalf("valid worker returned %d", status)
 			}
+			server.config.ProjectID = "another-project"
+			if status := request(); status != 403 {
+				t.Fatalf("valid credential reached another project gateway: %d", status)
+			}
+			server.config.ProjectID = ""
 			p.err = errors.New("temporary Deck outage")
 			if status := request(); status != 503 {
 				t.Fatalf("temporary provider outage must deny access without reporting revocation: %d", status)

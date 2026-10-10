@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/jmlero/the-platform/marina/internal/execution"
-	"github.com/jmlero/the-platform/marina/internal/kubernetes"
 	rt "github.com/jmlero/the-platform/marina/internal/runtime"
 )
 
@@ -61,7 +60,7 @@ func (server *Server) EngineCredential(ctx context.Context, spec rt.Specificatio
 	if err := server.AdmitEngine(ctx, spec); err != nil {
 		return "", err
 	}
-	return spec.AttemptID + "." + kubernetes.Token(server.config.SigningKey, spec), nil
+	return spec.AttemptID + "." + rt.CredentialToken(server.config.SigningKey, spec), nil
 }
 
 // Native Codex cannot interpolate an attempt ID into a shared ModelConfig URL.

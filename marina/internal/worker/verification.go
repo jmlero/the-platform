@@ -19,7 +19,7 @@ import (
 )
 
 // RunVerification is the deterministic verifier entry point. It consumes only
-// the pinned repository and installed checks; Harness and Analysis are ignored.
+// the pinned repository and installed checks.
 func RunVerification(ctx context.Context, input Input, root string) (Result, error) {
 	result := Result{Stage: "verify", SourceRevision: input.SourceRevision}
 	if input.Stage != "verify" || !revision(input.SourceRevision) || strings.TrimSpace(input.SourceURL) == "" {
@@ -30,7 +30,7 @@ func RunVerification(ctx context.Context, input Input, root string) (Result, err
 			return result, err
 		}
 	}
-	repo, environment, git, err := checkout(ctx, input, root, false)
+	repo, environment, git, err := checkout(ctx, input, root)
 	if err != nil {
 		return result, err
 	}
@@ -64,7 +64,7 @@ func RunVerification(ctx context.Context, input Input, root string) (Result, err
 	return result, nil
 }
 
-func checkout(ctx context.Context, input Input, root string, agent bool) (string, []string, func(string, ...string) (string, error), error) {
+func checkout(ctx context.Context, input Input, root string) (string, []string, func(string, ...string) (string, error), error) {
 	if err := os.MkdirAll(root, 0700); err != nil {
 		return "", nil, nil, err
 	}
@@ -76,13 +76,9 @@ func checkout(ctx context.Context, input Input, root string, agent bool) (string
 	repo := filepath.Join(root, "repo")
 	environment := []string{"PATH=" + os.Getenv("PATH"), "HOME=" + filepath.Join(root, "home"), "TMPDIR=" + filepath.Join(root, "tmp"),
 		"LANG=C.UTF-8", "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null", "GIT_TERMINAL_PROMPT=0",
-		"GOTOOLCHAIN=local", "GOPROXY=off", "GOSUMDB=off", "GOMODCACHE=/opt/marina-cache/go", "GOCACHE=" + filepath.Join(root, "go-cache")}
-	if agent {
-		if err := os.MkdirAll(filepath.Join(root, "codex"), 0700); err != nil {
-			return "", nil, nil, err
-		}
-		environment = append(environment, "CODEX_HOME="+filepath.Join(root, "codex"))
-	}
+		"GOTOOLCHAIN=local", "GOPROXY=off", "GOSUMDB=off", "GOMODCACHE=/opt/marina-cache/go", "GOCACHE=" + filepath.Join(root, "go-cache"),
+		"NPM_CONFIG_OFFLINE=true", "NPM_CONFIG_CACHE=/opt/marina-cache/npm", "NPM_CONFIG_AUDIT=false", "NPM_CONFIG_FUND=false", "NPM_CONFIG_LOGS_MAX=0",
+		"PLAYWRIGHT_BROWSERS_PATH=/opt/marina-cache/playwright", "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1"}
 	environment = append(environment, input.Environment...)
 	gitEnvironment := append([]string{}, environment...)
 	if input.GitAuthorization != "" {

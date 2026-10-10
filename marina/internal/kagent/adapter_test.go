@@ -42,11 +42,15 @@ type engine struct {
 	finishOnWatch bool
 	// stallAnswer models the pinned controller: an answer sent with
 	// ReturnImmediately leaves the stored task waiting for input.
-	stallAnswer bool
+	stallAnswer      bool
+	unavailableWatch bool
 }
 
 func (e *engine) SubscribeToTask(r *a2a.SubscribeToTaskRequest, stream grpc.ServerStreamingServer[a2a.StreamResponse]) error {
 	e.subscriptions++
+	if e.unavailableWatch {
+		return status.Error(codes.Unavailable, "worker no longer reachable")
+	}
 	if e.task == nil || r.Id != e.task.Id {
 		return status.Error(codes.NotFound, "no task")
 	}
@@ -54,6 +58,34 @@ func (e *engine) SubscribeToTask(r *a2a.SubscribeToTaskRequest, stream grpc.Serv
 		e.task.Status.State = a2a.TaskState_TASK_STATE_COMPLETED
 	}
 	return stream.Send(&a2a.StreamResponse{Payload: &a2a.StreamResponse_Task{Task: e.task}})
+}
+
+func TestLostComputeStopsAfterBoundedObservationsWithoutReplacementWork(t *testing.T) {
+	e := &engine{unavailableWatch: true}
+	f := setup(t, e)
+	ctx := context.Background()
+	obs, err := f.adapter.Start(ctx, f.spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		obs, err = f.adapter.Inspect(ctx, obs.ProviderHandle)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if obs.State != rt.StateCancelled || e.instance != nil || e.sends != 1 || e.creates != 1 {
+		t.Fatalf("lost worker still running or replaced: %+v creates=%d sends=%d", obs, e.creates, e.sends)
+	}
+}
+
+func TestRetiredDiagnosticCannotStartOnNativeEngine(t *testing.T) {
+	e := &engine{}
+	f := setup(t, e)
+	f.spec.Workload = "diagnostic-analysis/v1"
+	if _, err := f.adapter.Start(context.Background(), f.spec); err == nil || !strings.Contains(err.Error(), "retired") || e.creates != 0 || e.sends != 0 {
+		t.Fatalf("retired workload reached execution: %v creates=%d sends=%d", err, e.creates, e.sends)
+	}
 }
 
 type admission struct {

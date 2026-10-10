@@ -1,18 +1,18 @@
 {
   "profiles": [
     {
-      "id": "diagnostic-analysis/v1",
+      "id": "repository/v2",
       "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      "harness": "langchain-create-agent/v2",
+      "harness": "codex/v1",
       "authority": [
-        "analysis.run.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        "source.read",
+        "source.write",
+        "source.fast_forward"
       ],
       "max_tokens": 20000,
       "budget_minutes": 5,
-      "min_attempts": 1,
-      "tools": [
-        "read_context_source"
-      ],
+      "min_attempts": 3,
+      "tools": [],
       "context_kinds": [
         "instruction",
         "goal",

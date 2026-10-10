@@ -2,7 +2,10 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -51,13 +54,13 @@ func run(arguments []string, stdout io.Writer, stderr io.Writer) int {
 	}
 
 	switch arguments[0] {
-	case "workload-profile":
-		return runWorkloadProfile(arguments[1:], stdout, stderr)
-	case "worker":
+	case "check-config":
+		return runConfigCheck(arguments[1:], stdout, stderr)
+	case "verify":
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
 		if err := worker.RunRemote(ctx); err != nil {
-			_, _ = fmt.Fprintln(stderr, "worker failed:", err)
+			_, _ = fmt.Fprintln(stderr, "verification failed:", err)
 			return 1
 		}
 		return 0
@@ -80,6 +83,33 @@ func run(arguments []string, stdout io.Writer, stderr io.Writer) int {
 		writeUsage(stderr)
 		return 2
 	}
+}
+
+// Validate offline without reading credentials, opening stores or contacting a
+// provider. Error details stay private because decoder errors can quote input.
+func runConfigCheck(arguments []string, stdout, stderr io.Writer) int {
+	flags := flag.NewFlagSet("check-config", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	path := flags.String("config", "", "workflow configuration file")
+	if err := flags.Parse(arguments); err != nil || flags.NArg() != 0 || *path == "" {
+		_, _ = fmt.Fprintln(stderr, "check-config requires --config and no positional arguments")
+		return 2
+	}
+	configs, err := flow.LoadProjects(*path)
+	if err != nil {
+		_, _ = fmt.Fprintln(stderr, "workflow configuration is invalid; private content omitted")
+		return 1
+	}
+	digest := configs[0].Digest()
+	if len(configs) > 1 {
+		raw, _ := json.Marshal(configs)
+		sum := sha256.Sum256(raw)
+		digest = hex.EncodeToString(sum[:])
+	}
+	if err := json.NewEncoder(stdout).Encode(map[string]string{"configuration_digest": digest}); err != nil {
+		return 1
+	}
+	return 0
 }
 
 func runDiagnostics(arguments []string, stdout io.Writer, stderr io.Writer) int {
@@ -202,18 +232,25 @@ func runServe(arguments []string, stderr io.Writer) int {
 
 	logger := slog.New(slog.NewJSONHandler(stderr, nil))
 	var workflowConfig flow.Config
+	var projectConfigs []flow.Config
 	requiredCapabilities := workcontrol.MilestoneOneCapabilities()
 	if *configPath != "" {
-		workflowConfig, err = flow.Load(*configPath)
+		projectConfigs, err = flow.LoadProjects(*configPath)
 		if err != nil {
 			logger.Error("load workflow configuration", "error", err)
 			return 1
 		}
+		workflowConfig = projectConfigs[0]
 		requiredCapabilities = workcontrol.WorkerCapabilities()
-		if workflowConfig.Conversation != nil {
-			requiredCapabilities = append(requiredCapabilities, workcontrol.CapabilityConversationList, workcontrol.CapabilityChannelRead, workcontrol.CapabilityConversationQuestion, workcontrol.CapabilityConversationOutcome)
-			if workflowConfig.Conversation.Delegation != nil {
-				requiredCapabilities = append(requiredCapabilities, workcontrol.CapabilityConversationDelegate)
+		for _, configured := range projectConfigs {
+			if configured.Delivery == "fast_forward" {
+				requiredCapabilities = append(requiredCapabilities, workcontrol.CapabilityRunCompleteLanded)
+			}
+			if configured.Conversation != nil {
+				requiredCapabilities = append(requiredCapabilities, workcontrol.CapabilityConversationList, workcontrol.CapabilityConversationContext, workcontrol.CapabilityChannelRead, workcontrol.CapabilityConversationQuestion, workcontrol.CapabilityConversationOutcome, workcontrol.CapabilityConversationPRD, workcontrol.CapabilityConversationPRDTasks)
+				if configured.Conversation.Delegation != nil {
+					requiredCapabilities = append(requiredCapabilities, workcontrol.CapabilityConversationDelegate)
+				}
 			}
 		}
 	}
@@ -315,12 +352,26 @@ func runServe(arguments []string, stderr io.Writer) int {
 		}
 		binding.Version = baseline
 	}
+	projectBindings := []execution.ProjectBinding{binding}
+	for index, configured := range projectConfigs {
+		if index == 0 {
+			continue
+		}
+		additional, err := initializeProjectBinding(startupCtx, journal, configured)
+		if err != nil {
+			logger.Error("persist project binding", "error", err)
+			return 1
+		}
+		projectBindings = append(projectBindings, additional)
+	}
 	controllerEnabled := compatibilityErr == nil
 	registration := workcontrol.AgentRegistration{ID: identity.LogicalAgentID,
 		InstallationID: identity.InstallationID, Name: "Marina controller", Kind: "controller",
 		Capabilities: []string{"work-control", "reconciliation"}}
-	if workflowConfig.Conversation != nil {
-		registration.Capabilities = append(registration.Capabilities, "conversation.invoke."+workflowConfig.ProjectID)
+	for _, configured := range projectConfigs {
+		if configured.Conversation != nil {
+			registration.Capabilities = append(registration.Capabilities, "conversation.invoke."+configured.ProjectID)
+		}
 	}
 	if controllerEnabled {
 		if _, err := client.RegisterAgent(startupCtx, registration); err != nil {
@@ -357,6 +408,12 @@ func runServe(arguments []string, stderr io.Writer) int {
 		logger.Error("configure milestone-one control controller", "error", err)
 		return 1
 	}
+	for _, configured := range projectBindings {
+		controlController.WithProjectBinding(configured)
+	}
+	for _, configured := range projectConfigs {
+		controlController.WithProjectExecutionLimits(configured.ProjectID, flow.RepositoryRuntimeLimit, configured.MaxTokens)
+	}
 	controlController.WithIntakeEnabled(*intakeEnabled)
 	controlController.WithIntakeWorkID(*intakeTaskID)
 	if !*intakeEnabled {
@@ -372,7 +429,7 @@ func runServe(arguments []string, stderr io.Writer) int {
 			logger.Error("configure repository workflow", "error", err)
 			return 1
 		}
-		controlController.WithExecutionLimits(2, workflowConfig.MaxTokens).WithCommandHandler(workflow.Command)
+		controlController.WithExecutionLimits(flow.RepositoryRuntimeLimit, workflowConfig.MaxTokens).WithCommandHandler(workflow.Command)
 		var closeConversation func()
 		conversationController, conversationHandler, closeConversation, err = configureConversation(workflowConfig, journal, client, identity.LogicalAgentID)
 		if err != nil {
@@ -381,8 +438,57 @@ func runServe(arguments []string, stderr io.Writer) int {
 		}
 		defer closeConversation()
 	}
+	workflows := []*flow.Controller{}
+	conversations := []*conversation.Controller{}
+	workerHandlers := map[string]http.Handler{}
+	conversationHandlers := map[string]http.Handler{}
+	if workflow != nil {
+		workflows = append(workflows, workflow)
+		workerHandlers[workflowConfig.ProjectID] = workerHandler
+	}
+	if conversationController != nil {
+		conversations = append(conversations, conversationController)
+		conversationHandlers[workflowConfig.ProjectID] = conversationHandler
+	}
+	for index, configured := range projectConfigs {
+		if index == 0 {
+			continue
+		}
+		projectWorkflow, gateway, err := configureWorkers(configured, journal, client)
+		if err != nil {
+			logger.Error("configure project workflow", "error", err)
+			return 1
+		}
+		workflows = append(workflows, projectWorkflow)
+		workerHandlers[configured.ProjectID] = gateway
+		projectConversation, chatGateway, closeChat, err := configureConversation(configured, journal, client, identity.LogicalAgentID)
+		if err != nil {
+			logger.Error("configure project conversation", "error", err)
+			return 1
+		}
+		defer closeChat()
+		if projectConversation != nil {
+			conversations = append(conversations, projectConversation)
+			conversationHandlers[configured.ProjectID] = chatGateway
+		}
+	}
+	if len(workflows) > 0 {
+		controlController.WithCommandHandler(func(ctx context.Context, e execution.Execution, cmd workcontrol.Command) (string, string, error) {
+			for _, configured := range workflows {
+				if configured.Config.ProjectID == e.ProjectID {
+					return configured.Command(ctx, e, cmd)
+				}
+			}
+			return "", "", errProjectNotConfigured
+		})
+	}
+	if len(projectConfigs) > 1 {
+		gateway := projectGateway(journal, workerHandlers, conversationHandlers, workerHandler)
+		workerHandler = gateway
+		conversationHandler = gateway
+	}
 	if controllerEnabled {
-		if workflow != nil {
+		for _, workflow := range workflows {
 			if err := workflow.PublishWorkloads(startupCtx); err != nil {
 				logger.Warn("workload discovery publication deferred", "error", err)
 			}
@@ -429,6 +535,11 @@ func runServe(arguments []string, stderr io.Writer) int {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
+				for _, workflow := range workflows {
+					if err := workflow.StopExpired(ctx); err != nil {
+						logger.Warn("expired runtime termination deferred", "error", err)
+					}
+				}
 				if !controllerEnabled {
 					operationCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 					_, compatibilityErr := client.CheckCompatibility(operationCtx, requiredCapabilities)
@@ -443,7 +554,7 @@ func runServe(arguments []string, stderr io.Writer) int {
 					controllerEnabled = true
 					logger.Info("milestone-one controllers enabled after provider recovery")
 				}
-				if workflow != nil {
+				for _, workflow := range workflows {
 					op, cancel := context.WithTimeout(ctx, 30*time.Second)
 					if err := workflow.PublishWorkloads(op); err != nil {
 						logger.Warn("workload discovery publication deferred", "error", err)
@@ -461,7 +572,7 @@ func runServe(arguments []string, stderr io.Writer) int {
 						logger.Warn("repository workflow deferred", "error", err)
 					}
 				}
-				if conversationController != nil {
+				for _, conversationController := range conversations {
 					if ctx.Err() != nil {
 						return
 					}
@@ -632,7 +743,8 @@ func writeUsage(writer io.Writer) {
 	_, _ = fmt.Fprintln(writer, "Usage: marina <command> [options]")
 	_, _ = fmt.Fprintln(writer)
 	_, _ = fmt.Fprintln(writer, "Commands:")
-	_, _ = fmt.Fprintln(writer, "  workload-profile  Inspect the installed analysis profile and task authority grant")
+	_, _ = fmt.Fprintln(writer, "  check-config  Validate workflow configuration offline without exposing private content")
+	_, _ = fmt.Fprintln(writer, "  verify   Run one independent clean verification attempt")
 	_, _ = fmt.Fprintln(writer, "  diagnostics  Export a deterministic, redacted view of the local journal")
 	_, _ = fmt.Fprintln(writer, "  artifact-retention  Plan or apply offline cleanup of expired unreferenced artifacts")
 	_, _ = fmt.Fprintln(writer, "  doctor   Check the configured work-control dependency")

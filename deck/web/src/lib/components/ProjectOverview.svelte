@@ -24,8 +24,8 @@
    <button class="task" type="button" on:click={()=>onselect(task)}><span><strong>{task.title}</strong><small>{taskLabel(task)}</small></span><ArrowUpRight size={14}/></button>
   {:else}<p class="empty">No tasks to do.</p>{/each}
  </section>
- <section class="group" aria-label="Recently completed">
-  <h3>Recently completed</h3>
+ <section class="group" aria-label="Recently landed or accepted">
+  <h3>{queues.recent.every(task=>task.landing) ? 'Recently landed' : 'Recently completed'}</h3>
   {#each queues.recent as task (task.id)}
    <button class="task" type="button" on:click={()=>onselect(task)}><span><strong>{task.title}</strong><small>{taskLabel(task)}</small></span><ArrowUpRight size={14}/></button>
   {:else}<p class="empty">No completed tasks yet.</p>{/each}

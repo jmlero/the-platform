@@ -11,6 +11,19 @@ import (
 	rt "github.com/jmlero/the-platform/marina/internal/runtime"
 )
 
+// ModelBudgetDenial reads the durable gateway denial even after its outbox
+// receipt was published. The workflow uses it instead of a generic engine error.
+func (store *Store) ModelBudgetDenial(ctx context.Context, executionID, attemptID string) (string, error) {
+	var message string
+	err := store.db.QueryRowContext(ctx, `SELECT json_extract(payload_json,'$.message') FROM provider_outbox
+		WHERE execution_id=? AND kind='event' AND instr(idempotency_key,?)=1
+		AND json_extract(payload_json,'$.type')='model.budget_exhausted' ORDER BY sequence LIMIT 1`, executionID, "model-budget:"+attemptID+":").Scan(&message)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return message, err
+}
+
 // ReserveModelCall charges a conservative reservation before issuing a model
 // request. An unknown response retains the reservation across process restart.
 func (store *Store) ReserveModelCall(ctx context.Context, executionID, attemptID string, fence, tokens, cost int64) (string, error) {
@@ -35,6 +48,15 @@ func (store *Store) ReserveModelCall(ctx context.Context, executionID, attemptID
 	}
 	if attempt.ExecutionID != record.ID || attempt.State.Terminal() || attempt.Specification.AuthorityFence != fence || !store.now().Before(attempt.DeadlineAt) {
 		return "", execution.ErrConflict
+	}
+	if attempt.Specification.Stage == "review" {
+		var calls int
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM model_calls WHERE attempt_id=?`, attemptID).Scan(&calls); err != nil {
+			return "", err
+		}
+		if calls != 0 {
+			return "", execution.ErrConflict
+		}
 	}
 	if attempt.Specification.Engine != nil {
 		ref, err := attempt.Specification.EngineGatewayReference()

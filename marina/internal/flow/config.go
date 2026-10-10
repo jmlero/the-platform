@@ -1,4 +1,4 @@
-// Package flow connects bounded repository and analysis workloads to durable ports.
+// Package flow connects bounded repository work to durable ports.
 package flow
 
 import (
@@ -13,7 +13,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/jmlero/the-platform/marina/internal/analysis"
 	"github.com/jmlero/the-platform/marina/internal/conversation"
 	"github.com/jmlero/the-platform/marina/internal/kagent"
 	"github.com/jmlero/the-platform/marina/internal/kubernetes"
@@ -25,9 +24,7 @@ import (
 
 type Config struct {
 	Version                    int                         `json:"version,omitempty"`
-	Analysis                   *analysis.Profile           `json:"analysis,omitempty"`
 	Conversation               *conversation.Profile       `json:"conversation,omitempty"`
-	AnalysisEngine             *runtimeapi.EngineSelection `json:"analysis_engine,omitempty"`
 	ProjectID                  string                      `json:"project_id"`
 	PublicURL                  string                      `json:"public_url"`
 	TLSCertFile                string                      `json:"tls_cert_file"`
@@ -40,6 +37,7 @@ type Config struct {
 	RepositoryEngineGatewayURL string                      `json:"repository_engine_gateway_url,omitempty"`
 	Git                        github.Config               `json:"git"`
 	Model                      workerapi.Model             `json:"model"`
+	ReviewerModel              *workerapi.Model            `json:"reviewer_model,omitempty"`
 	AllowedPaths               []string                    `json:"allowed_paths"`
 	Checks                     []workresult.Check          `json:"checks"`
 	RequiredCI                 []string                    `json:"required_ci"`
@@ -57,6 +55,9 @@ func safeURL(value string) bool {
 }
 
 func (c Config) Validate() error {
+	if c.RepositoryEnabled() && c.RepositoryEngine == nil {
+		return errors.New("repository work requires the native kagent engine; legacy agent Jobs are retired")
+	}
 	if c.Version < 0 || c.Version > 1 {
 		return errors.New("unsupported workflow configuration version")
 	}
@@ -81,17 +82,6 @@ func (c Config) Validate() error {
 		!filepath.IsAbs(c.ArtifactDirectory) || c.SigningKeyFile == "" || c.ArtifactTokenFile == "" {
 		return errors.New("explicit project, HTTPS destinations, identity, secrets, bounded budget, file scope and trusted checks are required")
 	}
-	if c.Analysis != nil {
-		if err := c.Analysis.Validate(); err != nil {
-			return err
-		}
-		if c.Analysis.MaxTokens > c.MaxTokens || c.Analysis.BudgetMinutes > c.BudgetMinutes {
-			return errors.New("analysis limits cannot exceed installation limits")
-		}
-		if c.Analysis.HarnessVersion == analysis.HarnessBYO && c.AnalysisEngine == nil {
-			return errors.New("analysis BYO profile requires the selected kagent engine")
-		}
-	}
 	if c.Conversation != nil {
 		if err := c.Conversation.Validate(c.Model); err != nil {
 			return err
@@ -99,20 +89,8 @@ func (c Config) Validate() error {
 		if c.Conversation.MaxTokens > c.MaxTokens || c.Conversation.BudgetMinutes > c.BudgetMinutes {
 			return errors.New("conversation limits cannot exceed installation limits")
 		}
-		if d := c.Conversation.Delegation; d != nil && (!c.RepositoryEnabled() || d.MaxTokens > c.MaxTokens || d.TimeMinutes > c.BudgetMinutes || !slices.Equal(d.Authority, c.RepositoryAuthority())) {
+		if d := c.Conversation.Delegation; d != nil && (!c.RepositoryEnabled() || d.MaxAttempts < 3 || d.MaxTokens > c.MaxTokens || d.TimeMinutes > c.BudgetMinutes || !slices.Equal(d.Authority, c.RepositoryAuthority())) {
 			return errors.New("conversation delegation must fit the installed repository profile")
-		}
-	}
-	if c.AnalysisEngine != nil {
-		if c.Analysis == nil || c.Analysis.HarnessVersion != analysis.HarnessBYO || c.Analysis.Revision < 3 {
-			return errors.New("analysis engine requires a revisioned LangChain context profile")
-		}
-		if err := c.AnalysisEngine.Validate(); err != nil {
-			return err
-		}
-		if c.AnalysisEngine.Version != kagent.Version || c.AnalysisEngine.Endpoint != "kint-engine-controller.kint-engine.svc:8083" ||
-			c.AnalysisEngine.Namespace != "kint-engine" || c.AnalysisEngine.Harness != "kint-analysis-byo" {
-			return errors.New("analysis engine requires the pinned local LangChain BYO harness")
 		}
 	}
 	if c.RepositoryEngine != nil {
@@ -128,7 +106,10 @@ func (c Config) Validate() error {
 	if c.RepositoryEngine == nil && c.RepositoryEngineGatewayURL != "" {
 		return errors.New("repository engine gateway requires a selected engine")
 	}
-	if c.RepositoryEnabled() || c.Analysis == nil {
+	if c.RepositoryEnabled() {
+		if err := c.ValidateReviewer(); err != nil {
+			return err
+		}
 		if !safeURL(c.Git.APIURL) || !safeURL(c.Git.CloneURL) || c.Git.Repository == "" || c.Git.AuthorName == "" || c.Git.AuthorEmail == "" || c.Git.BaseBranch == "" || len(c.Checks) == 0 || len(c.Checks) > 20 || len(c.AllowedPaths) == 0 {
 			return errors.New("repository profile requires explicit Git destinations, identity, scope and trusted checks")
 		}
@@ -150,6 +131,16 @@ func (c Config) Validate() error {
 		if scope != "." && !workresult.AllowedPath([]string{"."}, scope) {
 			return errors.New("invalid allowed path")
 		}
+	}
+	return nil
+}
+
+func (c Config) ValidateReviewer() error {
+	m := c.ReviewerModel
+	if m == nil || strings.TrimSpace(m.Name) == "" || strings.EqualFold(strings.TrimSpace(m.Name), strings.TrimSpace(c.Model.Name)) ||
+		!safeURL(m.Endpoint) || m.MaxOutputTokens < 1 || m.MaxOutputTokens > 65536 || m.Currency != c.Model.Currency ||
+		m.InputMicrosPerMillion < 0 || m.OutputMicrosPerMillion < 0 || m.InputMicrosPerMillion > 100000000 || m.OutputMicrosPerMillion > 100000000 {
+		return errors.New("repository review requires a different explicitly configured model, HTTPS destination, bounded output and matching currency")
 	}
 	return nil
 }
@@ -182,22 +173,3 @@ func (c Config) Digest() string {
 func (c Config) RepositoryEnabled() bool {
 	return c.Git.Repository != "" || c.Git.CloneURL != "" || c.Git.APIURL != ""
 }
-
-// The scoped grant in the task budget binds the model and its
-// credential reference as well as the fixture, harness image and all limits.
-func (c Config) AnalysisDigest() string {
-	if c.AnalysisEngine != nil {
-		return analysis.Digest(struct {
-			Profile *analysis.Profile
-			Model   workerapi.Model
-			Policy  string
-			Engine  *runtimeapi.EngineSelection
-		}{c.Analysis, c.Model, c.PolicyVersion, c.AnalysisEngine})
-	}
-	return analysis.Digest(struct {
-		Profile *analysis.Profile
-		Model   workerapi.Model
-		Policy  string
-	}{c.Analysis, c.Model, c.PolicyVersion})
-}
-func (c Config) AnalysisAuthority() string { return "analysis.run." + c.AnalysisDigest() }

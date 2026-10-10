@@ -92,6 +92,10 @@ func TestAdvertisedCapabilitiesMatchOpenAPIOperations(t *testing.T) {
 	scanner := bufio.NewScanner(contract)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
+		// Landed completion is an additive behavior of the existing complete route.
+		line = strings.Replace(line, "x-landing-capability:", "x-capability:", 1)
+		line = strings.Replace(line, "x-prd-capability:", "x-capability:", 1)
+		line = strings.Replace(line, "x-prd-tasks-capability:", "x-capability:", 1)
 		if !strings.HasPrefix(line, "x-capability:") {
 			continue
 		}
@@ -118,8 +122,8 @@ func TestOpenAPIDeclaresIdempotencyForEveryClaimAndRunMutation(t *testing.T) {
 		t.Fatalf("read OpenAPI contract: %v", err)
 	}
 	const reference = `$ref: "#/components/parameters/IdempotencyKey"`
-	if count := strings.Count(string(contract), reference); count != 13 {
-		t.Fatalf("Idempotency-Key operation references = %d, want 13", count)
+	if count := strings.Count(string(contract), reference); count != 16 {
+		t.Fatalf("Idempotency-Key operation references = %d, want 16", count)
 	}
 }
 

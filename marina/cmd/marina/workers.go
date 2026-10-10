@@ -56,12 +56,6 @@ func configureWorkers(config flow.Config, journal *sqlite.Store, provider flow.P
 	kube := config.Kubernetes
 	kube.WorkerURL = config.PublicURL
 	kube.SigningKey = key
-	if config.Analysis != nil {
-		kube.AdditionalImages = []string{config.Analysis.Image}
-		if !config.RepositoryEnabled() {
-			kube.Image = config.Analysis.Image
-		}
-	}
 	runtime, err := kubernetes.New(kube, nil)
 	if err != nil {
 		return nil, nil, err
@@ -84,10 +78,10 @@ func configureWorkers(config flow.Config, journal *sqlite.Store, provider flow.P
 			return nil, nil, err
 		}
 	}
-	gateway := workerapi.New(workerapi.Config{SourceBinding: func(ctx context.Context, e execution.Execution) (string, string, error) {
+	gateway := workerapi.New(workerapi.Config{ProjectID: config.ProjectID, SourceBinding: func(ctx context.Context, e execution.Execution) (string, string, error) {
 		effective, err := controller.ConfigurationForExecution(ctx, e)
 		return effective.Git.CloneURL, effective.Git.TokenFile, err
-	}, ContextCheck: controller.CheckContext, PublicURL: config.PublicURL, SigningKey: key, SourceURL: config.Git.CloneURL, SourceTokenFile: config.Git.TokenFile, ArtifactTokenFile: config.ArtifactTokenFile, Model: config.Model}, journal, store, provider, nil)
+	}, ContextCheck: controller.CheckContext, PublicURL: config.PublicURL, SigningKey: key, SourceURL: config.Git.CloneURL, SourceTokenFile: config.Git.TokenFile, ArtifactTokenFile: config.ArtifactTokenFile, Model: config.Model, ReviewerModel: config.ReviewerModel}, journal, store, provider, modelClient())
 	// Retain cancellation and inspection for a journaled pilot attempt even
 	// after the profile stops selecting the engine for new work.
 	const engineEndpoint = "kint-engine-controller.kint-engine.svc:8083"

@@ -1,7 +1,7 @@
 # Governed worker and engine gateway
 
 `workerapi.Server` owns admission and bounded model/source/context access for
-both existing workers and the KINT-04 engine integration. Marina provisions
+native engine attempts and independent verification Jobs. Marina provisions
 each engine attempt's AgentTemplate, ModelConfig and gateway Secret itself; see
 `internal/kubernetes/engine.go`.
 See [KINT-04 acceptance evidence](../../../docs/validation/kint-04-2026-09-22.md).
@@ -29,12 +29,11 @@ revocation mechanism.
 
 | HTTPS route | Supported authority |
 | --- | --- |
-| `POST /engine/model/v1/responses` | Bounded self-contained Responses for implementation/analysis stages. |
+| `POST /engine/model/v1/responses` | Bounded self-contained Responses for repository implementation. |
 | `GET /engine/input` | Exact persisted worker input. |
 | `GET /engine/authority` | Current fence and bounded expiry. |
 | `GET /engine/git/info/refs?service=git-upload-pack` | Advertisement for the original repository only. |
 | `POST /engine/git/git-upload-pack` | Read-only Git transport for that repository. |
-| `POST /engine/tools/read-context-source` | Existing frozen tool allowlist and selected immutable source URI. |
 
 All routes require direct TLS and `Authorization: Bearer <engine credential>`.
 TLS-forwarding headers are not trusted. There are no generic proxy, Git-write,
@@ -46,7 +45,7 @@ Repository native requests have only two normalization rules: drop
 `type: web_search` and boolean `external_web_access`. Explicit remote search
 selection remains denied. No remote search tool reaches the upstream. Other
 provider-hosted tools, stored context/prompts, background requests and unknown
-Responses fields fail closed. Analysis tools retain their frozen allowlist.
+Responses fields fail closed. Arbitrary tools and child delegation are denied.
 
 Each accepted model attempt/retry reserves tokens and cost in SQLite. Engine
 cancellation and credential expiry are checked again in the reservation
@@ -76,9 +75,8 @@ installation and teardown.
 2. Bind the exact installed native harness/template and inspect the prepared
    resources. Permit egress only to Marina/DNS. Do not configure memory,
    shared/delegated agents, remote model endpoints, extra MCP tools, skills,
-   plugins, telemetry destinations or credentials. The diagnostic BYO worker can
-   call the existing HTTP context tool; no MCP bridge is needed for that client.
-   Preserve its no-repository authority.
+   plugins, telemetry destinations or credentials. The conversation BYO actor
+   has a separate gateway and no repository authority.
 3. Establish genuine TLS trust from Substrate's egress router to Marina and the
    generated MITM trust bundle inside the native client. The pinned native
    compiler rejects ModelConfig custom TLS fields and caller-token passthrough;
@@ -97,7 +95,8 @@ installation and teardown.
    termination, remove only the attempt-owned instance and prepared resources/
    Secret. Never reassign those names to another attempt. Full automated
    provisioning, workflow dispatch and resource cleanup belong to KINT-06/07;
-   installation upgrade/rollback remains KINT-10.
+   installation upgrade/rollback is covered by the
+   [permanent local runbook](../../../deploy/kubernetes/local-podman-kagent/README.md).
 
 ## Verification
 
@@ -132,3 +131,9 @@ podman --connection podman-machine-default-root run --rm \
 The regular suite skips this opt-in test. Its successful isolated run is recorded
 separately from deterministic tests and from the Substrate acceptance described
 in [the live fixture recipe](../../../deploy/kubernetes/kagent-trial/GATEWAY.md).
+
+The verifier retains `/workers/{attempt}/input`, `/authority`, read-only Git,
+artifact upload and result submission. `/workers/{attempt}/model` and the legacy
+context-tool route are removed. Shared signing and durable model reservations
+remain independent of the Kubernetes adapter. Cleanup failures are recorded and
+retried against the same attempt-owned resources.

@@ -145,6 +145,30 @@ func (store *Store) migrate(ctx context.Context) error {
 	sort.Slice(entries, func(left int, right int) bool {
 		return entries[left].Name() < entries[right].Name()
 	})
+	known := make(map[string]bool, len(entries))
+	for _, entry := range entries {
+		known[entry.Name()] = true
+	}
+	rows, err := store.db.QueryContext(ctx, "SELECT version FROM schema_migrations")
+	if err != nil {
+		return fmt.Errorf("inspect journal schema before migration: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var version string
+		if err := rows.Scan(&version); err != nil {
+			return err
+		}
+		if !known[version] {
+			return fmt.Errorf("unsupported newer journal schema %q; restore a compatible snapshot before downgrade", version)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
 
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".sql") {

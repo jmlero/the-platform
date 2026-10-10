@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jmlero/the-platform/marina/internal/analysis"
 	"github.com/jmlero/the-platform/marina/internal/artifacts"
 	"github.com/jmlero/the-platform/marina/internal/execution"
 	"github.com/jmlero/the-platform/marina/internal/journal/sqlite"
@@ -43,9 +42,6 @@ type Controller struct {
 // Every value used in an external write is derived from this durable state,
 // the frozen task, or the versioned installation configuration.
 type state struct {
-	Analysis             *analysis.Profile `json:",omitempty"`
-	ProfileDigest        string            `json:",omitempty"`
-	ValidationObservedAt time.Time         `json:",omitempty"`
 	Step                 string
 	ConfigDigest         string
 	ContextDigest        string
@@ -61,10 +57,21 @@ type state struct {
 	Implementer          string
 	Verifier             string
 	ImplementationDigest string
+	ImplementationBase   string `json:",omitempty"`
 	VerificationDigest   string
 	PR                   sourcecontrol.PullRequest
 	Reason               string
 	EvidenceIDs          []string
+	Failures             []repairFailure                 `json:",omitempty"`
+	RepairPlanDigest     string                          `json:",omitempty"`
+	CandidateDigest      string                          `json:",omitempty"`
+	Reviewer             string                          `json:",omitempty"`
+	ReviewDigest         string                          `json:",omitempty"`
+	ReviewEvidenceID     string                          `json:",omitempty"`
+	Rebases              []rebaseAttempt                 `json:",omitempty"`
+	Landing              *workcontrol.LandingObservation `json:",omitempty"`
+	LandingDigest        string                          `json:",omitempty"`
+	LandingEvidenceID    string                          `json:",omitempty"`
 }
 
 func (c *Controller) load(ctx context.Context, e execution.Execution) (state, error) {
@@ -94,37 +101,51 @@ func (c *Controller) save(ctx context.Context, e execution.Execution, s state) e
 	if err != nil {
 		return err
 	}
-	message := map[string]string{"plan": "Repository pinned; preparing approval", "approval": "Plan submitted", "implement": "Implementing the approved change", "branch": "Implementation result saved", "publish": "Publishing the scoped change", "verify": "Verifying the published commit in a clean worker", "pull_request": "Independent checks passed; opening pull request", "ci": "Waiting for required CI and review checks", "land": "Required CI passed; fast-forwarding the base branch", "evidence": "Recording verification evidence", "complete": "Verification evidence ready"}[s.Step]
+	message := map[string]string{"plan": "Repository pinned; preparing approval", "approval": "Plan submitted", "implement": "Implementing the approved change", "branch": "Implementation result saved", "publish": "Publishing the scoped change", "verify": "Verifying the published commit in a clean worker", "pull_request": "Independent checks passed; opening pull request", "ci": "Waiting for required CI and review checks", "land": "Required CI passed; fast-forwarding the base branch", "evidence": "Recording verification evidence", "complete": "Verification evidence ready", "repair": "Failure recorded; checking the remaining repair budget", "repair_plan": "Diagnosing the failure and selecting a different approach"}[s.Step]
 	if message == "" {
 		message = s.Step
+	}
+	if s.Step == "review" {
+		message = "Reviewing the candidate patch before commit"
 	}
 	if s.Reason != "" {
 		message = s.Reason
 	}
-	if (s.Step == "implement" || s.Step == "analyze") && s.EngineStatus != "" && s.Reason == "" {
+	if (s.Step == "implement") && s.EngineStatus != "" && s.Reason == "" {
 		message = "Engine " + strings.TrimPrefix(strings.ToLower(s.EngineStatus), "task_state_")
-	}
-	if s.Analysis != nil && s.Reason == "" {
-		message = map[string]string{
-			"plan":              "Diagnostic inputs frozen; preparing approval",
-			"approval":          "Diagnostic analysis plan submitted",
-			"analyze":           "Analyzing the frozen diagnostic records",
-			"analysis_verify":   "Independently checking diagnostic findings and source quotes",
-			"analysis_evidence": "Recording diagnostic validation evidence",
-			"complete":          "Diagnostic evidence ready",
-		}[s.Step]
 	}
 	totals, err := c.Journal.ExecutionModelTotals(ctx, e.ID)
 	if err != nil {
 		return err
 	}
-	workload, harness, profile := c.Config.RepositoryProfileID(), "codex/v1", s.ConfigDigest
-	if s.Analysis != nil {
-		workload = analysis.Kind
-		harness = s.Analysis.HarnessVersion
-		profile = s.ProfileDigest
+	attempts, err := c.Journal.ListRuntimeAttempts(ctx, e.ID)
+	if err != nil {
+		return err
 	}
-	_, _, err = c.Journal.EnqueueOutbox(ctx, e.ID, execution.OutboxInput{Kind: "event", IdempotencyKey: fmt.Sprintf("workflow:%s:%d", e.ID, checkpoint.ID), Payload: map[string]any{"type": "execution.progress", "message": message, "source_revision": s.Head, "execution_id": e.ID, "workload": workload, "harness": harness, "profile_digest": profile, "reported_tokens": totals.Tokens, "reported_cost_micros": totals.CostMicros, "pending_model_calls": totals.PendingCalls, "reserved_tokens": totals.ReservedTokens, "reserved_cost_micros": totals.ReservedCostMicros, "currency": c.Config.Model.Currency, "occurred_at": checkpoint.CreatedAt.UnixMilli()}})
+	workload, harness, profile := c.Config.RepositoryProfileID(), "codex/v1", s.ConfigDigest
+	payload := map[string]any{"type": "execution.progress", "message": message, "source_revision": s.Head, "execution_id": e.ID,
+		"workload": workload, "harness": harness, "profile_digest": profile, "reported_tokens": totals.Tokens, "reported_cost_micros": totals.CostMicros,
+		"pending_model_calls": totals.PendingCalls, "reserved_tokens": totals.ReservedTokens, "reserved_cost_micros": totals.ReservedCostMicros,
+		"currency": c.Config.Model.Currency, "occurred_at": checkpoint.CreatedAt.UnixMilli(), "deadline_at": e.DeadlineAt,
+		"runtime_attempts": len(attempts), "max_runtime_attempts": e.MaxAttempts, "remaining_runtime_attempts": max(0, e.MaxAttempts-len(attempts)),
+		"failure_count": len(s.Failures), "failure_limit": repositoryFailureLimit}
+	if e.MaxTokens > 0 {
+		payload["remaining_tokens"] = max(0, e.MaxTokens-e.UsedTokens-totals.ReservedTokens)
+	}
+	if e.MaxCostMicros > 0 {
+		payload["remaining_cost_micros"] = max(0, e.MaxCostMicros-e.UsedCostMicros-totals.ReservedCostMicros)
+	}
+	if len(s.Failures) > 0 {
+		failure := s.Failures[len(s.Failures)-1]
+		payload["failure_artifact_digest"], payload["failure_source_revision"] = failure.ArtifactDigest, failure.SourceRevision
+		if failure.PlanDigest != "" {
+			payload["repair_plan_digest"] = failure.PlanDigest
+			if s.Step == "implement" && s.Reason == "" {
+				payload["message"] = fmt.Sprintf("%s. Repair %d diagnosis: %s. New approach: %s", message, len(s.Failures), failure.Diagnosis, failure.NextApproach)
+			}
+		}
+	}
+	_, _, err = c.Journal.EnqueueOutbox(ctx, e.ID, execution.OutboxInput{Kind: "event", IdempotencyKey: fmt.Sprintf("workflow:%s:%d", e.ID, checkpoint.ID), Payload: payload})
 	return err
 }
 
@@ -180,7 +201,7 @@ func (c *Controller) CheckContext(ctx context.Context, e execution.Execution) er
 		return err
 	}
 	profileConfig := c.Config
-	if c.BindingConfig != nil && !analysisRequested(task) {
+	if c.BindingConfig != nil {
 		profileConfig, err = c.BindingConfig(ctx, e)
 		if err != nil {
 			return err
@@ -188,11 +209,6 @@ func (c *Controller) CheckContext(ctx context.Context, e execution.Execution) er
 	}
 	if !profileConfig.MatchesWorkload(task) {
 		return contextProblem("The selected workload profile is unavailable or changed")
-	}
-	if analysisRequested(task) {
-		if c.Config.Analysis == nil || len(task.Budget.Authority) != 1 || task.Budget.Authority[0] != c.Config.AnalysisAuthority() {
-			return contextProblem("The authorized analysis profile is unavailable or changed")
-		}
 	}
 	if task.Context != nil {
 		reader, ok := c.Provider.(workcontrol.ContextInspection)
@@ -211,6 +227,26 @@ func (c *Controller) CheckContext(ctx context.Context, e execution.Execution) er
 		}
 	}
 	return nil
+}
+
+// StopExpired terminates journaled compute without consulting Deck. It also
+// runs while provider compatibility is unavailable during startup recovery.
+func (c *Controller) StopExpired(ctx context.Context) error {
+	items, err := c.Journal.ListActiveExecutions(ctx, 100)
+	if err != nil {
+		return err
+	}
+	for _, e := range items {
+		if e.ProjectID == c.Config.ProjectID && !e.LeaseExpiresAt.After(time.Now().Add(time.Second)) {
+			op, cancel := context.WithTimeout(ctx, 30*time.Second)
+			err = c.stop(op, e)
+			cancel()
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return c.cleanup(ctx)
 }
 
 func (c *Controller) Cycle(ctx context.Context) []error {
@@ -245,6 +281,14 @@ func (c *Controller) Cycle(ctx context.Context) []error {
 }
 
 func (c *Controller) advance(ctx context.Context, e execution.Execution) error {
+	// Local lease expiry is enough to terminate compute. Deck may still be
+	// unavailable, so stopping the recorded attempt must precede provider reads.
+	if !e.LeaseExpiresAt.After(time.Now().Add(time.Second)) {
+		if err := c.stop(ctx, e); err != nil {
+			return err
+		}
+		return errors.New("execution lease expired; runtime stopped")
+	}
 	snapshot, err := c.Journal.AcquiredTaskSnapshot(ctx, e.ProjectID, e.ExternalWorkID, e.TaskVersion)
 	if err != nil {
 		return err
@@ -253,7 +297,7 @@ func (c *Controller) advance(ctx context.Context, e execution.Execution) error {
 	if err = json.Unmarshal([]byte(snapshot), &task); err != nil {
 		return err
 	}
-	if c.BindingConfig != nil && !analysisRequested(task) {
+	if c.BindingConfig != nil {
 		config, err := c.BindingConfig(ctx, e)
 		if err != nil {
 			r, readErr := c.run(ctx, e)
@@ -276,9 +320,6 @@ func (c *Controller) advance(ctx context.Context, e execution.Execution) error {
 		return err
 	}
 	if r.Status == workcontrol.RunCompleted && s.Step == "complete" {
-		if s.Analysis != nil {
-			return c.transition(ctx, e, execution.StateCompleted, "Validated diagnostic analysis available")
-		}
 		if c.Config.Delivery == "fast_forward" {
 			return c.transition(ctx, e, execution.StateCompleted, "Verified commit landed on the base branch")
 		}
@@ -302,10 +343,13 @@ func (c *Controller) advance(ctx context.Context, e execution.Execution) error {
 	if s.Step == "paused" {
 		return nil
 	}
+	if s.Step == "repair" || s.Step == "repair_plan" {
+		return c.advanceRepair(ctx, e, r, task, s)
+	}
+	if s.Step == "review" || s.Step == "review_evidence" || s.Step == "review_rejected" {
+		return c.advanceReview(ctx, e, r, task, s)
+	}
 	if s.Step == "prepare" {
-		if analysisRequested(task) {
-			return c.prepareAnalysis(ctx, e, r, task, s)
-		}
 		if strings.TrimSpace(task.AcceptanceCriteria) == "" {
 			return c.block(ctx, e, r, "Observable acceptance criteria are required for a repository change")
 		}
@@ -314,11 +358,17 @@ func (c *Controller) advance(ctx context.Context, e execution.Execution) error {
 				return c.block(ctx, e, r, "Task must explicitly authorize "+strings.Join(c.Config.RepositoryAuthority(), ", ")+"; create a new task with the required authority")
 			}
 		}
-		if e.MaxAttempts < 2 {
-			return c.block(ctx, e, r, "At least two runtime attempts are required: implementation and independent verification")
+		if err := c.Config.ValidateReviewer(); err != nil {
+			return c.block(ctx, e, r, err.Error())
+		}
+		if e.MaxAttempts < 3 {
+			return c.block(ctx, e, r, "At least three runtime attempts are required: implementation, independent review and clean verification")
 		}
 		if task.Budget.MaxCostMinor > 0 && (task.Budget.Currency != c.Config.Model.Currency || c.Config.Model.InputMicrosPerMillion == 0 || c.Config.Model.OutputMicrosPerMillion == 0) {
 			return c.block(ctx, e, r, "Task cost currency must match configured nonzero model price rates")
+		}
+		if task.Budget.MaxCostMinor > 0 && (c.Config.ReviewerModel.InputMicrosPerMillion == 0 || c.Config.ReviewerModel.OutputMicrosPerMillion == 0) {
+			return c.block(ctx, e, r, "Cost-bounded tasks require explicit reviewer price rates")
 		}
 		source, err := c.Source(e)
 		if err != nil {
@@ -329,6 +379,12 @@ func (c *Controller) advance(ctx context.Context, e execution.Execution) error {
 			return err
 		}
 		s.Base = base.Commit
+		if err := c.confirmDependencies(ctx, source, task, s.Base); err != nil {
+			if errors.Is(err, errLandingUnavailable) {
+				return c.block(ctx, e, r, err.Error())
+			}
+			return err
+		}
 		s.Head = base.Commit
 		s.Step = "plan"
 		return c.save(ctx, e, s)
@@ -371,22 +427,17 @@ func (c *Controller) advance(ctx context.Context, e execution.Execution) error {
 		}
 		g := guard(e, r, "plan")
 		submission := workcontrol.PlanRevisionSubmission{IdempotencyKey: g.IdempotencyKey, AgentID: g.AgentID, ExpectedVersion: g.ExpectedVersion, FenceToken: g.FenceToken,
-			Plan:          fmt.Sprintf("Implement the bounded task at `%s` in `%s`.\n\nAllowed paths: %s.\n\nRun the configured checks in a separate clean Kubernetes Job at the published commit. Open one PR against `%s`; stop for human review. Failed checks or requested review changes block this task.\n\nModel destination: %s (%s). No merge or deployment is authorized.", s.Base, c.Config.Git.Repository, strings.Join(c.Config.AllowedPaths, ", "), c.Config.Git.BaseBranch, c.Config.Model.Endpoint, c.Config.Model.Name),
+			Plan:          fmt.Sprintf("Implement the bounded task at `%s` in `%s`.\n\nAllowed paths: %s.\n\nRun the configured checks in a separate clean Kubernetes Job at the published commit. Open one PR against `%s`; stop for human review. Requested review changes block this task.\n\nModel destination: %s (%s). No merge or deployment is authorized.", s.Base, c.Config.Git.Repository, strings.Join(c.Config.AllowedPaths, ", "), c.Config.Git.BaseBranch, c.Config.Model.Endpoint, c.Config.Model.Name),
 			ContextDigest: c.contextDigest(task, s), RiskClass: "medium", VerificationStrategy: "Independent clean checkout; all configured local and required CI checks must pass for the PR head", ExpectedSideEffects: []string{"create scoped Git branch", "publish commit", "open pull request"}, RollbackApproach: "Close the PR and delete its branch; the base branch is not changed", PolicyVersion: c.Config.PolicyVersion, RequireApproval: c.Config.RequireApproval, DecisionExpiresAt: &e.DeadlineAt}
 		if c.Config.Delivery == "fast_forward" {
 			submission.Plan = fmt.Sprintf("Implement the bounded task at `%s` in `%s`.\n\nAllowed paths: %s.\n\nRun the configured checks in a separate clean Kubernetes Job at the published commit. Wait for required CI on that exact task-branch commit, then fast-forward `%s` only if it still points to `%s`. Never force-push or deploy.\n\nModel destination: %s (%s).", s.Base, c.Config.Git.Repository, strings.Join(c.Config.AllowedPaths, ", "), c.Config.Git.BaseBranch, s.Base, c.Config.Model.Endpoint, c.Config.Model.Name)
 			submission.VerificationStrategy = "Independent clean checkout, required CI on the exact task-branch commit, then guarded fast-forward"
 			submission.ExpectedSideEffects = []string{"create scoped Git branch", "publish commit", "fast-forward base branch"}
 			submission.RollbackApproach = "Revert the landed commit through a separately authorized task; never force-push"
+			submission.Plan += "\n\nIf main advances before landing, native Git rebases the task history onto that exact revision within the original budget. Conflicts block. A fresh branch, independent review, clean tests and required CI are mandatory; no ref is force-pushed."
 		}
-		if s.Analysis != nil {
-			submission.Plan = fmt.Sprintf("Analyze the frozen synthetic diagnostic fixture %s revision %d using LangChain create_agent on LangGraph. Profile: %s. Inputs: %s. Model destination: %s (%s). Return a structured report with source quotes; no repository or mutation authority is granted.", s.Analysis.Fixture.ID, s.Analysis.Fixture.Revision, s.ProfileDigest, s.Base, c.Config.Model.Endpoint, c.Config.Model.Name)
-			submission.RiskClass = "low"
-			submission.SourceRevision = s.Base
-			submission.VerificationStrategy = "Independent deterministic validation of required findings and source quotes, bound to input/profile/output digests"
-			submission.ExpectedSideEffects = []string{"bounded model inference", "store diagnostic report and validation evidence"}
-			submission.RollbackApproach = "Cancel the worker; no source or infrastructure mutations are performed"
-		}
+		submission.Plan += fmt.Sprintf("\n\nFailed clean checks or required CI permit a repair only after recording the failure evidence, diagnosis and a different approach. All work shares the frozen task, context and original budget of at most %d runtime starts. Three failures block the task; each repaired commit requires fresh clean verification and required CI on that exact head.", e.MaxAttempts)
+		submission.Plan += "\n\nBefore every commit, a fresh read-only reviewer using " + c.Config.ReviewerModel.Name + " must pass the exact candidate patch and base. It checks acceptance, scope, test preservation, the repair approach and defects. A rejected review counts once and feeds diagnosis; a missing verdict blocks. Review shares the original budget."
 		p, err := c.Provider.SubmitPlanRevision(ctx, r.ID, submission)
 		if err != nil {
 			return err
@@ -422,15 +473,15 @@ func (c *Controller) advance(ctx context.Context, e execution.Execution) error {
 			}
 		}
 		s.Step = "implement"
-		if s.Analysis != nil {
-			s.Step = "analyze"
-		}
 		return c.save(ctx, e, s)
 	}
-	if s.Step == "implement" || s.Step == "verify" || s.Step == "analyze" {
+	if s.Step == "implement" || s.Step == "verify" {
 		stage := s.Step
 		attempt, done, result, digest, err := c.worker(ctx, e, task, s, stage)
 		if err != nil {
+			if errors.Is(err, execution.ErrBudgetExhausted) {
+				return c.block(ctx, e, r, "Execution budget exhausted; further runtime and model work is denied")
+			}
 			if errors.Is(err, errInvalidWorkerResult) {
 				return c.block(ctx, e, r, err.Error())
 			}
@@ -446,58 +497,74 @@ func (c *Controller) advance(ctx context.Context, e execution.Execution) error {
 			message := stage + " worker failed; inspect the Kubernetes Job and create a revised task"
 			if attempt.Specification.Engine != nil {
 				message = stage + " engine task failed; inspect the recorded kagent task and create a revised task"
+				if attempt.FailureMessage != "" {
+					message = attempt.FailureMessage
+				}
+				denial, err := c.Journal.ModelBudgetDenial(ctx, e.ID, attempt.ID)
+				if err != nil {
+					return err
+				}
+				if denial != "" {
+					message = "Model budget blocked further work: " + denial
+				}
 			}
 			return c.block(ctx, e, r, message)
 		}
-		if stage == "analyze" {
+		if stage == "implement" {
+			if result.BlockingReason != "" {
+				return c.block(ctx, e, r, "Rebase could not be applied safely: "+result.BlockingReason)
+			}
 			s.Implementer = attempt.ID
 			s.ImplementationDigest = digest
-			s.Step = "analysis_verify"
-		} else if stage == "implement" {
-			s.Implementer = attempt.ID
-			s.ImplementationDigest = digest
-			s.Step = "branch"
+			s.ImplementationBase = result.SourceRevision
+			s.Step = "review"
 		} else {
 			s.Verifier = attempt.ID
 			s.VerificationDigest = digest
 			for _, check := range result.Checks {
 				if check.ExitCode != 0 {
-					s.Reason = "Independent verification failed: " + check.ID + ". Result: " + c.artifactURL(digest)
-					return c.save(ctx, e, s)
+					return c.failedAttempt(ctx, e, s, "verify", digest, "Independent verification failed: "+check.ID)
 				}
 			}
 			s.Step = "pull_request"
-			if c.Config.Delivery == "fast_forward" {
+			if c.Config.Delivery == "fast_forward" || s.PR.ID != "" {
 				s.Step = "ci"
 			}
 		}
 		return c.save(ctx, e, s)
 	}
-	if s.Analysis != nil {
-		return c.advanceAnalysisResult(ctx, e, r, s)
-	}
 	if s.Step == "branch" {
+		candidate, err := c.publicationCandidate(ctx, e, s)
+		if err == nil {
+			err = validatePRDCandidate(task, candidate)
+		}
+		if err != nil {
+			return c.block(ctx, e, r, err.Error())
+		}
 		source, err := c.Source(e)
 		if err != nil {
 			return err
 		}
-		if _, err = source.CreateBranch(ctx, sourcecontrol.BranchRequest{Repository: c.Config.Git.Repository, Name: s.Branch, BaseRevision: s.Base, IdempotencyKey: e.ID + ":branch", AuthorityFence: e.FenceToken}); err != nil {
+		if _, err = source.CreateBranch(ctx, sourcecontrol.BranchRequest{Repository: c.Config.Git.Repository, Name: s.Branch, BaseRevision: s.baseRevision(), IdempotencyKey: operationKey(e, s, "branch"), AuthorityFence: e.FenceToken}); err != nil {
 			return err
 		}
 		s.Step = "publish"
 		return c.save(ctx, e, s)
 	}
 	if s.Step == "publish" {
-		result, err := c.checkedResult(s.ImplementationDigest, workresult.Expected{Stage: "implement", SourceRevision: s.Base, AllowedPaths: c.Config.AllowedPaths})
+		candidate, err := c.publicationCandidate(ctx, e, s)
+		if err == nil {
+			err = validatePRDCandidate(task, candidate)
+		}
 		if err != nil {
-			return c.block(ctx, e, r, "Implementation artifact is missing or outside the authorized source boundary")
+			return c.block(ctx, e, r, err.Error())
 		}
 		source, err := c.Source(e)
 		if err != nil {
 			return err
 		}
-		changes := make([]sourcecontrol.Change, 0, len(result.Changes))
-		for _, change := range result.Changes {
+		changes := make([]sourcecontrol.Change, 0, len(candidate.Changes))
+		for _, change := range candidate.Changes {
 			if !workresult.AllowedPath(c.Config.AllowedPaths, change.Path) {
 				return c.block(ctx, e, r, "Worker output exceeds configured file scope")
 			}
@@ -511,12 +578,12 @@ func (c *Controller) advance(ctx context.Context, e execution.Execution) error {
 			}
 			changes = append(changes, sourcecontrol.Change{Path: change.Path, ContentDigest: digest, Mode: change.Mode, Operation: op})
 		}
-		revision, err := source.WriteChanges(ctx, sourcecontrol.WriteRequest{Repository: c.Config.Git.Repository, Branch: s.Branch, ExpectedHead: s.Base, IdempotencyKey: e.ID + ":commit", AuthorityFence: e.FenceToken, Changes: changes})
+		revision, err := source.WriteChanges(ctx, sourcecontrol.WriteRequest{Repository: c.Config.Git.Repository, Branch: s.Branch, ExpectedHead: s.Head, IdempotencyKey: operationKey(e, s, "commit"), AuthorityFence: e.FenceToken, Changes: changes})
 		if err != nil {
 			return err
 		}
 		s.Head = revision.Commit
-		s.Step = "verify"
+		s.Step = "review_evidence"
 		return c.save(ctx, e, s)
 	}
 	if c.Config.Delivery == "fast_forward" && (s.Step == "ci" || s.Step == "land" || s.Step == "evidence" || s.Step == "complete") {
@@ -568,7 +635,7 @@ func (c *Controller) advance(ctx context.Context, e execution.Execution) error {
 				if check.ID == required && check.HeadRevision == s.Head {
 					found = true
 					if check.State == "failure" || check.State == "failed" || check.State == "cancelled" || check.State == "timed_out" || check.State == "action_required" {
-						return c.block(ctx, e, r, "Required CI failed: "+required+". PR: "+s.PR.URL)
+						return c.failedCI(ctx, e, s, checks, "Required CI failed: "+required+". PR: "+s.PR.URL)
 					}
 					if check.State != "success" {
 						return nil
@@ -605,7 +672,7 @@ func (c *Controller) advance(ctx context.Context, e execution.Execution) error {
 		if s.Step == "evidence" {
 			return c.evidence(ctx, e, r, s)
 		}
-		if err = c.Provider.CompleteRun(ctx, r.ID, guard(e, r, "complete"), "Verified PR ready for human review: "+s.PR.URL+" (commit "+s.Head+")", s.EvidenceIDs); err != nil {
+		if err = c.Provider.CompleteRun(ctx, r.ID, guard(e, r, "complete"), "Verified PR ready for human review: "+s.PR.URL+" (commit "+s.Head+")", s.completionEvidence()); err != nil {
 			return err
 		}
 		return c.transition(ctx, e, execution.StateCompleted, "Verified pull request ready for human review")
@@ -666,12 +733,13 @@ func (c *Controller) evidence(ctx context.Context, e execution.Execution, r work
 		return c.save(ctx, e, s)
 	}
 	check := result.Checks[index]
-	id := fmt.Sprintf("%s:check:%d", e.ID, index)
+	id := operationKey(e, s, fmt.Sprintf("check:%d", index))
 	outcome := "passed"
 	if check.ExitCode != 0 {
 		outcome = "failed"
 	}
-	_, err = c.Provider.RecordEvidence(ctx, r.ID, guard(e, r, fmt.Sprintf("evidence:%d", index)), workcontrol.EvidenceSubmission{ID: id, PlanRevisionID: s.PlanID, Type: "test", Producer: s.Implementer, Verifier: s.Verifier, SubjectDigest: s.Head, SourceRevision: s.Head, Command: strings.Join(check.Command, " "), Outcome: outcome, ProvenanceURI: c.artifactURL(s.VerificationDigest), ProvenanceDigest: s.VerificationDigest, ObservedAt: result.ObservedAt, ExpiresAt: result.ObservedAt.Add(24 * time.Hour), ArtifactURI: c.artifactURL(s.VerificationDigest), ArtifactDigest: s.VerificationDigest, PolicyVersion: c.Config.PolicyVersion})
+	key := strings.TrimPrefix(operationKey(e, s, fmt.Sprintf("evidence:%d", index)), e.ID+":")
+	_, err = c.Provider.RecordEvidence(ctx, r.ID, guard(e, r, key), workcontrol.EvidenceSubmission{ID: id, PlanRevisionID: s.PlanID, Type: "test", Producer: s.Implementer, Verifier: s.Verifier, SubjectDigest: s.Head, SourceRevision: s.Head, Command: strings.Join(check.Command, " "), Outcome: outcome, ProvenanceURI: c.artifactURL(s.VerificationDigest), ProvenanceDigest: s.VerificationDigest, ObservedAt: result.ObservedAt, ExpiresAt: result.ObservedAt.Add(24 * time.Hour), ArtifactURI: c.artifactURL(s.VerificationDigest), ArtifactDigest: s.VerificationDigest, PolicyVersion: c.Config.PolicyVersion})
 	if err != nil {
 		return err
 	}

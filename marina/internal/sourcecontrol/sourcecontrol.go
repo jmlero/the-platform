@@ -129,9 +129,32 @@ type Port interface {
 	ObserveChecks(context.Context, ObservationRequest) ([]CheckObservation, error)
 }
 
+// ReviewSource supplies complete original files at the candidate's exact base.
+// Missing files are explicit; transport failures must never look like additions.
+type ReviewSource interface {
+	ReadReviewFile(ctx context.Context, repository, revision, filename string) (content []byte, exists bool, err error)
+}
+
+// RepositoryReader exposes only pinned repository reads to conversation turns.
+type RepositoryReader interface {
+	ReviewSource
+	CurrentHead(context.Context, HeadRequest) (Revision, error)
+	ListRepositoryFiles(context.Context, string, string) ([]RepositoryFile, error)
+}
+
+type RepositoryFile struct {
+	Path string `json:"path"`
+	Size int    `json:"size"`
+}
+
 // LandingPort is used only by the main-landing workload. Legacy PR sources
 // continue to implement Port without acquiring main-update authority.
 type LandingPort interface {
 	Port
 	FastForward(context.Context, FastForwardRequest) (Revision, error)
+}
+
+// AncestryPort proves a recorded landed commit remains on a subsequently advanced base.
+type AncestryPort interface {
+	ContainsCommit(context.Context, string, string, string) (bool, error)
 }

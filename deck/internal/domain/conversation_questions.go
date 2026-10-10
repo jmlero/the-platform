@@ -20,6 +20,8 @@ type ConversationQuestion struct {
 	AnsweredBy          string   `json:"answered_by,omitempty"`
 	CreatedAt           int64    `json:"created_at"`
 	AnsweredAt          int64    `json:"answered_at,omitempty"`
+	ExpiresAt           int64    `json:"expires_at,omitempty"`
+	ClosedAt            int64    `json:"closed_at,omitempty"`
 }
 
 type ConversationQuestionInput struct {
@@ -28,4 +30,5 @@ type ConversationQuestionInput struct {
 	QuestionID          string   `json:"question_id"`
 	Text                string   `json:"text"`
 	Choices             []string `json:"choices,omitempty"`
+	ExpiresAt           int64    `json:"expires_at,omitempty"`
 }

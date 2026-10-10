@@ -126,23 +126,21 @@ second-device testing were removed from the local acceptance scope by the operat
 2. Marina claims it with a lease and persists the plan and execution state.
 3. Marina creates the attempt's own kagent template and starts native Codex at a pinned repository revision.
 4. The agent receives the frozen task, repository binding, and selected immutable context, then implements the change.
-5. A separate clean verification Job produces deterministic check evidence. Independent semantic review is future work.
-6. Marina pushes the exact commit to a task branch and observes required CI on it. Failed checks block; automatic repair loops remain future work.
+5. An independent text-only review passes the exact candidate before commit; a separate clean verification Job produces deterministic check evidence. Preserve both gates and their distinct evidence.
+6. Marina pushes the exact commit to a task branch and observes required CI on it. Review and check failures enter bounded diagnosis and repair within the original budget; installation acceptance belongs in status.
 7. Marina fast-forwards main only if it still points at the task's base, then records evidence.
 8. Deck shows truthful state, cost, decisions, artifacts, and evidence across restarts. The run ends with the commit on main or a focused blocker. It never deploys.
 
 Prefer changes that strengthen this vertical slice or the next accepted backlog
 item over scaffolding for a hypothetical maturity stage.
 
-The same foundation also runs one pinned LangChain diagnostic workload. It is
-retired by [decision 0023](../docs/decisions/0023-focus-kagent-cutover.md) and
-removed under KINT-12; do not extend it. Until then, follow
-the [workload profiles](docs/workloads/profiles-v1.md),
-[decision 0016](../docs/decisions/0016-workload-invocation-and-context-tool.md),
-and the [installation guide](../deploy/kubernetes/agent-platform/README.md).
-Repository steps stay out of analysis, and each workload keeps its own evidence
-rules. Interrupted worker I/O may block; harness-step checkpoint/replay is not
-supported.
+The retired diagnostic workload and custom agent Job paths are removed. Follow
+the [workload profiles](docs/workloads/profiles-v1.md) and
+[installation guide](../deploy/kubernetes/agent-platform/README.md).
+Keep historical journal readers and artifact access; the Kubernetes adapter
+serves independent verification only. Do not reintroduce agent launch loops or
+legacy configuration. Engine cancellation must remain possible after authority
+is lost, including when Deck is offline and the local lease expires.
 
 ## Engineering workflow
 

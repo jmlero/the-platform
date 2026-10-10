@@ -37,7 +37,7 @@ Read-only GitHub inspection found no branch or PR for this execution. No
 completion was published after cancellation.
 
 This adds live repository evidence for cancellation during a model call across
-a Marina restart. The [KINT-09 core matrix](../plans/kagent-integration.md#mandatory-failure-matrix)
+a Marina restart. The [KINT-09 core matrix](https://github.com/jmlero/the-platform/blob/b7ccd54cdf79f3f669d23c75eb5c9840f43de953/docs/plans/kagent-integration.md#mandatory-failure-matrix)
 still needs separate restart-only observations, lost create/send and source
 publication responses, gateway/compute/database restarts, tool/question
 cancellation, time/cost and missing-usage limits, and failed verification/CI.

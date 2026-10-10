@@ -2,6 +2,7 @@ package workerapi
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"io"
@@ -16,7 +17,6 @@ import (
 	"github.com/jmlero/the-platform/marina/internal/artifacts"
 	"github.com/jmlero/the-platform/marina/internal/execution"
 	"github.com/jmlero/the-platform/marina/internal/journal/sqlite"
-	"github.com/jmlero/the-platform/marina/internal/kubernetes"
 	runtimeapi "github.com/jmlero/the-platform/marina/internal/runtime"
 	"github.com/jmlero/the-platform/marina/internal/workcontrol"
 	"github.com/jmlero/the-platform/marina/internal/worker"
@@ -45,11 +45,17 @@ func TestGatewayCredentialRotationAndEmptyFilesFailClosed(t *testing.T) {
 				t.Fatal(err)
 			}
 			spec := runtimeapi.Specification{IdempotencyKey: "job", RepositoryURI: "https://git.example/owner/repo.git", SourceRevision: strings.Repeat("a", 40), ContextURI: "journal://context", ContextDigest: "sha256:context", HarnessVersion: "test", Limits: runtimeapi.Limits{CPUMillis: 1000, MemoryBytes: 1024, EphemeralStorageBytes: 1024, WallTimeSeconds: 60, MaxProcesses: 64}, NetworkPolicy: "restricted", FilesystemPolicy: "ephemeral", AuthorityFence: 1, DeadlineAt: lease, PolicyVersion: "test"}
+			if mode == "model" {
+				spec = gatewayWorkloadSpec("repository", spec)
+			}
 			record, attempt, _, err := journal.EnsureRuntimeAttempt(ctx, record.ID, record.Version, spec)
 			if err != nil {
 				t.Fatal(err)
 			}
-			input, _ := json.Marshal(worker.Input{Stage: "implement", SourceRevision: spec.SourceRevision})
+			if spec.Engine != nil {
+				bindEngineForCalls(t, journal, attempt.Specification)
+			}
+			input, _ := json.Marshal(worker.Input{Stage: "verify", SourceRevision: spec.SourceRevision})
 			_, _, _, err = journal.SaveCheckpoint(ctx, record.ID, record.Version, execution.CheckpointInput{Key: "worker-input:" + attempt.ID, Phase: "worker_input", Payload: map[string]any{"input": string(input)}})
 			if err != nil {
 				t.Fatal(err)
@@ -73,7 +79,7 @@ func TestGatewayCredentialRotationAndEmptyFilesFailClosed(t *testing.T) {
 				}
 				return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"status":"completed","usage":{"input_tokens":2,"output_tokens":1}}`))}, nil
 			})}
-			server := New(Config{SigningKey: key, SourceURL: spec.RepositoryURI, SourceTokenFile: path, Model: Model{Endpoint: "https://model.example/v1", Name: "fixture", TokenFile: path, MaxOutputTokens: 10}}, journal, store, p, client)
+			server := New(Config{SigningKey: key, ContextCheck: func(context.Context, execution.Execution) error { return nil }, SourceURL: spec.RepositoryURI, SourceTokenFile: path, Model: Model{Endpoint: "https://model.example/v1", Name: "fixture", TokenFile: path, MaxOutputTokens: 10}}, journal, store, p, client)
 			for _, token := range []string{"first-private-token", "replacement-private-token", ""} {
 				want = token
 				if err := os.WriteFile(path, []byte(token), 0600); err != nil {
@@ -83,8 +89,17 @@ func TestGatewayCredentialRotationAndEmptyFilesFailClosed(t *testing.T) {
 				if mode == "source" {
 					method, route = http.MethodGet, "/git/info/refs?service=git-upload-pack"
 				}
-				r := httptest.NewRequest(method, "/workers/"+attempt.ID+route, strings.NewReader(`{"input":"hello"}`))
-				r.Header.Set("Authorization", "Bearer "+kubernetes.Token(key, attempt.Specification))
+				url := "/workers/" + attempt.ID + route
+				credential := runtimeapi.CredentialToken(key, attempt.Specification)
+				if mode == "model" {
+					url = "/engine" + route
+					credential = attempt.ID + "." + credential
+				}
+				r := httptest.NewRequest(method, url, strings.NewReader(`{"input":"hello"}`))
+				if mode == "model" {
+					r.TLS = &tls.ConnectionState{}
+				}
+				r.Header.Set("Authorization", "Bearer "+credential)
 				w := httptest.NewRecorder()
 				server.ServeHTTP(w, r)
 				expected := 200

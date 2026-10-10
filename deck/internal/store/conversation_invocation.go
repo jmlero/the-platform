@@ -10,7 +10,7 @@ import (
 	"github.com/jmlero/the-platform/deck/internal/domain"
 )
 
-const channelMessageColumns = "id, channel_id, project_id, author_type, author_id, body, references_json, promoted_task_id, created_at, thread_id, invoked_agent_id, invocation_request_id"
+const channelMessageColumns = "id, channel_id, project_id, author_type, author_id, body, references_json, promoted_task_id, created_at, thread_id, invoked_agent_id, invocation_request_id, prd_json, prd_tasks_json"
 
 // InvokeConversation records an operator request and its selected conversation
 // agent atomically. Dispatch is a separate consumer capability.
@@ -108,7 +108,7 @@ func (s *Store) InvokeConversation(ctx context.Context, in domain.ConversationIn
 		if in.ThreadID == "" {
 			insertThreadID = nil
 		}
-		if _, err := tx.ExecContext(ctx, "INSERT INTO channel_messages ("+channelMessageColumns+") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", message.ID, message.ChannelID, message.ProjectID, message.AuthorType, message.AuthorID, message.Body, marshalJSON(message.References), nil, message.CreatedAt, insertThreadID, message.InvokedAgentID, message.InvocationRequestID); err != nil {
+		if _, err := tx.ExecContext(ctx, "INSERT INTO channel_messages ("+channelMessageColumns+") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", message.ID, message.ChannelID, message.ProjectID, message.AuthorType, message.AuthorID, message.Body, marshalJSON(message.References), nil, message.CreatedAt, insertThreadID, message.InvokedAgentID, message.InvocationRequestID, "null", "null"); err != nil {
 			return domain.ConversationInvocation{}, err
 		}
 		if in.ThreadID == "" {
@@ -145,6 +145,13 @@ func (s *Store) InvokeConversation(ctx context.Context, in domain.ConversationIn
 			return domain.ConversationInvocation{}, err
 		}
 		events = append(events, event)
+	}
+	selection, err := selectTaskContext(ctx, tx, projectID, nil, true)
+	if err != nil {
+		return domain.ConversationInvocation{}, err
+	}
+	if _, err := tx.ExecContext(ctx, "INSERT INTO conversation_context(invocation_message_id, context_json) VALUES (?, ?)", message.ID, marshalJSON(selection)); err != nil {
+		return domain.ConversationInvocation{}, err
 	}
 	event, err := insertEventTx(ctx, tx, nil, nil, nil, "conversation.agent.invoked", "Conversation agent requested", map[string]any{"project_id": projectID, "channel_id": in.ChannelID, "thread_id": thread.ID, "message_id": message.ID, "agent_id": in.AgentID})
 	if err != nil {

@@ -110,6 +110,24 @@ func TestProtocolFixturesCoverCanonicalContract(t *testing.T) {
 
 		path := filepath.Join(fixtureRoot, filepath.FromSlash(entry.Path))
 		switch entry.Kind {
+		case "prd_task_plan":
+			var fixture domain.PRDTaskPlan
+			decodeFixture(t, path, &fixture)
+			if fixture.Validate() != nil || fixture.Digest != fixture.ContentDigest() {
+				t.Fatal("invalid PRD task fixture")
+			}
+		case "prd_document":
+			var fixture domain.PRDDocument
+			decodeFixture(t, path, &fixture)
+			if fixture.Validate() != nil || fixture.Digest != fixture.ContentDigest() || fixture.MessageID == "" {
+				t.Fatal("invalid PRD fixture")
+			}
+		case "task_landing":
+			var fixture domain.TaskLanding
+			decodeFixture(t, path, &fixture)
+			if fixture.RunID == "" || fixture.Repository == "" || fixture.BaseBranch == "" || len(fixture.Commit) != 40 || fixture.ObservedAt <= 0 || len(fixture.EvidenceIDs) < 3 {
+				t.Fatal("invalid task landing fixture")
+			}
 		case "task_review":
 			var fixture domain.TaskReview
 			decodeFixture(t, path, &fixture)
@@ -150,10 +168,10 @@ func TestProtocolFixturesCoverCanonicalContract(t *testing.T) {
 		case "workloads":
 			var fixture domain.WorkloadCatalog
 			decodeFixture(t, path, &fixture)
-			if len(fixture.Profiles) != 1 || fixture.Profiles[0].ID != "diagnostic-analysis/v1" {
+			if len(fixture.Profiles) != 1 || fixture.Profiles[0].ID != "repository/v2" || fixture.Profiles[0].MinAttempts != 3 {
 				t.Fatal("invalid workloads fixture")
 			}
-		case "context":
+		case "context", "conversation_context":
 			var fixture domain.ResolvedContext
 			decodeFixture(t, path, &fixture)
 			if fixture.Selection == nil || len(fixture.Sources) != 1 || len(fixture.Selection.Sources) != 1 || fixture.Selection.Sources[0].Digest != fixture.Sources[0].Digest || fixture.Sources[0].Trust != "guidance" {

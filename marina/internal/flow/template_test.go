@@ -78,6 +78,7 @@ func (p authorizedRun) GetWork(context.Context, string) (workcontrol.WorkDetail,
 type engineFlow struct {
 	ctx      context.Context
 	journal  *sqlite.Store
+	path     string
 	deadline time.Time
 	c        *Controller
 	e        execution.Execution
@@ -88,7 +89,8 @@ type engineFlow struct {
 func newEngineFlow(t *testing.T) engineFlow {
 	t.Helper()
 	ctx := context.Background()
-	journal, err := sqlite.Open(ctx, t.TempDir()+"/journal.db")
+	path := t.TempDir() + "/journal.db"
+	journal, err := sqlite.Open(ctx, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,6 +124,7 @@ func newEngineFlow(t *testing.T) engineFlow {
 		RepositoryEngine:           &runtimeapi.EngineSelection{Backend: "kagent", Version: kagent.Version, Endpoint: "kint-engine-controller.kint-engine.svc:8083", Namespace: "kint-engine", Harness: "kint-codex"},
 		RepositoryEngineGatewayURL: "https://marina.marina-system.svc"}
 	config.Kubernetes.Image = "worker@sha256:" + strings.Repeat("a", 64)
+	config.ReviewerModel = &workerapi.Model{Endpoint: "https://reviewer.example/v1", Name: "independent-fixture", MaxOutputTokens: 100, Currency: "USD"}
 	c := &Controller{Config: config, Journal: journal, Provider: provider, Artifacts: blobs,
 		PrepareEngine: func(context.Context, runtimeapi.Specification) error { return nil }}
 	s := state{Step: "implement", Base: strings.Repeat("b", 40), Head: strings.Repeat("b", 40), ConfigDigest: config.Digest()}
@@ -133,7 +136,7 @@ func newEngineFlow(t *testing.T) engineFlow {
 		t.Fatal(err)
 	}
 	s.ContextDigest = manifest.Digest
-	return engineFlow{ctx: ctx, journal: journal, deadline: deadline, c: c, e: e, task: task, s: s}
+	return engineFlow{ctx: ctx, journal: journal, path: path, deadline: deadline, c: c, e: e, task: task, s: s}
 }
 
 func TestEachRepositoryEngineAttemptRunsOnItsOwnPreparedTemplate(t *testing.T) {
@@ -217,30 +220,15 @@ func (r *recordingRuntime) Inspect(_ context.Context, handle string) (runtimeapi
 }
 
 func TestActiveAttemptStaysOnItsEngineWhenTheProfileChanges(t *testing.T) {
-	for _, cutover := range []bool{true, false} {
-		f := newEngineFlow(t)
-		jobs, engine := &recordingRuntime{prefix: "job:"}, &recordingRuntime{prefix: "kagent:"}
-		f.c.Runtime, f.c.EngineRuntime, f.c.EngineTemplates = jobs, engine, &flowTemplates{}
-		// Cutover starts on the Job runtime and then selects native Codex;
-		// rollback starts on native Codex and then drops it.
-		selection := f.c.Config.RepositoryEngine
-		first, second := jobs, engine
-		if cutover {
-			f.c.Config.RepositoryEngine = nil
-		} else {
-			first, second = engine, jobs
-		}
-		if _, done, _, _, err := f.c.worker(f.ctx, f.e, f.task, f.s, "implement"); err != nil || done || first.started != 1 {
-			t.Fatalf("cutover=%v first start: done=%v err=%v started=%d", cutover, done, err, first.started)
-		}
-		if cutover {
-			f.c.Config.RepositoryEngine = selection
-		} else {
-			f.c.Config.RepositoryEngine = nil
-		}
-		attempt, done, _, _, err := f.c.worker(f.ctx, f.e, f.task, f.s, "implement")
-		if err != nil || done || len(first.inspected) != 1 || second.started != 0 || len(second.inspected) != 0 || (attempt.Specification.Engine == nil) != cutover {
-			t.Fatalf("cutover=%v: the active attempt moved engines: done=%v err=%v first=%+v second=%+v", cutover, done, err, first, second)
-		}
+	f := newEngineFlow(t)
+	jobs, engine := &recordingRuntime{prefix: "job:"}, &recordingRuntime{prefix: "kagent:"}
+	f.c.Runtime, f.c.EngineRuntime, f.c.EngineTemplates = jobs, engine, &flowTemplates{}
+	if _, done, _, _, err := f.c.worker(f.ctx, f.e, f.task, f.s, "implement"); err != nil || done || engine.started != 1 {
+		t.Fatalf("first native start: done=%v err=%v starts=%d", done, err, engine.started)
+	}
+	f.c.Config.RepositoryEngine = nil
+	attempt, done, _, _, err := f.c.worker(f.ctx, f.e, f.task, f.s, "implement")
+	if err != nil || done || len(engine.inspected) != 1 || jobs.started != 0 || len(jobs.inspected) != 0 || attempt.Specification.Engine == nil {
+		t.Fatalf("active attempt moved engines: done=%v err=%v engine=%+v jobs=%+v", done, err, engine, jobs)
 	}
 }

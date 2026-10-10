@@ -3,6 +3,13 @@ import { taskStage, taskLabel, projectTasks, workspaceQueues } from './project-w
 import type { Task } from './types';
 
 describe('project work', () => {
+ it('moves an evidenced landing directly into recently landed work', () => {
+  const landed = {id:'landed', status:'done',updated_at:5,landing:{run_id:'run',repository:'example/repo',base_branch:'main',commit:'a'.repeat(40),observed_at:4,evidence_ids:['review','test','landing']}} as Task;
+  expect(taskStage(landed)).toBe('done');
+  expect(taskLabel(landed)).toBe('Landed');
+  expect(workspaceQueues([landed]).recent.map(task=>task.id)).toEqual(['landed']);
+  expect(taskStage({...landed,display_state:'stale-evidence'})).toBe('in_progress');
+ });
  it('keeps verified work in progress until a human accepts it', () => {
   const task = {status:'done'} as Task;
   expect(taskStage(task)).toBe('in_progress');

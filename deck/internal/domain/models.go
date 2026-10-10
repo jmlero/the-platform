@@ -55,6 +55,10 @@ type Project struct {
 }
 
 type Task struct {
+	PRDReference       *PRDReference    `json:"prd_reference,omitempty"`
+	PRDAcceptance      *PRDAcceptance   `json:"prd_acceptance,omitempty"`
+	PRD                *PRDDocument     `json:"prd,omitempty"`
+	Landing            *TaskLanding     `json:"landing,omitempty"`
 	Review             *TaskReview      `json:"review,omitempty"`
 	DependsOn          []string         `json:"depends_on,omitempty"`
 	Archived           bool             `json:"archived,omitempty"`
@@ -318,6 +322,8 @@ type Channel struct {
 }
 
 type ChannelMessage struct {
+	PRDTasks            *PRDTaskPlan        `json:"prd_tasks,omitempty"`
+	PRD                 *PRDDocument        `json:"prd,omitempty"`
 	ThreadID            string              `json:"thread_id,omitempty"`
 	InvokedAgentID      string              `json:"invoked_agent_id,omitempty"`
 	InvocationRequestID string              `json:"invocation_request_id,omitempty"`

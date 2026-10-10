@@ -1,6 +1,6 @@
 IMAGE ?= deck:dev
 
-.PHONY: setup web build run dev-api dev-web check test conformance image manifests clean
+.PHONY: setup web build run dev-api dev-web check test browser-test conformance image manifests clean
 
 setup:
 	npm --prefix web install
@@ -28,6 +28,9 @@ check:
 test:
 	go test ./...
 	npm --prefix web test
+
+browser-test:
+	npm --prefix web run test:e2e
 
 conformance:
 	python3 scripts/test-threads.py

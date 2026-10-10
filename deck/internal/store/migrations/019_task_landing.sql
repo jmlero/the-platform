@@ -1,0 +1,1 @@
+ALTER TABLE tasks ADD COLUMN landing_json TEXT NOT NULL DEFAULT 'null';

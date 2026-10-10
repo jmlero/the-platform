@@ -43,6 +43,9 @@ export interface WorkloadProfile {
 }
 
 export interface Task {
+ prd_reference?:PRDReference;prd_acceptance?:PRDAcceptance;
+ prd?: PRDDocument;
+	landing?: {run_id:string;repository:string;base_branch:string;commit:string;observed_at:number;evidence_ids:string[]};
  review?: {run_id:string;accepted_by:string;accepted_at:number;task_version:number;source_available:boolean};
  depends_on?: string[];
   archived?: boolean;
@@ -262,6 +265,8 @@ export interface Channel {
 }
 
 export interface ChannelMessage {
+ prd_tasks?:PRDTaskPlan;
+ prd?: PRDDocument;
  thread_id?: string;
   invoked_agent_id?: string;
   invocation_request_id?: string;
@@ -338,4 +343,16 @@ export interface RepositoryRequest extends RepositoryRequestInput { revision: nu
 export interface ProjectChannel { project:{id:string;name:string;slug:string;description:string;created_at:number}; channels:Channel[]; repository:RepositoryRequest }
 export interface ConversationThread {id:string;project_id:string;channel_id:string;root_message_id:string;task_ids:string[];selected_agent_id?:string;created_at:number}
 export interface ConversationInvocation {thread:ConversationThread;message:ChannelMessage}
-export interface ConversationQuestion {id:string;project_id:string;channel_id:string;thread_id:string;invocation_message_id:string;agent_id:string;question_id:string;message_id:string;text:string;choices:string[];status:'pending'|'answered';answer_message_id?:string;answer?:string;answer_request_id?:string;created_at:number;answered_at?:number}
+export interface ConversationQuestion {id:string;project_id:string;channel_id:string;thread_id:string;invocation_message_id:string;agent_id:string;question_id:string;message_id:string;text:string;choices:string[];status:'pending'|'answered';answer_message_id?:string;answer?:string;answer_request_id?:string;created_at:number;answered_at?:number;expires_at?:number;closed_at?:number}
+
+export interface PRDDocument {
+ title:string;path:string;content:string;message_id:string;digest:string;
+ repository:RepositoryBinding;approval_digest?:string;approved_by?:string;approved_at?:number;
+}
+export interface PRDApproval {digest:string;profile_digest:string;budget:Budget}
+
+export interface PRDTaskDraft {title:string;description:string;acceptance_criteria:string}
+export interface PRDReference {publication_task_id:string;plan_message_id:string;path:string;revision:string;digest:string;repository:RepositoryBinding}
+export interface PRDTaskPlan {publication_task_id:string;revision:string;tasks:PRDTaskDraft[];source:PRDReference;digest:string;approval_digest?:string;approved_by?:string;approved_at?:number;task_ids?:string[]}
+export interface PRDAcceptance {results_digest:string;accepted_by:string;accepted_at:number}
+export interface PRDProgress {publication:Task;plans:PRDTaskPlan[];tasks:Task[];results_digest:string;ready_to_accept:boolean;acceptance?:PRDAcceptance}

@@ -1,7 +1,7 @@
 # Permanent local kagent and chat profile
 
 This overlay extends the [local repository profile](../local-podman/README.md)
-without selecting kagent for repository work. The local acceptance and current
+with native Codex repository work and a separate verifier. The local acceptance and current
 limits are in [the KINT-16 report](../../../docs/validation/kint-16-2026-09-26.md).
 Use only `kind-marina-local` on `podman-machine-default-root`; keep Marina new
 task intake disabled outside a selected exercise.
@@ -46,11 +46,14 @@ task intake disabled outside a selected exercise.
    its `the-platform.dev/owner: marina` label.
 6. Serve both harness images from the task-owned registry at `10.89.0.2:5000`,
    because a replaced worker keeps no image cache and atelet has no internet
-   egress. Mirror the pinned native Codex image without changing its digest,
-   for example with
-   `skopeo copy --preserve-digests --dest-tls-verify=false docker://ghcr.io/kagent-dev/kagent/codex-harness@sha256:<digest> docker://10.89.0.2:5000/kagent-dev/codex-harness:<tag>`
-   inside the Podman VM, and pin `10.89.0.2:5000/kagent-dev/codex-harness@sha256:<digest>`
-   in the `kint-codex` Harness. The overlay's `atelet-local-registry` policy lets
+   egress. Build the `native-codex` target with the shared offline test toolchain
+   in the [agent installation guide](../agent-platform/README.md#build-and-pin).
+   Publish that image to `10.89.0.2:5000/kagent-dev/codex-harness:<tag>` and pin
+   its registry manifest digest as
+   `10.89.0.2:5000/kagent-dev/codex-harness@sha256:<digest>` in the `kint-codex`
+   Harness. Prepare a new golden snapshot for that image before admitting work;
+   an old snapshot does not contain the new toolchain. Preserve historical
+   snapshots and runtime identities. The overlay's `atelet-local-registry` policy lets
    atelet reach that registry only. Without it a golden actor retries the pull
    and stays in `ACTOR_STATE_RESUMING`, holding a worker.
 7. Allow `atenet-egress` to reach Marina over TLS: create its `marina-gateway-ca`
@@ -75,8 +78,8 @@ in-flight Substrate actor assignment before dispatch. The local KINT-16 test
 found a stale actor route when the Pod kept its UID but received a new IP.
 Reconcile or let an uncertain attempt block; do not resend it blindly. Once no
 work is active, restart only the dedicated `kint-worker` Deployment to obtain a
-fresh UID and address. This remains a KINT-09 failure case, not proof of
-transparent recovery.
+fresh UID and address. A lost route blocks after bounded observation failures; the original attempt
+is cancelled rather than blindly resubmitted.
 
 Each worker runs one actor. A golden actor stuck in `ACTOR_STATE_DELETING`,
 with atelet logging `runsc state` exit status 128 on every retry, keeps its
@@ -141,6 +144,38 @@ the same Deck message IDs and model usage, no pending turns, and disabled
 intake. The kagent, Substrate and Deck PVCs stay in place; do not replace their
 identities. The rehearsal kept the upgraded Marina data directory separately.
 
-This is the supported **local image pair** only. Schema-aware downgrade,
-broader kagent/Substrate version changes, and automated backups remain outside
-this pilot's acceptance scope.
+These pairs establish local application-release recovery only. Broader
+kagent/Substrate version changes and automated backups remain outside the
+pilot's acceptance scope. The current schema-aware procedure follows.
+
+
+## Schema-aware rollback
+
+Drain work and disable new intake. Record immutable Deck/Marina release images,
+each store's `schema_migrations` inventory, PVC UIDs and private configuration in
+a protected release manifest. Stop Marina then Deck and copy both complete PVC
+directories, including WALs, artifact files and ownership. Verify SQLite integrity.
+Keep the engine PostgreSQL/RustFS stores and native runtime identities in place.
+Do not point an older binary at a newer authoritative store.
+
+Before rollback, check **copied** current stores against the retained release:
+
+```sh
+python3 scripts/check-sqlite-rollback.py /PRIVATE_RELEASE/manifest.json --deck-db /PRIVATE_COPY/deck.db --marina-db /PRIVATE_COPY/marina.db
+```
+
+The read-only gate rejects any migration absent from that release's inventory.
+Both current services also reject unknown applied migrations before running DDL.
+If the gate rejects the current copy, restore the matching retained snapshot to
+new, test-owned PVCs with the retained private configuration and exact image pair.
+Verify Ready services, historical task/conversation identities, usage reservations
+and artifacts before considering a rollback accepted. New data remains separately
+retained; a snapshot restore does not merge histories or undo Git changes.
+
+The final KINT drill used new application PVCs for fresh native repository/chat
+work, then restored the previous Deck-17/Marina-15 snapshot only onto those test
+volumes. The previous pair became Ready; upgrade back to Deck-18/Marina-15 kept
+historical IDs. Original application and engine PVCs were preserved. See the
+[final report](../../../docs/validation/kint-12-17-2026-10-01.md) for exact releases,
+counts, scope and footprint. This is a verified manual release drill, not backup
+automation or a tested engine-version downgrade.

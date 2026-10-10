@@ -30,11 +30,11 @@ func (s *Store) PublishWorkloads(ctx context.Context, project, owner string, cat
 				return domain.ErrInvalidInput
 			}
 		case "repository/v1":
-			if p.Harness != "codex/v1" || !slices.Equal(p.Authority, []string{"source.read", "source.write", "pull_request.create"}) || p.MinAttempts != 2 {
+			if p.Harness != "codex/v1" || !slices.Equal(p.Authority, []string{"source.read", "source.write", "pull_request.create"}) || (p.MinAttempts != 2 && p.MinAttempts != 3) {
 				return domain.ErrInvalidInput
 			}
 		case "repository/v2":
-			if p.Harness != "codex/v1" || !slices.Equal(p.Authority, []string{"source.read", "source.write", "source.fast_forward"}) || p.MinAttempts != 2 {
+			if p.Harness != "codex/v1" || !slices.Equal(p.Authority, []string{"source.read", "source.write", "source.fast_forward"}) || (p.MinAttempts != 2 && p.MinAttempts != 3) {
 				return domain.ErrInvalidInput
 			}
 		default:

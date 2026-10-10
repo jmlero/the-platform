@@ -38,7 +38,7 @@ showed no publication for this execution. Deck's provider projection reported
 a later stale-authority conflict; it did not revive or complete the run.
 
 This is a safe failure and cancellation observation for the
-[KINT-09 core matrix](../plans/kagent-integration.md#mandatory-failure-matrix).
+[KINT-09 core matrix](https://github.com/jmlero/the-platform/blob/b7ccd54cdf79f3f669d23c75eb5c9840f43de953/docs/plans/kagent-integration.md#mandatory-failure-matrix).
 It does not close the restart-only, gateway-resume, or other untested rows.
 KINT-11 remains gated.
 

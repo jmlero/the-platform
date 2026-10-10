@@ -32,5 +32,5 @@ This validates the real GitHub adapter's PR-response recovery path. The
 branch and commit were prepared locally; this test did **not** inject the
 fault through a full Deck → Marina → kagent repository execution or its
 outbox. Lost branch/commit response and full-process publication recovery
-remain open in the [KINT-09 core matrix](../plans/kagent-integration.md#mandatory-failure-matrix).
+remain open in the [KINT-09 core matrix](https://github.com/jmlero/the-platform/blob/b7ccd54cdf79f3f669d23c75eb5c9840f43de953/docs/plans/kagent-integration.md#mandatory-failure-matrix).
 KINT-11 remains gated. No merge or deployment was performed.

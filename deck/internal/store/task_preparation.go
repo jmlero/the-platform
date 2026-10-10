@@ -12,16 +12,27 @@ import (
 	"github.com/jmlero/the-platform/deck/internal/domain"
 )
 
-// Eligible work requires accepted prerequisites. Code prerequisites also need
-// the operator to attest that the accepted changes are available on the base branch.
+// Landed prerequisites use Marina's exact source observation. Other results
+// retain human acceptance and the explicit source-availability attestation.
 const dependenciesEligibleSQL = `NOT EXISTS (
  SELECT 1 FROM json_each(tasks.depends_on_json) d LEFT JOIN tasks p ON p.id = d.value
- WHERE p.id IS NULL OR p.status != 'done' OR json_extract(p.review_json, '$.accepted_at') IS NULL
+ WHERE p.id IS NULL OR p.status != 'done' OR (
+ json_extract(p.landing_json, '$.run_id') IS NULL AND (
+ json_extract(p.review_json, '$.accepted_at') IS NULL
  OR EXISTS (SELECT 1 FROM evidence_records e WHERE e.run_id = json_extract(p.review_json, '$.run_id') AND (e.admission_status IN ('stale','rejected') OR (e.expires_at IS NOT NULL AND e.expires_at <= CAST(unixepoch('subsec') * 1000 AS INTEGER))))
  OR (EXISTS (SELECT 1 FROM json_each(p.authority_json) a WHERE a.value = 'source.write')
  AND (COALESCE(json_extract(p.review_json, '$.source_available'), 0) != 1
  OR COALESCE(json_extract(p.context_json, '$.repository.repository'), '') != COALESCE(json_extract(tasks.context_json, '$.repository.repository'), '')
  OR COALESCE(json_extract(p.context_json, '$.repository.base_branch'), '') != COALESCE(json_extract(tasks.context_json, '$.repository.base_branch'), '')))
+ )) OR (json_extract(p.landing_json, '$.run_id') IS NOT NULL AND (
+ json_extract(p.landing_json, '$.repository') != COALESCE(json_extract(tasks.context_json, '$.repository.repository'), '')
+ OR json_extract(p.landing_json, '$.base_branch') != COALESCE(json_extract(tasks.context_json, '$.repository.base_branch'), '')
+ OR EXISTS (SELECT 1 FROM json_each(p.landing_json, '$.evidence_ids') selected
+ LEFT JOIN evidence_records e ON e.id = selected.value
+ WHERE e.id IS NULL OR e.admission_status != 'current' OR e.outcome != 'passed'
+ OR (e.expires_at IS NOT NULL AND e.expires_at <= CAST(unixepoch('subsec') * 1000 AS INTEGER))
+ OR e.source_revision != json_extract(p.landing_json, '$.commit'))
+ ))
 
 )`
 
@@ -44,7 +55,7 @@ func (s *Store) AcceptTask(ctx context.Context, id string, version int, actor st
 		}
 		return s.GetTask(ctx, id)
 	}
-	if task.Version != version || task.Status != domain.TaskDone || task.Archived {
+	if task.Version != version || task.Status != domain.TaskDone || task.Archived || task.Landing != nil {
 		return task, fmt.Errorf("only a current, finished result can be accepted: %w", domain.ErrConflict)
 	}
 	var runID, status, digest string

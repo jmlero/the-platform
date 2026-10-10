@@ -6,6 +6,8 @@
  import { createChannelHistory } from '$lib/channel-history';
  import { taskLabel } from '$lib/project-work';
  import CreateTaskModal from './CreateTaskModal.svelte';
+ import PRDTaskPlanCard from './PRDTaskPlanCard.svelte';
+ import PRDDraftCard from './PRDDraftCard.svelte';
  import { formatDate } from '$lib/format';
  import type { Agent, Channel, ChannelMessage, ConversationQuestion, ConversationThread, CreateTaskInput, Task } from '$lib/types';
  export let channels:Channel[]=[];
@@ -57,12 +59,16 @@
     <article class="message">
      <div class:agent-avatar={message.author_type==='agent'} class="avatar">{message.author_type==='human'?'Y':message.author_type==='agent'?'A':'D'}</div>
      <div class="message-content"><header><strong>{message.author_type==='human'?'You':message.author_type==='agent'?message.author_id:'Deck'}</strong><time datetime={new Date(message.created_at).toISOString()}>{formatDate(message.created_at)}</time></header><p>{message.body}</p>
+      {#if message.prd_tasks}<PRDTaskPlanCard {message} onapproved={async(task)=>{await history.refresh(selectedID);if(threadID)await refreshThread(threadID);await onpromoted(task);}}/>{/if}
+      {#if message.prd}<PRDDraftCard {message} onapproved={async(task)=>{await history.refresh(selectedID);if(threadID)await refreshThread(threadID);await onpromoted(task);}}/>{/if}
       {#if message.invoked_agent_id}<small class="invoked">Agent requested: {agents.find(agent=>agent.id===message.invoked_agent_id)?.name??message.invoked_agent_id}</small>{/if}
-      {#if question?.status==='pending'&&threadID}
+      {#if question?.status==='pending'&&threadID&&!question.closed_at&&(!question.expires_at||question.expires_at>Date.now())}
        <div class="question-answer"><strong>Answer this question</strong>
         {#if question.choices.length}<div class="question-choices">{#each question.choices as choice}<button type="button" disabled={busy} on:click={()=>{answerQuestionID=question.id;answerText=choice;}}>{choice}</button>{/each}</div>{/if}
         <div class="question-entry"><input aria-label={`Answer ${question.text}`} value={answerQuestionID===question.id?answerText:''} on:input={event=>{answerQuestionID=question.id;answerText=event.currentTarget.value;}} placeholder="Your answer"/><button type="button" disabled={busy||answerQuestionID!==question.id||!answerText.trim()} on:click={()=>answerQuestion(question)}>Send answer</button></div>
        </div>
+      {:else if question?.status==='pending'&&(question.closed_at||(question.expires_at&&question.expires_at<=Date.now()))}
+       <small class="invoked">This question is closed.</small>
       {/if}
       {#each linkedTasks as linked}<button class="linked-task" type="button" on:click={()=>onopen(linked)}><Check size={14}/><span>{linked.title}</span><small>{taskLabel(linked)}</small><ArrowUpRight size={13}/></button>{/each}
       {#if message.references?.evidence_ids?.length}<small class="invoked">{message.references.evidence_ids.length} evidence record{message.references.evidence_ids.length===1?'':'s'} in task details</small>{/if}

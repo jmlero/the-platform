@@ -1,0 +1,13 @@
+{
+  "title": "Saved filters",
+  "path": "docs/prd/saved-filters.md",
+  "content": "# Saved filters\n\nUsers can save and restore filters.\n",
+  "message_id": "msg_prd_example",
+  "repository": {
+    "version": 1,
+    "repository": "example/project",
+    "clone_url": "https://github.com/example/project.git",
+    "base_branch": "main"
+  },
+  "digest": "1d1cd682f3f3e7147f79ff1534adbbc73d39431b6cf228925aa5d2b11f0fd3e5"
+}

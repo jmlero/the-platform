@@ -39,6 +39,22 @@ func (s *Store) PublishConversationOutcome(ctx context.Context, in domain.Conver
 	if (in.Task == nil || in.Task.Status != domain.TaskReady) && (in.ProfileID != "" || in.ProfileDigest != "") {
 		return domain.ConversationOutcome{}, fmt.Errorf("only Ready delegation can bind an installed profile: %w", domain.ErrInvalidInput)
 	}
+	if in.PRDTasks != nil {
+		if err := in.PRDTasks.Validate(); err != nil {
+			return domain.ConversationOutcome{}, err
+		}
+		if in.Status != "completed" || in.PRD != nil || in.Task != nil || in.ProfileID != "" || in.ProfileDigest != "" || in.FollowupTaskID != "" {
+			return domain.ConversationOutcome{}, domain.ErrInvalidInput
+		}
+	}
+	if in.PRD != nil {
+		if err := in.PRD.Validate(); err != nil {
+			return domain.ConversationOutcome{}, err
+		}
+		if in.Status != "completed" || in.Task != nil || in.ProfileID != "" || in.ProfileDigest != "" || in.FollowupTaskID != "" {
+			return domain.ConversationOutcome{}, domain.ErrInvalidInput
+		}
+	}
 	digest := outcomeDigest(in)
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -73,6 +89,26 @@ func (s *Store) PublishConversationOutcome(ctx context.Context, in domain.Conver
 		return domain.ConversationOutcome{}, fmt.Errorf("invocation already has a task: %w", domain.ErrConflict)
 	}
 	out := domain.ConversationOutcome{InvocationMessageID: in.InvocationMessageID, MessageID: newID("msg"), FollowupTaskID: in.FollowupTaskID, Status: in.Status, ResultDigest: in.ResultDigest}
+	var prd *domain.PRDDocument
+	if in.PRD != nil {
+		var raw string
+		if err := tx.QueryRowContext(ctx, "SELECT context_json FROM conversation_context WHERE invocation_message_id=?", invocation.ID).Scan(&raw); err != nil {
+			return out, err
+		}
+		var selected *domain.TaskContext
+		if json.Unmarshal([]byte(raw), &selected) != nil || selected == nil || selected.Repository == nil {
+			return out, fmt.Errorf("PRD draft needs a connected repository: %w", domain.ErrConflict)
+		}
+		prd = &domain.PRDDocument{PRDDraft: *in.PRD, MessageID: out.MessageID, Repository: *selected.Repository}
+		prd.Digest = prd.ContentDigest()
+	}
+	var prdTasks *domain.PRDTaskPlan
+	if in.PRDTasks != nil {
+		prdTasks, err = buildPRDTaskPlan(ctx, tx, invocation, out.MessageID, *in.PRDTasks)
+		if err != nil {
+			return out, err
+		}
+	}
 	refs := domain.CanonicalReferences{}
 	if in.Task != nil {
 		input := *in.Task
@@ -93,8 +129,8 @@ func (s *Store) PublishConversationOutcome(ctx context.Context, in domain.Conver
 		}
 		var profile *domain.WorkloadProfile
 		if validated.Status == domain.TaskReady {
-			if (in.ProfileID != "repository/v1" && in.ProfileID != "repository/v2") || in.ProfileDigest == "" || validated.Budget.MaxAttempts != 2 {
-				return out, fmt.Errorf("Ready delegation requires the installed repository profile and two attempts: %w", domain.ErrInvalidInput)
+			if (in.ProfileID != "repository/v1" && in.ProfileID != "repository/v2") || in.ProfileDigest == "" || (validated.Budget.MaxAttempts != 2 && validated.Budget.MaxAttempts != 3) {
+				return out, fmt.Errorf("Ready delegation requires the installed repository profile and two or three attempts: %w", domain.ErrInvalidInput)
 			}
 			profile, err = admittedProfile(ctx, tx, invocation.ProjectID, domain.WorkloadInvocation{ProfileID: in.ProfileID, ProfileDigest: in.ProfileDigest, Task: validated}, *validated.Budget)
 			if err != nil {
@@ -129,10 +165,13 @@ func (s *Store) PublishConversationOutcome(ctx context.Context, in domain.Conver
 		refs.TaskIDs = append(refs.TaskIDs, out.TaskID)
 	}
 	createdAt := nowMillis()
-	if _, err := tx.ExecContext(ctx, `INSERT INTO channel_messages (id,channel_id,project_id,author_type,author_id,body,references_json,created_at,thread_id) VALUES (?,?,?,?,?,?,?,?,?)`, out.MessageID, invocation.ChannelID, invocation.ProjectID, "agent", in.AgentID, in.Body, marshalJSON(refs), createdAt, invocation.ThreadID); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO channel_messages (id,channel_id,project_id,author_type,author_id,body,references_json,created_at,thread_id,prd_json,prd_tasks_json) VALUES (?,?,?,?,?,?,?,?,?,?,?)`, out.MessageID, invocation.ChannelID, invocation.ProjectID, "agent", in.AgentID, in.Body, marshalJSON(refs), createdAt, invocation.ThreadID, marshalJSON(prd), marshalJSON(prdTasks)); err != nil {
 		return out, err
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO conversation_outcomes(invocation_message_id,message_id,task_id,followup_task_id,status,result_digest,request_digest,created_at) VALUES (?,?,?,?,?,?,?,?)`, invocation.ID, out.MessageID, nullableText(out.TaskID), nullableText(out.FollowupTaskID), out.Status, out.ResultDigest, digest, createdAt); err != nil {
+		return out, err
+	}
+	if _, err := tx.ExecContext(ctx, "UPDATE conversation_questions SET closed_at=? WHERE invocation_message_id=? AND status='pending' AND closed_at IS NULL", createdAt, invocation.ID); err != nil {
 		return out, err
 	}
 	event, err := insertEventTx(ctx, tx, nullableStringValue(out.TaskID), nil, &in.AgentID, "conversation.outcome.published", "Conversation outcome published", map[string]any{"project_id": invocation.ProjectID, "thread_id": invocation.ThreadID, "message_id": out.MessageID, "invocation_message_id": invocation.ID, "task_id": out.TaskID, "followup_task_id": out.FollowupTaskID})

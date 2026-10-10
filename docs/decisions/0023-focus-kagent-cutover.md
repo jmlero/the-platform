@@ -3,7 +3,7 @@
 - Date: 2026-09-25
 - Status: accepted
 - Scope: the KINT gates in [decision 0017](0017-kagent-core-engine.md) and the
-  [kagent plan](../plans/kagent-integration.md), and the diagnostic workload of
+  [kagent plan](https://github.com/jmlero/the-platform/blob/b7ccd54cdf79f3f669d23c75eb5c9840f43de953/docs/plans/kagent-integration.md), and the diagnostic workload of
   [decisions 0015](0015-marina-agent-platform.md) and
   [0016](0016-workload-invocation-and-context-tool.md)
 

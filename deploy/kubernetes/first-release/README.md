@@ -1,15 +1,14 @@
 # First usable repository workflow
 
-This release implements a bounded repository fix: explicit task authorization →
-immutable plan and optional approval → isolated coding Job → scoped branch and
-commit → independent verification Job at that commit → one PR → required CI and
-review checks → evidence-backed completion in Deck. Completion means ready
-for human review. It does not mean merged, deployed, or production-approved.
+Marina runs bounded repository changes through native Codex on kagent, then a
+separate clean verification Job. The selected delivery profile either opens a
+PR (`repository/v1`) or waits for required CI and guarded main landing
+(`repository/v2`). Current supported behavior and limits are in
+[status](../../../docs/status.md). Engine success alone cannot complete a task.
 
-The real-process suite restarts Marina's journal between workflow steps and
-checks completion, lost commit-response recovery, failed verification, changed
-heads, missing CI and missing authority. A selected cluster, worker image,
-repository and model still require the installation acceptance procedure below.
+The real-process suite checks workflow recovery and the Deck contract. Repeat
+installation-specific native engine, model, Git/CI, network and failure acceptance
+on the selected environment; deterministic runtime doubles do not establish it.
 
 For the current pilot, [decision 0010](../../../docs/decisions/0010-initial-installation-services.md)
 selects OpenRouter, GitHub/GHCR, and the existing Kubernetes-volume-backed SQLite
@@ -43,7 +42,8 @@ through an authenticated, digest-checking proxy. Workers have disposable disks,
 no Kubernetes API token, no Git write token and no upstream model credential.
 They receive a credential restricted to one attempt. Marina checks the live
 Deck lease/fence on gateway requests and repeatedly during long streams.
-Worker processes stop when the authority watchdog loses contact.
+The gateway stops calls when live authority is unavailable. Local lease expiry
+stops the recorded engine attempt even while Deck is offline.
 
 Both service connections and the worker gateway use TLS. Worker network policy
 permits only Marina and cluster DNS. Kubernetes must have a CNI that enforces
@@ -70,20 +70,19 @@ Branch protection remains authoritative; Marina never force-pushes or merges.
 
 ## Prepare locally
 
-Requirements: Go 1.26, Node 22, a container builder/registry, kubectl with
+Requirements: Go 1.27+, Node 22, a container builder/registry, kubectl with
 Kustomize support, Python 3, OpenSSL, and Kubernetes with persistent volumes,
 NetworkPolicy support and cluster DNS. The sample uses two fixed namespaces:
 `marina-system` and `marina-workers`, with one active task at a time.
 
-Build independent images. Choose and pin a tested Codex CLI version; it is the
-coding harness, with the configured endpoint supplying inference.
-The command explicitly disables web search and image attachments for the text-only
-gateway, using the [Codex configuration contract](https://learn.chatgpt.com/docs/config-file/config-reference).
+Build independent Deck, Marina and verifier images. Install the pinned kagent
+engine and native Codex/BYO Harnesses using the
+[permanent local guide](../local-podman-kagent/README.md).
 
 ```sh
 podman build -f deck/Dockerfile -t YOUR_REGISTRY/deck:YOUR_RELEASE deck
 podman build -f marina/Dockerfile -t YOUR_REGISTRY/marina:YOUR_RELEASE marina
-podman build -f marina/Dockerfile.worker --build-arg CODEX_VERSION=YOUR_TESTED_VERSION -t YOUR_REGISTRY/marina-worker:YOUR_RELEASE marina
+podman build --ignorefile marina/Dockerfile.verifier.dockerignore -f marina/Dockerfile.verifier -t YOUR_REGISTRY/marina-verifier:YOUR_RELEASE .
 python3 scripts/prepare-installation.py /private/tmp/marina-install
 ```
 
@@ -96,8 +95,8 @@ endpoint without authentication, set `model.token_file` to an empty string.
 Use a CA bundle containing your other internal roots when Git/model use private
 certificates; keep the installation CA in the same bundle.
 
-Edit `workflow.json`: Git locations and identity, model location/name/rates,
-worker image **digest**, trusted commands, allowed paths, required CI names and
+Edit `workflow.json`: Git locations and identity, producer and different reviewer model locations/names/rates,
+verifier image **digest**, exact native engine selection, trusted commands, allowed paths, required CI names and
 budget. Set the independently built Deck and Marina images in the generated
 `kustomization.yaml`. Push/load your images using your registry's normal process.
 The generated workflow selects OpenRouter
@@ -108,8 +107,8 @@ enabling intake; existing installations keep their explicit workflow setting
 until updated separately.
 The worker cannot download dependencies from the internet. Vendor dependencies
 in the repository or extend the image with pre-fetched dependencies and tools.
-Go uses `/opt/marina-cache/go`, `GOPROXY=off`, `GOTOOLCHAIN=local` and a disposable
-build cache. Other check commands must likewise work without public egress.
+The verifier image includes Node and Git. Extend it with prepackaged dependencies
+for other trusted checks; commands must work without public egress.
 
 The sample permits `src` and `tests`; change these to your actual bounded scope.
 Git metadata, Codex configuration, AGENTS.md and GitHub workflow files cannot be
@@ -120,9 +119,11 @@ files and 2 MiB. Individual result artifacts are limited to 4 MiB.
 `required_ci` contains the exact check/status names that must report success on
 the published head. A missing check waits until the task deadline; it never
 counts as success. An explicitly empty list means only the configured local
-checks gate completion. Failed checks or requested changes block the task;
-create a focused follow-up task. Automatic revision loops, pause/resume, merge
-and deployment are outside this first slice. Cancel is supported.
+checks gate completion. Failed clean checks or required CI can enter the bounded
+repair loop when the frozen task has enough runtime starts and model budget;
+see the [profile contract](../../../marina/docs/workloads/profiles-v1.md).
+Requested review changes block. Pause/resume and deployment are outside this
+workflow. Cancel is supported; installed acceptance is tracked in [status](../../../docs/status.md).
 
 Token admission reserves a conservative byte-based input estimate plus capped
 output before forwarding a request. Unknown responses retain their reservations;
@@ -160,32 +161,42 @@ No public ingress is created by the sample. Keep secure cookies enabled.
 ## Installation acceptance
 
 1. Start with a disposable repository and a small known regression. Confirm the
-   worker's tools/dependencies and chosen model work through the gateway.
-2. In Deck create a task with observable acceptance criteria. Check **Allow
-   Marina to change the configured repository and open a PR**, allow at least
-   two attempts, set a realistic token/time limit, and place it in Ready.
+   native harness and verifier dependencies and chosen model work through the gateway.
+2. Discover the installed workload profile and invoke it with observable acceptance
+   criteria and its required authority. Allow at least three runtime starts for
+   implementation, independent review and clean verification; set realistic
+   token, cost and time limits. Preserve the installed plan approval policy.
 3. Approve the displayed plan. Inspect the worker's namespace, UID, read-only
    root, absent service-account token, resource limits and network restrictions.
    Confirm direct internet/API-server access from the worker is denied.
-4. Restart Marina during execution. Confirm the same Job is recovered and that
-   only one branch/commit/PR is created. Restart again while waiting for CI.
-5. Confirm verification uses a second clean Job at the PR head, required CI is
-   green, and Deck links to the PR and downloadable digest-checked evidence.
-6. Run a failing check and confirm the task blocks with its evidence. Move the
-   PR head after verification and confirm old evidence cannot complete the task.
+4. Restart Marina during execution. Confirm the same engine attempt is recovered and that
+   only one logical source publication occurs. Restart again while waiting for CI.
+5. Confirm verification uses a separate clean Job at the exact commit, required CI
+   is green, and Deck links to the delivered commit/PR and digest-checked evidence.
+6. With a three-start task budget, run a failing check and confirm the task blocks
+   with its evidence. For repair acceptance, authorize seven or eleven starts,
+   trigger a failed clean check and required CI separately, and confirm a saved
+   diagnosis precedes each repair, with fresh review and verification at the new commit.
+   Move the task branch after verification and confirm old evidence cannot
+   complete the task. See the [local AUTO acceptance evidence](../../../docs/validation/auto-02-08-local-2026-10-01.md).
+   Also reject a weakened test before commit, repair it through a recorded new
+   approach, and retain the exact candidate, review verdict and original budget
+   across restart. A malformed or unavailable reviewer must block publication.
 7. Cancel a running task in Deck. Confirm model/source requests lose authority,
-   the process exits, the Job/credential are cleaned up, and cancellation is
+   the process exits, the engine instance/template/credential are cleaned up, and cancellation is
    acknowledged only after termination is observed.
 8. Test provider outage and expired task budget. They must not permit continued
    model or publication authority. Inspect retained artifacts after Job cleanup.
 
-Backup/restore is outside the current pilot's acceptance scope. When activated,
+Automated backups remain deferred. For a release rollback,
 back up each SQLite database **with its WAL consistently**, and Marina's artifact
 directory and identity/configuration separately. For this initial single-replica
 release, stop new tasks, wait for active work to finish, stop the deployments and
 take volume snapshots before restoring to an isolated environment. Deck's
 logical export is useful but does not replace Marina's journal/artifact backup.
-Verify a restore before treating that backup as a recovery mechanism.
+Verify schema compatibility and a restore on isolated test volumes before
+starting an older binary. See the
+[schema-aware local runbook](../local-podman-kagent/README.md#schema-aware-rollback).
 
 Repository checks: `make check`, `make conformance`, `make build`. Passing these
 does not replace the selected installation's network, model and recovery checks.

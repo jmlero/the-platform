@@ -1,3 +1,0 @@
-# OSS libraries executed locally in the isolated worker; tracing is disabled.
-langchain>=1,<2
-langchain-openai>=1,<2

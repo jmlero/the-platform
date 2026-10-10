@@ -3,24 +3,35 @@ package conversation
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"reflect"
 	"strings"
 	"time"
 
+	"github.com/jmlero/the-platform/marina/internal/artifacts"
+	"github.com/jmlero/the-platform/marina/internal/conversationbyo"
 	"github.com/jmlero/the-platform/marina/internal/journal/sqlite"
-	"github.com/jmlero/the-platform/marina/internal/kubernetes"
 	rt "github.com/jmlero/the-platform/marina/internal/runtime"
+	"github.com/jmlero/the-platform/marina/internal/sourcecontrol"
+	"github.com/jmlero/the-platform/marina/internal/workcontrol"
 	"github.com/jmlero/the-platform/marina/internal/workerapi"
 )
 
-// Gateway grants one text-only model call to a single immutable conversation
-// turn, and one follow-up after the turn's clarification question was answered.
-// It has no source, shell, tool, task, or result-publication route.
+// Gateway grants one bounded model exchange to an immutable conversation turn,
+// and one follow-up after its clarification answer. Each exchange permits at most
+// four model requests and fixed read-only tools; both share the turn's budget.
+// It has no direct source, shell, task, or result-publication route.
 type Gateway struct {
+	ProjectID     string
+	Blobs         *artifacts.Store
+	Source        workcontrol.ConversationSource
+	Repository    func(context.Context, workcontrol.RepositoryBinding) (sourcecontrol.RepositoryReader, error)
 	journal       *sqlite.Store
 	signingKey    []byte
 	model         workerapi.Model
@@ -40,40 +51,157 @@ var conversationResponseFormat = json.RawMessage(`{
     "schema": {
       "type": "object",
       "properties": {
-        "answer": {"type": "string", "description": "Plain answer for the operator, without claiming an action already happened"},
+        "answer": {
+          "type": "string",
+          "description": "Plain answer for the operator, without claiming an action already happened"
+        },
         "delegation": {
           "anyOf": [
-            {"type": "null"},
+            {
+              "type": "null"
+            },
             {
               "type": "object",
               "properties": {
-                "title": {"type": "string"},
-                "description": {"type": "string"},
-                "acceptance_criteria": {"type": "string"},
-                "mode": {"type": "string", "enum": ["ready", "draft"]},
-                "followup_task_id": {"type": "string"}
+                "title": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "acceptance_criteria": {
+                  "type": "string"
+                },
+                "mode": {
+                  "type": "string",
+                  "enum": [
+                    "ready",
+                    "draft"
+                  ]
+                },
+                "followup_task_id": {
+                  "type": "string"
+                }
               },
-              "required": ["title", "description", "acceptance_criteria", "mode", "followup_task_id"],
+              "required": [
+                "title",
+                "description",
+                "acceptance_criteria",
+                "mode",
+                "followup_task_id"
+              ],
               "additionalProperties": false
             }
           ]
         },
         "question": {
           "anyOf": [
-            {"type": "null"},
+            {
+              "type": "null"
+            },
             {
               "type": "object",
               "properties": {
-                "text": {"type": "string"},
-                "choices": {"type": "array", "items": {"type": "string"}}
+                "text": {
+                  "type": "string"
+                },
+                "choices": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
               },
-              "required": ["text", "choices"],
+              "required": [
+                "text",
+                "choices"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "prd": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "title": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "content": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "title",
+                "path",
+                "content"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "prd_tasks": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "publication_task_id": {
+                  "type": "string"
+                },
+                "revision": {
+                  "type": "string"
+                },
+                "tasks": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "title": {
+                        "type": "string"
+                      },
+                      "description": {
+                        "type": "string"
+                      },
+                      "acceptance_criteria": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "title",
+                      "description",
+                      "acceptance_criteria"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "publication_task_id",
+                "revision",
+                "tasks"
+              ],
               "additionalProperties": false
             }
           ]
         }
       },
-      "required": ["answer", "delegation", "question"],
+      "required": [
+        "answer",
+        "delegation",
+        "question",
+        "prd",
+        "prd_tasks"
+      ],
       "additionalProperties": false
     }
   }
@@ -115,7 +243,7 @@ func (g *Gateway) EngineCredential(ctx context.Context, spec rt.Specification) (
 	if err := g.AdmitEngine(ctx, spec); err != nil {
 		return "", err
 	}
-	return spec.AttemptID + "." + kubernetes.Token(g.signingKey, spec), nil
+	return spec.AttemptID + "." + rt.CredentialToken(g.signingKey, spec), nil
 }
 
 func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -134,11 +262,11 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	turn, err := g.journal.GetConversationTurn(r.Context(), id)
-	if err != nil || turn.SpecificationDigest == "" || g.AdmitEngine(r.Context(), turn.Specification) != nil {
+	if err != nil || (g.ProjectID != "" && turn.ProjectID != g.ProjectID) || turn.SpecificationDigest == "" || g.AdmitEngine(r.Context(), turn.Specification) != nil {
 		http.Error(w, "turn unavailable", 403)
 		return
 	}
-	want := kubernetes.Token(g.signingKey, turn.Specification)
+	want := rt.CredentialToken(g.signingKey, turn.Specification)
 	if subtle.ConstantTimeCompare([]byte(token), []byte(want)) != 1 {
 		http.Error(w, "turn unavailable", 403)
 		return
@@ -154,7 +282,7 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Stream       bool            `json:"stream"`
 		Tools        json.RawMessage `json:"tools"`
 	}
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 32<<10))
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 256<<10))
 	if err != nil {
 		http.Error(w, "model input too large", 413)
 		return
@@ -166,13 +294,62 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "text-only model input required", 400)
 		return
 	}
-	encoded, err := json.Marshal(map[string]any{"model": g.model.Name, "input": input.Input, "instructions": input.Instructions,
-		"store": false, "stream": false, "max_output_tokens": g.model.MaxOutputTokens, "text": conversationResponseFormat})
+	var frozen conversationbyo.Input
+	var transcript []conversationbyo.Message
+	clarified := false
+	if g.Blobs != nil {
+		frozen, err = frozenInput(g.Blobs.Get, turn.Specification.ContextDigest, turn.Specification.InputDigest)
+		if err != nil || checkSelection(r.Context(), g.Source, frozen) != nil {
+			http.Error(w, "conversation context unavailable", 403)
+			return
+		}
+		if json.Unmarshal([]byte(input.Input), &transcript) != nil || len(transcript) < len(frozen.Messages) || !reflect.DeepEqual(transcript[:len(frozen.Messages)], frozen.Messages) {
+			http.Error(w, "frozen conversation transcript required", 400)
+			return
+		}
+		if len(transcript) != len(frozen.Messages) {
+			if len(transcript) != len(frozen.Messages)+2 {
+				http.Error(w, "frozen conversation transcript required", 400)
+				return
+			}
+			question, answer := transcript[len(frozen.Messages)], transcript[len(frozen.Messages)+1]
+			engine, err := g.journal.ConversationEngineJournal().GetEngineAttempt(r.Context(), id)
+			if err != nil || engine.AnswerPhase != "sending" && engine.AnswerPhase != "sent" || question.ID != "clarification-question" || question.Role != "agent" || len(question.Body) > 1000 ||
+				answer.ID != "clarification-answer" || answer.Role != "human" || len(answer.Body) > 16<<10 || fmt.Sprintf("%x", sha256.Sum256([]byte(answer.Body))) != engine.AnswerDigest {
+				http.Error(w, "recorded conversation answer required", 403)
+				return
+			}
+			clarified = true
+		}
+		input.Instructions = conversationbyo.ModelInstructions(clarified)
+	}
+	payload := map[string]any{"model": g.model.Name, "input": input.Input, "instructions": input.Instructions,
+		"store": false, "stream": false, "max_output_tokens": g.model.MaxOutputTokens, "text": conversationResponseFormat}
+	if frozen.Repository != nil {
+		payload["tools"] = repositoryTools
+		payload["instructions"] = input.Instructions + repositoryInstructions
+	}
+	if frozen.SelectedContext != nil {
+		prompt, err := json.Marshal(map[string]any{"thread": transcript, "repository": frozen.Repository, "selected_context": frozen.SelectedContext, "selected_git_files": frozen.ContextFiles})
+		if err != nil {
+			http.Error(w, "conversation context unavailable", 503)
+			return
+		}
+		payload["input"] = string(prompt)
+	}
+	encoded, err := json.Marshal(payload)
 	if err != nil {
 		http.Error(w, "model input invalid", 400)
 		return
 	}
 	reservation := int64(len(encoded)) + 1024 + g.model.MaxOutputTokens
+	if frozen.Repository != nil {
+		reservation = turn.MaxTokens - turn.UsedTokens
+		if int64(len(encoded))+1024+g.model.MaxOutputTokens > reservation {
+			http.Error(w, "model budget or turn unavailable", 429)
+			return
+		}
+	}
 	reserve, complete := g.journal.ReserveConversationCall, g.journal.CompleteConversationCall
 	if turn.ModelCallStatus == "completed" {
 		engine, err := g.journal.ConversationEngineJournal().GetEngineAttempt(r.Context(), id)
@@ -199,43 +376,14 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithDeadline(r.Context(), turn.DeadlineAt)
 	defer cancel()
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(g.model.Endpoint, "/")+"/responses", bytes.NewReader(encoded))
+	output, used, err := g.modelResponse(ctx, turn, frozen, payload, credential, reservation)
 	if err != nil {
-		http.Error(w, "model unavailable", 503)
-		return
-	}
-	request.Header.Set("Content-Type", "application/json")
-	if credential != "" {
-		request.Header.Set("Authorization", "Bearer "+credential)
-	}
-	response, err := g.client.Do(request)
-	if err != nil {
-		http.Error(w, "model unavailable", 502)
-		return
-	}
-	defer response.Body.Close()
-	if response.StatusCode != 200 {
-		http.Error(w, "model rejected request", 502)
-		return
-	}
-	output, err := io.ReadAll(io.LimitReader(response.Body, (1<<20)+1))
-	if err != nil || len(output) > 1<<20 {
-		http.Error(w, "model response too large", 502)
-		return
-	}
-	var decoded struct {
-		Usage struct {
-			InputTokens  int64 `json:"input_tokens"`
-			OutputTokens int64 `json:"output_tokens"`
-		} `json:"usage"`
-	}
-	if json.Unmarshal(output, &decoded) != nil || decoded.Usage.InputTokens < 1 || decoded.Usage.OutputTokens < 0 {
-		http.Error(w, "model usage missing", 502)
+		http.Error(w, "model or repository response unavailable within turn limits", 502)
 		return
 	}
 	accountCtx, finish := context.WithTimeout(context.WithoutCancel(r.Context()), 5*time.Second)
 	defer finish()
-	if err := complete(accountCtx, id, decoded.Usage.InputTokens+decoded.Usage.OutputTokens); err != nil {
+	if err := complete(accountCtx, id, used); err != nil {
 		http.Error(w, "model usage could not be recorded", 503)
 		return
 	}

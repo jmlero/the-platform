@@ -14,6 +14,7 @@ var (
 	engineDialOptions []grpc.DialOption
 	sourceTransport   http.RoundTripper
 	deckTransport     http.RoundTripper
+	modelTransport    http.RoundTripper
 )
 
 func sourceClient() *http.Client {
@@ -21,4 +22,11 @@ func sourceClient() *http.Client {
 		return nil
 	}
 	return &http.Client{Transport: sourceTransport, Timeout: 15 * time.Second}
+}
+
+func modelClient() *http.Client {
+	if modelTransport == nil {
+		return nil
+	}
+	return &http.Client{Transport: modelTransport, Timeout: 10 * time.Minute}
 }

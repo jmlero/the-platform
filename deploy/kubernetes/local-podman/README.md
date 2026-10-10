@@ -14,12 +14,11 @@ The installation is localhost-only and uses the Mac as its host, so the Mac must
 remain running. Laptop-off and LAN/second-device acceptance are outside this
 profile. New task intake stays disabled except during a bounded exercise.
 
-The validated private overlay contains pinned Deck, Marina, coding-worker, and
-analysis-worker images; the disposable acceptance repository; offline checks;
-and explicit Git/model credentials and budget rates. Credentials live in private
-files and are never inferred from developer logins. See the
-[repository acceptance](../../../docs/validation/poc-mvp-2026-09-21.md) and
-[two-workload acceptance](../../../docs/validation/agent-11-13-2026-09-22.md).
+The private overlay pins Deck, Marina, the independent verifier and the native
+kagent/BYO Harnesses. It uses offline checks, explicit private Git/model credentials
+and bounded admission rates. Current evidence is in
+[status](../../../docs/status.md); use the
+[native installation guide](../agent-platform/README.md).
 
 ## Inspect and start
 
@@ -46,7 +45,8 @@ The optional LaunchAgent installed by
 `python3 scripts/install-local-podman-startup.py` starts the existing VM and
 cluster at login. Its log is
 `~/.local/share/the-platform/marina-local/startup.log`. It does not recreate a
-deleted cluster or change Podman's default connection.
+deleted cluster or change Podman's default connection. When the owned local
+registry exists, startup starts it after the existing Kind node.
 
 Deck and Marina use separate `standard` local-path PVCs in the Kind node. They
 survive service and node restarts. Deleting the cluster or Podman VM removes this
@@ -56,8 +56,7 @@ outside the current pilot.
 ## Reproduce on a Mac
 
 The accepted environment used an ARM64 Mac, Podman 6.1.1, an 8 GiB VM, Kind
-0.33.0, the node image pinned in `kind.yaml`, Calico 3.32.2, and Codex CLI
-0.153.4. Acceptance reports record the exact application image and profile
+0.33.0, the node image pinned in `kind.yaml`, Calico 3.32.2, and the pinned native Codex Harness from the engine lock. Acceptance reports record the exact application image and profile
 digests.
 
 Install Kind if needed. Inspect running containers before resizing or restarting
@@ -82,11 +81,11 @@ Build and load the base images without a remote registry:
 ```sh
 podman build -f deck/Dockerfile -t localhost/the-platform/deck:local deck
 podman build -f marina/Dockerfile -t localhost/the-platform/marina:local marina
-podman build -f marina/Dockerfile.worker --build-arg CODEX_VERSION=0.153.4 -t localhost/the-platform/marina-worker:local marina
+podman build --ignorefile marina/Dockerfile.verifier.dockerignore -f marina/Dockerfile.verifier -t localhost/the-platform/marina-verifier:local .
 podman save --format docker-archive -o /private/tmp/marina-local-images.tar localhost/the-platform/deck:local localhost/the-platform/marina:local
 kind load image-archive --name marina-local /private/tmp/marina-local-images.tar
-podman save --format oci-archive -o /private/tmp/marina-local-worker.tar localhost/the-platform/marina-worker:local
-kind load image-archive --name marina-local /private/tmp/marina-local-worker.tar
+podman save --format oci-archive -o /private/tmp/marina-local-verifier.tar localhost/the-platform/marina-verifier:local
+kind load image-archive --name marina-local /private/tmp/marina-local-verifier.tar
 ```
 
 Prepare credentials once. The helper refuses to overwrite an existing directory;
@@ -148,5 +147,6 @@ work, so settle journaled executions first.
 Before trusting a new repository, model, worker image, or network policy, repeat
 the [installation acceptance procedure](../first-release/README.md#installation-acceptance).
 Use [NETWORK.md](../first-release/NETWORK.md) when provider addresses change.
-For the diagnostic profile and its analysis image, follow the
-[two-workload guide](../agent-platform/README.md).
+Install the native engine and conversation Harness using the
+[permanent engine guide](../local-podman-kagent/README.md). No legacy agent image
+or diagnostic configuration is required.

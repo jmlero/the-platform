@@ -15,14 +15,14 @@ const taskColumns = `
 	id, project_id, title, description, acceptance_criteria, status, priority,
 	budget_minutes, deadline_at, max_attempts, max_tokens, max_cost_minor,
 	currency, max_concurrency, authority_json,
-	assigned_agent_id, version, created_at, updated_at, context_json, workload_json, archived, review_json, depends_on_json
+	assigned_agent_id, version, created_at, updated_at, context_json, workload_json, archived, review_json, depends_on_json, landing_json, prd_json, prd_reference_json, prd_acceptance_json
 `
 
 func scanTask(scanner interface{ Scan(...any) error }) (domain.Task, error) {
 	var task domain.Task
 	var assignedAgentID sql.NullString
 	var deadlineAt sql.NullInt64
-	var authority, contextJSON, workloadJSON, reviewJSON, dependenciesJSON string
+	var authority, contextJSON, workloadJSON, reviewJSON, dependenciesJSON, landingJSON, prdJSON, prdReferenceJSON, prdAcceptanceJSON string
 	if err := scanner.Scan(
 		&task.ID,
 		&task.ProjectID,
@@ -45,7 +45,7 @@ func scanTask(scanner interface{ Scan(...any) error }) (domain.Task, error) {
 		&task.UpdatedAt,
 		&contextJSON,
 		&workloadJSON,
-		&task.Archived, &reviewJSON, &dependenciesJSON,
+		&task.Archived, &reviewJSON, &dependenciesJSON, &landingJSON, &prdJSON, &prdReferenceJSON, &prdAcceptanceJSON,
 	); err != nil {
 		return domain.Task{}, err
 	}
@@ -58,7 +58,19 @@ func scanTask(scanner interface{ Scan(...any) error }) (domain.Task, error) {
 	if err := json.Unmarshal([]byte(reviewJSON), &task.Review); err != nil {
 		return domain.Task{}, err
 	}
+	if err := json.Unmarshal([]byte(landingJSON), &task.Landing); err != nil {
+		return domain.Task{}, err
+	}
 	if err := json.Unmarshal([]byte(dependenciesJSON), &task.DependsOn); err != nil {
+		return domain.Task{}, err
+	}
+	if err := json.Unmarshal([]byte(prdReferenceJSON), &task.PRDReference); err != nil {
+		return task, err
+	}
+	if err := json.Unmarshal([]byte(prdAcceptanceJSON), &task.PRDAcceptance); err != nil {
+		return task, err
+	}
+	if err := json.Unmarshal([]byte(prdJSON), &task.PRD); err != nil {
 		return domain.Task{}, err
 	}
 	task.Budget.TimeMinutes = task.BudgetMinutes
@@ -547,7 +559,7 @@ func (s *Store) MoveTask(ctx context.Context, id, target string) (domain.Task, e
 	}
 	result, err := tx.ExecContext(ctx, `
 		UPDATE tasks
-		SET status = ?, review_json = 'null', assigned_agent_id = NULL, version = version + 1, updated_at = ?, context_json = ?
+		SET status = ?, review_json = 'null', landing_json = 'null', assigned_agent_id = NULL, version = version + 1, updated_at = ?, context_json = ?
 		WHERE id = ? AND status = ? AND version = ?
 	`, target, now, marshalJSON(task.Context), id, task.Status, task.Version)
 	if err != nil {

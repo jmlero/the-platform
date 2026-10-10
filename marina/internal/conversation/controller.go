@@ -19,6 +19,7 @@ import (
 	"github.com/jmlero/the-platform/marina/internal/journal/sqlite"
 	"github.com/jmlero/the-platform/marina/internal/kagent"
 	rt "github.com/jmlero/the-platform/marina/internal/runtime"
+	"github.com/jmlero/the-platform/marina/internal/sourcecontrol"
 	"github.com/jmlero/the-platform/marina/internal/workcontrol"
 	"github.com/jmlero/the-platform/marina/internal/workerapi"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -45,7 +46,7 @@ func (p Profile) Validate(model workerapi.Model) error {
 		b := p.Delegation
 		pr := []string{"source.read", "source.write", "pull_request.create"}
 		landing := []string{"source.read", "source.write", "source.fast_forward"}
-		if b.TimeMinutes < 1 || b.MaxAttempts != 2 || b.MaxTokens < 1 || b.MaxConcurrency != 1 || b.MaxCostMinor < 0 ||
+		if b.TimeMinutes < 1 || (b.MaxAttempts != 2 && b.MaxAttempts != 3) || b.MaxTokens < 1 || b.MaxConcurrency != 1 || b.MaxCostMinor < 0 ||
 			(!slices.Equal(b.Authority, pr) && !slices.Equal(b.Authority, landing)) {
 			return errors.New("conversation delegation requires a fixed bounded repository grant")
 		}
@@ -66,7 +67,7 @@ func (p Profile) Digest(model workerapi.Model) string {
 // turn gets its own Secret, so a cached credential never reaches another turn.
 func (p Profile) template(messageID string) rt.EngineTemplate {
 	return rt.EngineTemplate{Namespace: p.Engine.Namespace, Name: rt.EngineTemplateName("conversation-" + messageID), Harness: p.Engine.Harness,
-		Description: "Read-only project conversation turn", SystemPrompt: "Interpret one frozen Deck conversation turn. No tools or repository access.",
+		Description: "Read-only project conversation turn", SystemPrompt: "Interpret one frozen Deck conversation turn using only the governed read-only repository and selected context.",
 		Model: "conversation", BaseURL: "https://marina.marina-system.svc/conversation/model/v1"}
 }
 
@@ -77,6 +78,7 @@ type Controller struct {
 	Profile                           Profile
 	Model                             workerapi.Model
 	Source                            workcontrol.ConversationSource
+	Repository                        func(context.Context, workcontrol.RepositoryBinding) (sourcecontrol.RepositoryReader, error)
 	Journal                           *sqlite.Store
 	Blobs                             *artifacts.Store
 	Engine                            rt.Adapter
@@ -159,7 +161,37 @@ func (c *Controller) input(ctx context.Context, turn sqlite.ConversationTurn) (c
 				return in, errors.New("conversation history escaped channel scope")
 			}
 			if m.ThreadID == turn.ThreadID && (m.AuthorType == "human" || m.AuthorType == "agent") && m.Body != "" {
-				in.Messages = append(in.Messages, conversationbyo.Message{ID: m.ID, Role: m.AuthorType, Body: m.Body, TaskIDs: m.References.TaskIDs})
+				body := m.Body
+				if m.PRDTasks != nil {
+					if m.PRDTasks.Validate() != nil || m.PRDTasks.Digest != m.PRDTasks.ContentDigest() {
+						return in, errors.New("invalid saved PRD task proposal")
+					}
+					raw, _ := json.Marshal(m.PRDTasks)
+					body += "\n\nPRD task proposal (data): " + string(raw)
+				}
+				if m.PRD != nil {
+					if m.PRD.Validate() != nil || m.PRD.Digest != m.PRD.ContentDigest() {
+						return in, errors.New("invalid saved PRD draft")
+					}
+					body += "\n\nPRD draft (" + m.PRD.Path + "):\n" + m.PRD.Content
+					if m.PromotedTaskID != nil {
+						if source, ok := c.Source.(interface {
+							GetWork(context.Context, string) (workcontrol.WorkDetail, error)
+						}); ok {
+							detail, err := source.GetWork(ctx, *m.PromotedTaskID)
+							if err != nil {
+								return in, err
+							}
+							if detail.Work.ProjectID != turn.ProjectID {
+								return in, errors.New("PRD publication escaped project")
+							}
+							if detail.Work.PRD != nil && detail.Work.PRD.Digest == m.PRD.Digest && detail.Work.Status == "done" && detail.Work.Landing != nil {
+								body += "\nPublished PRD source: publication_task_id=" + detail.Work.ID + " revision=" + detail.Work.Landing.Commit
+							}
+						}
+					}
+				}
+				in.Messages = append(in.Messages, conversationbyo.Message{ID: m.ID, Role: m.AuthorType, Body: body, TaskIDs: m.References.TaskIDs})
 				if len(in.Messages) > 20 {
 					in.Messages = in.Messages[1:]
 				}
@@ -189,6 +221,9 @@ func (c *Controller) input(ctx context.Context, turn sqlite.ConversationTurn) (c
 			break
 		}
 		in.Messages = in.Messages[1:]
+	}
+	if err := c.addContext(ctx, &in); err != nil {
+		return in, err
 	}
 	in.InputDigest = conversationbyo.DigestInput(in)
 	if err := conversationbyo.ValidateInput(in); err != nil {
@@ -270,6 +305,11 @@ func (c *Controller) advance(ctx context.Context, turn sqlite.ConversationTurn) 
 	if !time.Now().Before(turn.DeadlineAt) {
 		return c.stop(ctx, turn, "Conversation deadline exceeded")
 	}
+	if in, err := c.frozenInput(turn); err != nil {
+		return err
+	} else if err = checkSelection(ctx, c.Source, in); err != nil {
+		return c.stop(ctx, turn, "Conversation context is no longer valid")
+	}
 	engineRecord, err := c.Journal.ConversationEngineJournal().GetEngineAttempt(ctx, turn.MessageID)
 	if err == nil && engineRecord.State.Terminal() {
 		return c.finish(ctx, turn, rt.Observation{Found: true, ProviderHandle: "kagent:" + turn.MessageID, State: engineRecord.State})
@@ -318,7 +358,7 @@ func (c *Controller) question(ctx context.Context, turn sqlite.ConversationTurn,
 	}
 	q, err := c.Source.EnsureConversationQuestion(ctx, workcontrol.ConversationQuestionInput{
 		InvocationMessageID: turn.MessageID, AgentID: turn.AgentID, QuestionID: obs.Question.ID,
-		Text: obs.Question.Text, Choices: obs.Question.Choices,
+		Text: obs.Question.Text, Choices: obs.Question.Choices, ExpiresAt: turn.DeadlineAt.UnixMilli(),
 	})
 	if err != nil {
 		return err
@@ -326,6 +366,9 @@ func (c *Controller) question(ctx context.Context, turn sqlite.ConversationTurn,
 	if q.ProjectID != turn.ProjectID || q.ChannelID != turn.ChannelID || q.ThreadID != turn.ThreadID ||
 		q.InvocationMessageID != turn.MessageID || q.AgentID != turn.AgentID || q.QuestionID != obs.Question.ID {
 		return errors.New("conversation question escaped originating invocation")
+	}
+	if q.ClosedAt > 0 || q.ExpiresAt > 0 && q.ExpiresAt <= time.Now().UnixMilli() {
+		return errors.New("conversation question authority ended")
 	}
 	if q.Status == "pending" {
 		return nil
@@ -446,6 +489,8 @@ func (c *Controller) publishOutcome(ctx context.Context, turn sqlite.Conversatio
 			return errors.New("recorded conversation result changed before publication")
 		}
 		in.Body = result.Answer
+		in.PRD = result.PRD
+		in.PRDTasks = result.PRDTasks
 		if d := result.Delegation; d != nil {
 			status := "backlog"
 			var budget *workcontrol.ConversationBudget

@@ -10,33 +10,37 @@ const (
 	ProtocolMajor        = 1
 	ProtocolMinimumMinor = 0
 
-	CapabilityContextRead     = "context.read"
-	CapabilityRepositoryRead  = "repository.read"
-	CapabilityRepositoryWrite = "repository.write"
-	CapabilityProviderInfo    = "provider.info"
-	CapabilityAgentRegister   = "agent.register"
-	CapabilityWorkReadyList   = "work.ready.list"
-	CapabilityWorkInspect     = "work.inspect"
-	CapabilityWorkClaim       = "work.claim.atomic"
-	CapabilityLeaseRenew      = "run.lease.renew"
-	CapabilityPlanSubmit      = "run.plan.submit"
-	CapabilityRunStart        = "run.start"
-	CapabilityProgress        = "run.progress.append"
-	CapabilityRunVerify       = "run.verify"
-	CapabilityRunComplete     = "run.complete"
-	CapabilityRunBlock        = "run.block"
-	CapabilityClaimLookup     = "work.claim.lookup"
-	CapabilityAssignedRuns    = "run.assigned.list"
-	CapabilityCommandList     = "command.list"
-	CapabilityCommandAck      = "command.ack"
-	CapabilityEventAppend     = "event.append"
-	CapabilityDecisionInspect = "decision.inspect"
-	CapabilityDecisionRequest = "decision.request"
-	CapabilityChannelList     = "channel.list"
-	CapabilityChannelRead     = "channel.message.list"
-	CapabilityConversationList = "conversation.invocation.list"
+	CapabilityContextRead          = "context.read"
+	CapabilityRepositoryRead       = "repository.read"
+	CapabilityRepositoryWrite      = "repository.write"
+	CapabilityProviderInfo         = "provider.info"
+	CapabilityAgentRegister        = "agent.register"
+	CapabilityWorkReadyList        = "work.ready.list"
+	CapabilityWorkInspect          = "work.inspect"
+	CapabilityWorkClaim            = "work.claim.atomic"
+	CapabilityLeaseRenew           = "run.lease.renew"
+	CapabilityPlanSubmit           = "run.plan.submit"
+	CapabilityRunStart             = "run.start"
+	CapabilityProgress             = "run.progress.append"
+	CapabilityRunVerify            = "run.verify"
+	CapabilityRunComplete          = "run.complete"
+	CapabilityRunCompleteLanded    = "run.complete.landed"
+	CapabilityRunBlock             = "run.block"
+	CapabilityClaimLookup          = "work.claim.lookup"
+	CapabilityAssignedRuns         = "run.assigned.list"
+	CapabilityCommandList          = "command.list"
+	CapabilityCommandAck           = "command.ack"
+	CapabilityEventAppend          = "event.append"
+	CapabilityDecisionInspect      = "decision.inspect"
+	CapabilityDecisionRequest      = "decision.request"
+	CapabilityChannelList          = "channel.list"
+	CapabilityChannelRead          = "channel.message.list"
+	CapabilityConversationList     = "conversation.invocation.list"
+	CapabilityConversationContext  = "conversation.context.read"
 	CapabilityConversationQuestion = "conversation.question.write"
-	CapabilityConversationOutcome = "conversation.outcome.publish"
+	CapabilityConversationPRDTasks = "conversation.prd.tasks"
+	CapabilityConversationPRD      = "conversation.prd.draft"
+	CapabilityConversationOutcome  = "conversation.outcome.publish"
 	CapabilityConversationDelegate = "conversation.task.delegate"
 )
 
@@ -77,6 +81,10 @@ const (
 )
 
 type WorkItem struct {
+	PRDReference       *PRDReference    `json:"prd_reference,omitempty"`
+	PRD                *PRDDocument     `json:",omitempty"`
+	Landing            *TaskLanding     `json:",omitempty"`
+	DependsOn          []string         `json:",omitempty"`
 	Workload           *WorkloadProfile `json:",omitempty"`
 	Context            *TaskContext     `json:",omitempty"`
 	ID                 string

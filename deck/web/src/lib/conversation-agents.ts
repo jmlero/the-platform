@@ -1,7 +1,7 @@
 import type { Agent } from './types';
 
 export function configuredConversationAgents(agents: Agent[], projectID: string): Agent[] {
-  return agents.filter(agent => !!agent.installation_id && agent.capabilities.includes(`conversation.invoke.${projectID}`));
+  return agents.filter(agent => !!agent.installation_id && (agent.capabilities ?? []).includes(`conversation.invoke.${projectID}`));
 }
 
 export function mentionedConversationAgent(body: string, agents: Agent[], projectID: string): Agent | undefined {

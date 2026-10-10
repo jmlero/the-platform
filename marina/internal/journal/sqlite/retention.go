@@ -28,6 +28,12 @@ func (store *Store) ArtifactRetentionReferences(ctx context.Context, directory s
 	if count != 0 {
 		return nil, errors.New("active executions remain; finish or cancel work before artifact maintenance")
 	}
+	if err := store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM conversation_turns WHERE status IN ('pending','running')`).Scan(&count); err != nil {
+		return nil, err
+	}
+	if count != 0 {
+		return nil, errors.New("active conversation turns remain; finish work before artifact maintenance")
+	}
 	rows, err := store.db.QueryContext(ctx, `
 		SELECT digest FROM runtime_artifacts UNION ALL SELECT uri FROM runtime_artifacts
 		UNION ALL SELECT payload_json FROM checkpoints
@@ -36,7 +42,12 @@ func (store *Store) ArtifactRetentionReferences(ctx context.Context, directory s
 		UNION ALL SELECT specification_json FROM runtime_attempts
 		UNION ALL SELECT manifest_json FROM context_packages
 		UNION ALL SELECT payload_json FROM provider_outbox
-		UNION ALL SELECT payload_json FROM events`)
+		UNION ALL SELECT payload_json FROM events
+		UNION ALL SELECT specification_json FROM conversation_turns
+		UNION ALL SELECT result_digest FROM conversation_turns
+		UNION ALL SELECT publication_json FROM conversation_turns
+		UNION ALL SELECT digest FROM conversation_artifacts
+		UNION ALL SELECT uri FROM conversation_artifacts`)
 	if err != nil {
 		return nil, err
 	}

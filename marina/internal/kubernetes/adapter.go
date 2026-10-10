@@ -5,7 +5,6 @@ package kubernetes
 import (
 	"bytes"
 	"context"
-	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
@@ -19,7 +18,6 @@ import (
 	"net/url"
 	"os"
 	"regexp"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -30,7 +28,6 @@ import (
 var dnsName = regexp.MustCompile(`^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$`)
 
 type Config struct {
-	AdditionalImages  []string                                                     `json:"-"`
 	ServerURL         string                                                       `json:"server_url"`
 	Namespace         string                                                       `json:"namespace"`
 	TokenFile         string                                                       `json:"token_file"`
@@ -52,11 +49,6 @@ type Adapter struct {
 var _ runtimeapi.Adapter = (*Adapter)(nil)
 
 func New(config Config, client *http.Client) (*Adapter, error) {
-	for _, image := range config.AdditionalImages {
-		if !regexp.MustCompile(`^.+@sha256:[a-f0-9]{64}$`).MatchString(image) {
-			return nil, errors.New("additional worker images must be pinned by digest")
-		}
-	}
 	if !dnsName.MatchString(config.Namespace) || !dnsName.MatchString(config.ServiceAccount) || len(config.SigningKey) < 32 ||
 		!regexp.MustCompile(`^.+@sha256:[a-f0-9]{64}$`).MatchString(config.Image) {
 		return nil, errors.New("worker namespace, service account, image digest, and signing key are required")
@@ -88,20 +80,13 @@ func New(config Config, client *http.Client) (*Adapter, error) {
 	return &Adapter{config: config, client: &copyClient}, nil
 }
 
-func Token(key []byte, specification runtimeapi.Specification) string {
-	digest, _ := specification.Digest()
-	mac := hmac.New(sha256.New, key)
-	_, _ = mac.Write([]byte(specification.AttemptID + "\x00" + digest))
-	return hex.EncodeToString(mac.Sum(nil))
-}
-
 // InstallEngineCredential updates only a pre-created attempt-exclusive Secret.
 // Resource-version preconditions prevent replacing a concurrent administrator edit.
 func (adapter *Adapter) InstallEngineCredential(ctx context.Context, spec runtimeapi.Specification, credential string) error {
 	if _, err := spec.EngineGatewayReference(); err != nil {
 		return err
 	}
-	if credential != spec.AttemptID+"."+Token(adapter.config.SigningKey, spec) {
+	if credential != spec.AttemptID+"."+runtimeapi.CredentialToken(adapter.config.SigningKey, spec) {
 		return runtimeapi.ErrInvalidInput
 	}
 	name := spec.Engine.Template
@@ -172,7 +157,10 @@ type job struct {
 }
 
 func (adapter *Adapter) Start(ctx context.Context, spec runtimeapi.Specification) (runtimeapi.Observation, error) {
-	if spec.WorkerImage != "" && spec.WorkerImage != adapter.config.Image && !slices.Contains(adapter.config.AdditionalImages, spec.WorkerImage) {
+	if spec.Engine != nil || !strings.HasSuffix(spec.IdempotencyKey, ":verify") {
+		return runtimeapi.Observation{}, errors.New("Kubernetes Jobs may run only independent verification")
+	}
+	if spec.WorkerImage != "" && spec.WorkerImage != adapter.config.Image {
 		return runtimeapi.Observation{}, errors.New("worker image is not installed in an approved profile")
 	}
 	if err := spec.Validate(time.Now().UTC()); err != nil {
@@ -196,7 +184,7 @@ func (adapter *Adapter) Start(ctx context.Context, spec runtimeapi.Specification
 	}
 	secret := map[string]any{"apiVersion": "v1", "kind": "Secret", "immutable": true,
 		"metadata":   map[string]any{"name": name, "labels": map[string]string{"app.kubernetes.io/name": "marina-worker"}},
-		"stringData": map[string]string{"token": Token(adapter.config.SigningKey, spec)}}
+		"stringData": map[string]string{"token": runtimeapi.CredentialToken(adapter.config.SigningKey, spec)}}
 	status, err = adapter.request(ctx, http.MethodPost, adapter.secrets(), secret, nil)
 	if err != nil {
 		return runtimeapi.Observation{}, err
@@ -249,7 +237,7 @@ func (adapter *Adapter) manifest(spec runtimeapi.Specification, name, digest str
 		"enableServiceLinks": false, "restartPolicy": "Never", "terminationGracePeriodSeconds": 10,
 		"securityContext": map[string]any{"runAsNonRoot": true, "runAsUser": 65532, "runAsGroup": 65532, "fsGroup": 65532, "seccompProfile": map[string]string{"type": "RuntimeDefault"}},
 		"containers": []any{map[string]any{"name": "worker", "image": image, "imagePullPolicy": "IfNotPresent",
-			"command": []string{"/marina", "worker"}, "env": env, "volumeMounts": mounts,
+			"command": []string{"/marina", "verify"}, "env": env, "volumeMounts": mounts,
 			"securityContext": map[string]any{"allowPrivilegeEscalation": false, "readOnlyRootFilesystem": true, "capabilities": map[string]any{"drop": []string{"ALL"}}},
 			"resources": map[string]any{"requests": map[string]string{"cpu": "100m", "memory": "128Mi"},
 				"limits": map[string]string{"cpu": fmt.Sprintf("%dm", spec.Limits.CPUMillis), "memory": strconv.FormatInt(spec.Limits.MemoryBytes, 10), "ephemeral-storage": strconv.FormatInt(spec.Limits.EphemeralStorageBytes, 10)}}}}, "volumes": volumes}

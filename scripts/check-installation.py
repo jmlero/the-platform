@@ -14,6 +14,27 @@ import subprocess
 
 def check_configuration(installation, rendered):
     config = json.loads((installation / "workflow.json").read_text())
+    profiles = config.get("projects")
+    if profiles is None:
+        return check_profile(config, installation, rendered)
+    if config.get("version") != 1 or set(config) != {"version", "projects"} or not isinstance(profiles, list) or not 1 <= len(profiles) <= 16 or any(not isinstance(profile, dict) for profile in profiles):
+        return ["PROJ-01: bounded version-1 project profiles are required"]
+    failures = []
+    seen = set()
+    shared = profiles[0]
+    for profile in profiles:
+        project = profile.get("project_id")
+        if not isinstance(project, str) or not project or project in seen:
+            failures.append("PROJ-01: each project requires one explicit profile")
+        if isinstance(project, str):
+            seen.add(project)
+        if any(profile.get(field) != shared.get(field) for field in ("public_url", "tls_cert_file", "tls_key_file", "signing_key_file", "artifact_directory", "artifact_token_file")):
+            failures.append("PROJ-01: project profiles must share the service and artifact installation")
+        failures.extend(check_profile(profile, installation, rendered))
+    return sorted(set(failures))
+
+
+def check_profile(config, installation, rendered):
     failures = []
     if re.search(r"YOUR_|REPLACE_", json.dumps(config)):
         failures.append("RUN-05: workflow contains unresolved placeholders")
@@ -23,20 +44,33 @@ def check_configuration(installation, rendered):
     images.append(config.get("kubernetes", {}).get("image", ""))
     if len(images) < 3 or any(not re.fullmatch(r"[^\s]+@sha256:[0-9a-f]{64}", image) for image in images):
         failures.append("RUN-05: every control and worker image must be pinned by digest")
-    analysis = config.get("analysis")
-    if analysis:
-        if not re.fullmatch(r"[^\s]+@sha256:[0-9a-f]{64}", analysis.get("image", "")):
-            failures.append("AGENT-12: analysis image must be pinned by digest")
-        if analysis.get("tools") and analysis.get("harness_version") != "langchain-create-agent/v2":
-            failures.append("AGENT-12: context tools require the v2 analysis harness image")
+    if "analysis" in config or "analysis_engine" in config:
+        failures.append("KINT-14: diagnostic analysis configuration is retired; prepare the native installation upgrade")
+    if config.get("git", {}).get("repository"):
+        engine = config.get("repository_engine") or {}
+        reference = json.loads((Path(__file__).resolve().parents[1] /
+                                "deploy/kubernetes/first-release/workflow.example.json").read_text())["repository_engine"]
+        if (any(engine.get(field) != value for field, value in reference.items()) or
+                engine.get("template") or engine.get("revision") or
+                config.get("repository_engine_gateway_url") != "https://marina.marina-system.svc"):
+            failures.append("KINT-14: repository work requires the installed native kagent profile and gateway")
         try:
             identities = json.loads((installation / "service-auth.json").read_text())["identities"]
             publishers = [identity for identity in identities if config.get("project_id") in identity["projects"]
                           and "workload.publish" in identity["capabilities"]]
             if not publishers:
-                failures.append("AGENT-12: the project service identity needs workload.publish")
+                failures.append("KINT-14: the project service identity needs workload.publish")
         except (OSError, ValueError, KeyError, TypeError):
-            failures.append("AGENT-12: a readable service publisher policy is required")
+            failures.append("KINT-14: a readable service publisher policy is required")
+    if config.get("conversation"):
+        try:
+            identities = json.loads((installation / "service-auth.json").read_text())["identities"]
+            if not any(config.get("project_id") in identity["projects"]
+                       and "conversation.context.read" in identity["capabilities"]
+                       for identity in identities):
+                failures.append("CHAT-11: the project service identity needs conversation.context.read")
+        except (OSError, ValueError, KeyError, TypeError):
+            failures.append("CHAT-11: a readable conversation context service policy is required")
     for name, item in (("git-token", "RUN-03"), ("model-token", "RUN-09")):
         path = installation / name
         if not path.is_file() or not path.read_text().strip():
@@ -49,6 +83,16 @@ def check_configuration(installation, rendered):
     if any(not isinstance(model.get(field), int) or model[field] <= 0 for field in
            ("input_micros_per_million", "output_micros_per_million")):
         failures.append("RUN-09/16: nonzero model rates are required for cost-cap acceptance")
+    if config.get("git", {}).get("repository"):
+        reviewer = config.get("reviewer_model") or {}
+        name = reviewer.get("name", "")
+        if (not isinstance(name, str) or not name.strip() or re.search(r"YOUR_|REPLACE_|TBD", name)
+                or name.strip().casefold() == str(model.get("name", "")).strip().casefold()):
+            failures.append("AUTO-08: select a different explicit reviewer model")
+        if (reviewer.get("currency") != model.get("currency") or any(
+                not isinstance(reviewer.get(field), int) or reviewer[field] <= 0
+                for field in ("input_micros_per_million", "output_micros_per_million"))):
+            failures.append("AUTO-08: configure nonzero reviewer rates in the task currency")
     if not config.get("checks") or not config.get("allowed_paths") or not config.get("required_ci"):
         failures.append("RUN-03: configure offline checks, allowed paths and required CI")
     return failures

@@ -31,7 +31,7 @@ func TestVerificationChecksThePinnedRevisionInAFreshWorkspace(t *testing.T) {
 	git("add", "answer.txt")
 	git("commit", "--quiet", "-m", "fixture")
 	head := git("rev-parse", "HEAD")
-	input := Input{Stage: "verify", SourceURL: repo, SourceRevision: head, Harness: []string{"/nonexistent-agent-harness"}, Checks: []Check{{ID: "regression", Directory: ".", Command: []string{"git", "grep", "--quiet", "expected", "HEAD:answer.txt"}}}}
+	input := Input{Stage: "verify", SourceURL: repo, SourceRevision: head, Checks: []Check{{ID: "regression", Directory: ".", Command: []string{"git", "grep", "--quiet", "expected", "HEAD:answer.txt"}}}}
 	result, err := RunVerification(context.Background(), input, t.TempDir())
 	if err != nil || result.SourceRevision != head || len(result.Checks) != 1 || result.Checks[0].ExitCode != 0 {
 		t.Fatalf("verification: %#v %v", result, err)
@@ -39,6 +39,18 @@ func TestVerificationChecksThePinnedRevisionInAFreshWorkspace(t *testing.T) {
 	if _, err := Run(context.Background(), input, t.TempDir()); err != nil {
 		t.Fatalf("worker entry did not select verifier: %v", err)
 	}
+	input.Checks[0].Command = []string{"sh", "-ec", `test "$GOTOOLCHAIN" = local && test "$GOPROXY" = off && test "$NPM_CONFIG_OFFLINE" = true && test "$NPM_CONFIG_CACHE" = /opt/marina-cache/npm && test "$PLAYWRIGHT_BROWSERS_PATH" = /opt/marina-cache/playwright && test "$PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD" = 1`}
+	result, err = Run(context.Background(), input, t.TempDir())
+	if err != nil || result.Checks[0].ExitCode != 0 {
+		t.Fatalf("verification cannot use the prepackaged offline toolchain: %#v %v", result, err)
+	}
+	input.GitAuthorization = "expected"
+	input.Checks[0].Command = []string{"git", "show", "HEAD:answer.txt"}
+	result, err = Run(context.Background(), input, t.TempDir())
+	if err != nil || result.Checks[0].Output != "[redacted]\n" {
+		t.Fatalf("verification exposed its attempt credential: %#v %v", result, err)
+	}
+	input.GitAuthorization = ""
 	input.Checks[0].Command = []string{"git", "grep", "--quiet", "absent", "HEAD:answer.txt"}
 	result, err = Run(context.Background(), input, t.TempDir())
 	if err != nil || result.Checks[0].ExitCode == 0 {
@@ -70,20 +82,5 @@ func TestGitReadUsesOneScopedBearerHeader(t *testing.T) {
 	_, err := Run(context.Background(), Input{Stage: "verify", SourceURL: server.URL, SourceRevision: strings.Repeat("a", 40), GitAuthorization: "attempt-credential"}, t.TempDir())
 	if err == nil || !seen {
 		t.Fatalf("expected rejected source read, seen=%v err=%v", seen, err)
-	}
-}
-
-func TestHarnessFailureKeepsFinalStructuredErrorAndRedactsCredential(t *testing.T) {
-	output := "raw output must not be copied\n" +
-		`{"type":"error","message":"Reconnecting: temporary failure"}` + "\n" +
-		`{"type":"turn.failed","error":{"message":"unexpected status 429 with attempt-secret"}}` + "\n"
-	if got := harnessFailure(output, "attempt-secret"); got != "unexpected status 429 with [redacted]" {
-		t.Fatalf("safe final failure = %q", got)
-	}
-	if got := harnessFailure(`{"type":"item.completed","item":{"text":"tool output"}}`, "secret"); got != "" {
-		t.Fatalf("non-error output exposed: %q", got)
-	}
-	if got := harnessFailure(`{"type":"error","message":"`+strings.Repeat("x", 1000)+`"}`, "secret"); len(got) > 512 {
-		t.Fatalf("unbounded error: %d bytes", len(got))
 	}
 }

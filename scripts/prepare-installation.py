@@ -39,7 +39,8 @@ def main():
                     "work.claim.atomic", "work.claim.lookup", "run.assigned.list", "run.lease.renew",
                     "run.plan.submit", "run.start", "run.verify", "run.complete", "run.block",
                     "run.progress.append", "command.list", "command.ack", "event.append",
-                    "decision.inspect", "evidence.record"]
+                    "decision.inspect", "decision.request", "evidence.record",
+                    "conversation.invocation.list", "conversation.context.read", "channel.message.list", "conversation.question.write", "conversation.outcome.publish"]
     write("service-auth.json", json.dumps({"version": 1, "identities": [{"id": "marina",
           "token_sha256": [service_hash], "projects": ["prj_default"], "capabilities": capabilities}]}, indent=2) + "\n")
     write("operator-auth.json", json.dumps({"version": 1, "operators": [{"id": "owner", "token_sha256": [operator_hash]}]}, indent=2) + "\n")

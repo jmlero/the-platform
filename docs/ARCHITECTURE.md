@@ -5,7 +5,7 @@ tech stack and the rules that keep work safe. Why it exists is in
 [VISION.md](VISION.md); what is supported today is in [status.md](status.md).
 Planned changes are in [plans/](plans/) until they ship.
 
-Last reviewed: 2026-09-28.
+Last reviewed: 2026-10-04.
 
 ## Components
 
@@ -36,15 +36,14 @@ versioned HTTP/JSON API.
 
 | Part of the vision | Today | Target ([decision 0022](decisions/0022-autonomous-software-factory.md)) |
 | --- | --- | --- |
-| **Outer loop** (me and the chat agent) | Deck channels and threads. An explicitly invoked chat agent on kagent, with no write authority, replies in the thread, can ask one typed clarification, and can create a Backlog draft or a Ready task within a fixed budget. Tasks can also be created by hand or promoted from messages. | The chat agent drafts a PRD; after my approval Marina commits it to the project repository, and top-level tasks are derived from it. Context and knowledge bases come later. |
-| **Inner loop** (agents) | Native Codex on kagent implements the task at a pinned revision; a separate clean verification Job runs the checks. Failed checks block the task. | Native Codex on kagent. Failed checks feed back into bounded repair attempts ([0020](decisions/0020-bounded-repair-policy.md)); an independent review runs before every commit ([0021](decisions/0021-semantic-review-gate.md)). |
-| **Landing** | No pull request: after clean verification Marina pushes the exact commit to a task branch, waits for required GitHub CI on that commit, and fast-forwards main if it has not moved. GitHub branch protection is not required. | No pull request: clean verification (unit and end-to-end tests), push to a task branch, required GitHub CI on that commit, then fast-forward main. |
+| **Outer loop** (me and the chat agent) | Deck channels and threads. The explicitly invoked chat agent reads a pinned repository and selected project context through Marina's bounded read tools ([0027](decisions/0027-read-only-repository-context-for-chat.md)). It replies in the thread, can ask one typed clarification, and can create a Backlog draft or a Ready task within a fixed budget. Tasks can also be created by hand or promoted from messages. Typed PRD proposals and exact operator approval use the normal publication workflow ([0029](decisions/0029-approved-prd-publication.md)); see [acceptance status](status.md). | The chat agent drafts a PRD; after my approval Marina commits it to the project repository, and top-level tasks are derived from it. Agent-maintained notes and knowledge bases come later. |
+| **Inner loop** (agents) | Native Codex produces a candidate at a pinned revision. A text-only reviewer using a different model passes its exact patch before commit; a separate clean verification Job runs the checks. Failed reviews or checks enter bounded diagnosis and repair. See [0026](decisions/0026-read-only-review-and-exact-patch.md) and [installation acceptance](status.md). | The same review, repair and verification gates on the installed engine. |
+| **Landing** | Marina observes the exact commit on main and records its selected evidence; Deck completes the task automatically. A moved base uses bounded rebase and fresh gates ([0028](decisions/0028-evidenced-landing-and-rebase.md)); installation acceptance is in [status](status.md). | No pull request: clean verification (unit and end-to-end tests), push to a task branch, required GitHub CI on that commit, then fast-forward main. |
 | **CI and deployment** | GitHub. | GitHub. The platform observes CI and never deploys. |
-| **Deck UI** | Three columns: projects, a middle column (in progress, to do, recently completed), and the chat, plus a task drawer. | Three columns: projects, a simple middle column (in progress, to do, recently landed), and the chat. |
+| **Deck UI** | Three columns: projects, a middle column (in progress, to do, recently landed or accepted), and the chat, plus a task drawer. | Three columns: projects, a simple middle column (in progress, to do, recently landed), and the chat. |
 
 The LangChain diagnostic workflow is retired
-([decision 0023](decisions/0023-focus-kagent-cutover.md)) and is removed with
-the old runtime.
+([decision 0023](decisions/0023-focus-kagent-cutover.md)) and removed with the old runtime.
 
 ## Tech stack
 
@@ -55,7 +54,7 @@ the old runtime.
 | Storage | One SQLite database per service (`modernc.org/sqlite`) and artifact files on persistent volumes |
 | API | HTTP/JSON with an OpenAPI v1 contract in [deck/api/openapi.yaml](../deck/api/openapi.yaml) |
 | Runtime | Kubernetes: local Podman + Kind for acceptance, GKE Autopilot for tests; ephemeral Jobs with NetworkPolicy isolation |
-| Agent engine | kagent (A2A protocol, pinned `v1.0.0-alpha1`) with native Codex for repository work and a Marina BYO actor for the chat. The old Codex worker Job stays in the code until KINT-12. |
+| Agent engine | kagent (A2A protocol, pinned `v1.0.0-alpha1`) with native Codex for repository work and a Marina BYO actor for the chat. Marina retains only the independent verifier Job. |
 | Models | OpenRouter, reached only through Marina's model gateway |
 | Git, registry, CI | GitHub, GHCR, GitHub Actions |
 
@@ -79,7 +78,8 @@ Choices and budgets for the installation are in
 | Evidence decisions and artifact bytes | Marina | Deck stores evidence records and proxies downloads. |
 
 Deck's event history explains work to me. Marina's journal recovers execution.
-Correlation IDs connect them; they are not competing records. Project context
+Correlation IDs connect them; they are not competing records. Historical
+engine/worker specifications and artifacts remain readable after launch-path removal. Project context
 rules are in [decision 0014](decisions/0014-project-repository-and-knowledge.md).
 
 ## Contract
@@ -139,11 +139,27 @@ Marina never assumes an operation failed and starts replacement work.
 | Deck unavailable before claim | Claim nothing; readiness names the dependency. |
 | Claim or completion response lost | Replay the recorded key or look up the original result. |
 | Marina restarts | Inspect the recorded run and runtime handle before continuing. |
-| Lease or fence expires or is rejected | Stop new side effects and terminate the worker. |
+| Lease or fence expires or is rejected | Stop new side effects and terminate the recorded runtime; local lease expiry is enforced while Deck is offline. |
 | Model response uncertain | Keep the full reservation; never invent usage. |
+| Engine stream disconnects or repeats older events | Observe committed task state with the original IDs; do not create replacement work. Repeated lost-runtime observations block early. |
+| Pending question expires or its turn ends | Reject a new answer; exact replay of an already accepted answer preserves the original human message. |
+| Artifact retention or runtime cleanup fails | Do not complete without durable evidence; record cleanup failure and retry the same owned resources. |
+| Binary does not recognize an applied schema migration | Reject startup; an older release needs its compatible retained snapshot. |
 | Verification, CI or artifact storage fails | Do not complete; block or wait within budget. |
 | Operator cancels | Revoke authority, terminate the worker, clean up, then acknowledge. |
-| Delivered commit changes (task branch moved, or main moved before landing) | Earlier evidence becomes stale; the task blocks. Rebasing is LAND-03. |
+| Task branch moves after verification | Earlier evidence cannot complete the task; block. |
+| Main moves before landing | Reobserve prerequisites, rebase within the original budget onto a fresh scoped branch, then require fresh review, clean verification and CI. Conflicts block. |
+
+Repair attempts preserve the original task, context, profile and execution
+budget. Their diagnosis, failure artifacts, runtime starts, commits and evidence
+are journaled under stable identities. See [decision 0025](decisions/0025-repair-attempts-and-budget.md)
+for the separate failure and runtime-start limits. [Decision 0026](decisions/0026-read-only-review-and-exact-patch.md)
+adds a different model's read-only review, exact-patch commit gate, retained verdict
+and one-call response replay. Acceptance is in [status](status.md).
+[Decision 0028](decisions/0028-evidenced-landing-and-rebase.md) adds exact landing
+observations, automatic completion, source-observed prerequisites and bounded
+rebase recovery. Native Codex and the independent verifier share a prepackaged
+project toolchain; dependency and browser downloads belong to image preparation.
 
 ## Security boundaries
 
@@ -181,7 +197,7 @@ Both services use `Recreate` updates and `ReadWriteOnce` storage; neither SQLite
 deployment can scale horizontally. Installation guides:
 [local Podman/Kind](../deploy/kubernetes/local-podman/README.md),
 [repository workflow](../deploy/kubernetes/first-release/README.md) and
-[two-workload profile](../deploy/kubernetes/agent-platform/README.md).
+[native agent and verifier profile](../deploy/kubernetes/agent-platform/README.md).
 
 ## Repository layout
 
@@ -191,8 +207,22 @@ docs/                         vision, architecture, status, backlog, decisions, 
 cli/                          platformctl
 deck/                         Deck service and web UI (deck/web/)
 deck/api/                     OpenAPI contract and canonical fixtures
-marina/                       Marina service and worker harnesses
+marina/                       Marina service, BYO conversation actor and independent verifier
 marina/internal/workcontrol/  provider-neutral consumer contract
 deploy/kubernetes/            installation profiles and runbooks
 scripts/                      installation and acceptance helpers
 ```
+
+## PRD tasks and project profiles
+
+After a PRD lands, the chat agent can propose ordered tasks. Deck records one
+explicit approval, the tasks' exact PRD source and their dependencies. The same
+thread shows landed results and records the operator's acceptance of the current
+result set. Follow-ups create new approved work and retain earlier history. See
+[decision 0030](decisions/0030-ordered-prd-tasks-and-acceptance.md).
+
+Marina can select an explicit private execution profile for each configured Deck
+project. One journal and controller keep a single active repository task across
+projects; gateway requests resolve the recorded attempt's project before applying
+its credentials, scope and budget. See
+[decision 0031](decisions/0031-explicit-per-project-profiles.md).

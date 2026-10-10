@@ -1,0 +1,232 @@
+{
+  "lockfileVersion": 1,
+  "components": {
+    "block/completion-evidence": {
+      "kind": "block",
+      "version": "1.0.1",
+      "source": {
+        "kind": "bundled",
+        "path": "blocks/completion-evidence.md",
+        "upstream": "jmlero/app-meerkat",
+        "revision": "51b77a6a0506661979bef8c6b152d8b3d4fcc3ba"
+      },
+      "metadataIntegrity": "sha256-7O0ZZVHpthuWz1VDCNEiWztU5iRePoK665dvAeNX4vs=",
+      "scope": "project",
+      "adapters": [
+        "claude",
+        "codex",
+        "grok"
+      ],
+      "files": [
+        {
+          "path": "./.agents/rules.md",
+          "kind": "block",
+          "id": "block/completion-evidence",
+          "integrity": "sha256-eg35wxtLD1g/FybpHpyx4nf50FGCRQ8yHsdCRpAAtuc=",
+          "created": true
+        },
+        {
+          "path": "./AGENTS.md",
+          "kind": "link",
+          "integrity": "sha256-WDMArD6OVTzm57iGvC3gsU6vHl8yDeN8TrpVnbysJew=",
+          "created": false
+        }
+      ],
+      "integrity": "sha256-eg35wxtLD1g/FybpHpyx4nf50FGCRQ8yHsdCRpAAtuc="
+    },
+    "block/focused-changes": {
+      "kind": "block",
+      "version": "1.0.0",
+      "source": {
+        "kind": "bundled",
+        "path": "blocks/focused-changes.md"
+      },
+      "metadataIntegrity": "sha256-01t7nlGXORcOmiUroRweX2UKOpx3n+kWHo5rrzvnGwM=",
+      "scope": "project",
+      "adapters": [
+        "claude",
+        "codex",
+        "grok"
+      ],
+      "files": [
+        {
+          "path": "./.agents/rules.md",
+          "kind": "block",
+          "id": "block/focused-changes",
+          "integrity": "sha256-MI8aZYNZrEZHnxNZQHMG4FbOht+G+F1TC+sZLSJGokU=",
+          "created": true
+        },
+        {
+          "path": "./AGENTS.md",
+          "kind": "link",
+          "integrity": "sha256-WDMArD6OVTzm57iGvC3gsU6vHl8yDeN8TrpVnbysJew=",
+          "created": false
+        }
+      ],
+      "integrity": "sha256-MI8aZYNZrEZHnxNZQHMG4FbOht+G+F1TC+sZLSJGokU="
+    },
+    "block/no-unfinished-ui": {
+      "kind": "block",
+      "version": "1.0.0",
+      "source": {
+        "kind": "bundled",
+        "path": "blocks/no-unfinished-ui.md",
+        "upstream": "jmlero/app-meerkat",
+        "revision": "51b77a6a0506661979bef8c6b152d8b3d4fcc3ba"
+      },
+      "metadataIntegrity": "sha256-Z1JhcKDViJgfTTT5FReDu/QJ52/cDJe0/59fwP05z0w=",
+      "scope": "project",
+      "adapters": [
+        "claude",
+        "codex",
+        "grok"
+      ],
+      "files": [
+        {
+          "path": "./.agents/rules.md",
+          "kind": "block",
+          "id": "block/no-unfinished-ui",
+          "integrity": "sha256-7eti0Pwqjj1qnM2E+NX7PT8hd3zNW5C7a6ad1Q+//cg=",
+          "created": true
+        },
+        {
+          "path": "./AGENTS.md",
+          "kind": "link",
+          "integrity": "sha256-WDMArD6OVTzm57iGvC3gsU6vHl8yDeN8TrpVnbysJew=",
+          "created": false
+        }
+      ],
+      "integrity": "sha256-7eti0Pwqjj1qnM2E+NX7PT8hd3zNW5C7a6ad1Q+//cg="
+    },
+    "block/ponytail": {
+      "kind": "block",
+      "version": "1.0.2",
+      "source": {
+        "kind": "bundled",
+        "path": "blocks/ponytail.md",
+        "upstream": "DietrichGebert/ponytail",
+        "revision": "2ed6c52c9d7e5e56942508591085fd45dea277d3"
+      },
+      "metadataIntegrity": "sha256-yXp0Vzt2hOpW9RmaSxNgH54fvpLwvRxVlyip3Tb7Uxw=",
+      "scope": "project",
+      "adapters": [
+        "claude",
+        "codex",
+        "grok"
+      ],
+      "files": [
+        {
+          "path": "./.agents/rules.md",
+          "kind": "block",
+          "id": "block/ponytail",
+          "integrity": "sha256-Ak0M5iJ01XS7jJbjdP2IbPkhVcvVlvY8XY6tV7/yD6k=",
+          "created": true
+        },
+        {
+          "path": "./AGENTS.md",
+          "kind": "link",
+          "integrity": "sha256-WDMArD6OVTzm57iGvC3gsU6vHl8yDeN8TrpVnbysJew=",
+          "created": false
+        }
+      ],
+      "integrity": "sha256-Ak0M5iJ01XS7jJbjdP2IbPkhVcvVlvY8XY6tV7/yD6k="
+    },
+    "block/secure-defaults": {
+      "kind": "block",
+      "version": "1.1.0",
+      "source": {
+        "kind": "bundled",
+        "path": "blocks/secure-defaults.md",
+        "upstream": "jmlero/app-meerkat",
+        "revision": "51b77a6a0506661979bef8c6b152d8b3d4fcc3ba"
+      },
+      "metadataIntegrity": "sha256-/ej0Jfw6U7D8/QlyfMsWb9DiYWJh9wSbHIT2my+aGfA=",
+      "scope": "project",
+      "adapters": [
+        "claude",
+        "codex",
+        "grok"
+      ],
+      "files": [
+        {
+          "path": "./.agents/rules.md",
+          "kind": "block",
+          "id": "block/secure-defaults",
+          "integrity": "sha256-HpuGGmunmEP6BwmFaO6nBLvaovNx6tKLyBOuoD3JClk=",
+          "created": true
+        },
+        {
+          "path": "./AGENTS.md",
+          "kind": "link",
+          "integrity": "sha256-WDMArD6OVTzm57iGvC3gsU6vHl8yDeN8TrpVnbysJew=",
+          "created": false
+        }
+      ],
+      "integrity": "sha256-HpuGGmunmEP6BwmFaO6nBLvaovNx6tKLyBOuoD3JClk="
+    },
+    "block/tdd": {
+      "kind": "block",
+      "version": "1.1.1",
+      "source": {
+        "kind": "bundled",
+        "path": "blocks/tdd.md"
+      },
+      "metadataIntegrity": "sha256-qTgK52xtBPGjGS8HPd3SjiWgqmdpKr6R+jfA8YAWqu0=",
+      "scope": "project",
+      "adapters": [
+        "claude",
+        "codex",
+        "grok"
+      ],
+      "files": [
+        {
+          "path": "./.agents/rules.md",
+          "kind": "block",
+          "id": "block/tdd",
+          "integrity": "sha256-KQ/7nmrKRF124NtUVt5qENVgRnZItwHxyk8C2hE2YjM=",
+          "created": true
+        },
+        {
+          "path": "./AGENTS.md",
+          "kind": "link",
+          "integrity": "sha256-WDMArD6OVTzm57iGvC3gsU6vHl8yDeN8TrpVnbysJew=",
+          "created": false
+        }
+      ],
+      "integrity": "sha256-KQ/7nmrKRF124NtUVt5qENVgRnZItwHxyk8C2hE2YjM="
+    },
+    "block/transparent-shortcuts": {
+      "kind": "block",
+      "version": "1.1.0",
+      "source": {
+        "kind": "bundled",
+        "path": "blocks/transparent-shortcuts.md",
+        "upstream": "jmlero/app-meerkat",
+        "revision": "51b77a6a0506661979bef8c6b152d8b3d4fcc3ba"
+      },
+      "metadataIntegrity": "sha256-iPF3PzHF4UyhjKA5do1YnrKagxh7DdRAxwgXBu8cfeY=",
+      "scope": "project",
+      "adapters": [
+        "claude",
+        "codex",
+        "grok"
+      ],
+      "files": [
+        {
+          "path": "./.agents/rules.md",
+          "kind": "block",
+          "id": "block/transparent-shortcuts",
+          "integrity": "sha256-f2DbmxFcAHYv6UJT2btS/LJ7PsX/4FdaZ2vW0ZBvbGY=",
+          "created": true
+        },
+        {
+          "path": "./AGENTS.md",
+          "kind": "link",
+          "integrity": "sha256-WDMArD6OVTzm57iGvC3gsU6vHl8yDeN8TrpVnbysJew=",
+          "created": false
+        }
+      ],
+      "integrity": "sha256-f2DbmxFcAHYv6UJT2btS/LJ7PsX/4FdaZ2vW0ZBvbGY="
+    }
+  }
+}

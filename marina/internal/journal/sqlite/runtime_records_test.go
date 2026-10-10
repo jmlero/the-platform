@@ -3,7 +3,6 @@ package sqlite_test
 import (
 	"context"
 	"errors"
-	"github.com/jmlero/the-platform/marina/internal/analysis"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -130,9 +129,9 @@ func TestRuntimeAttemptLimitSurvivesRestartAndAllowsIdempotentReplay(t *testing.
 			specification := validRuntimeSpecification(now)
 			if workload == "analysis" {
 				specification.RepositoryURI, specification.SourceRevision = "", ""
-				specification.Workload, specification.HarnessVersion = analysis.Kind, analysis.HarnessWithContext
+				specification.Workload, specification.HarnessVersion = "diagnostic-analysis/v1", "langchain-create-agent/v2"
 				specification.WorkerImage = "analysis@sha256:" + strings.Repeat("a", 64)
-				specification.InputDigest, specification.ProfileDigest = analysis.DiagnosticFixture().InputDigest(), strings.Repeat("b", 64)
+				specification.InputDigest, specification.ProfileDigest = strings.Repeat("c", 64), strings.Repeat("b", 64)
 				specification.CredentialReferences = nil
 			}
 			var last runtimeapi.Attempt

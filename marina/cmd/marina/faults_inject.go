@@ -12,10 +12,12 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 )
 
 // MARINA_FAULTS lists responses this process drops once, after the upstream
@@ -37,12 +39,141 @@ func init() {
 	if len(methods) > 0 {
 		engineDialOptions = append(engineDialOptions, grpc.WithUnaryInterceptor(dropUnaryOnce(methods)))
 	}
+	if modes := strings.FieldsFunc(os.Getenv("MARINA_FAULT_STREAM"), func(r rune) bool { return r == ',' }); len(modes) > 0 {
+		engineDialOptions = append(engineDialOptions, grpc.WithStreamInterceptor(streamFaults(modes)))
+	}
 	if len(routes) > 0 {
 		sourceTransport = &dropTransport{next: http.DefaultTransport, armed: &onceSet{pending: routes}}
 	}
 	if len(deckRoutes) > 0 {
 		deckTransport = &dropTransport{next: http.DefaultTransport, armed: &onceSet{pending: deckRoutes}}
 	}
+	// Hold only the first real provider response so live tests can revoke
+	// authority during an accepted call. Release builds have no delay hook.
+	if delay, err := time.ParseDuration(os.Getenv("MARINA_FAULT_MODEL_DELAY")); err == nil && delay > 0 && delay <= 3*time.Minute {
+		modelTransport = &delayModelTransport{next: http.DefaultTransport, delay: delay}
+	}
+}
+
+type delayModelTransport struct {
+	next  http.RoundTripper
+	delay time.Duration
+	mu    sync.Mutex
+	used  bool
+}
+
+func (t *delayModelTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	response, err := t.next.RoundTrip(request)
+	if err != nil || request.URL.Host != "openrouter.ai" || request.URL.Path != "/api/v1/responses" || response.StatusCode < 200 || response.StatusCode >= 300 {
+		return response, err
+	}
+	t.mu.Lock()
+	delay := !t.used
+	t.used = true
+	t.mu.Unlock()
+	if delay {
+		slog.Warn("fault injection delayed an accepted model response")
+		response.Body = &delayedModelBody{ReadCloser: response.Body, ctx: request.Context(), delay: t.delay}
+	}
+	return response, nil
+}
+
+type delayedModelBody struct {
+	io.ReadCloser
+	ctx   context.Context
+	delay time.Duration
+	once  sync.Once
+	err   error
+}
+
+func (b *delayedModelBody) Read(buffer []byte) (int, error) {
+	b.once.Do(func() {
+		timer := time.NewTimer(b.delay)
+		defer timer.Stop()
+		select {
+		case <-b.ctx.Done():
+			b.err = b.ctx.Err()
+		case <-timer.C:
+		}
+	})
+	if b.err != nil {
+		return 0, b.err
+	}
+	return b.ReadCloser.Read(buffer)
+}
+
+// The test-only stream faults change received events, never engine requests.
+// Each configured mode is used on one subscription in order.
+func streamFaults(modes []string) grpc.StreamClientInterceptor {
+	var mu sync.Mutex
+	var firstSnapshot proto.Message
+	return func(ctx context.Context, desc *grpc.StreamDesc, conn *grpc.ClientConn, method string, streamer grpc.Streamer, options ...grpc.CallOption) (grpc.ClientStream, error) {
+		stream, err := streamer(ctx, desc, conn, method, options...)
+		if err != nil || !strings.HasSuffix(method, "/SubscribeToTask") {
+			return stream, err
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		mode := ""
+		if len(modes) > 0 {
+			mode = modes[0]
+			modes = modes[1:]
+		}
+		return &faultStream{ClientStream: stream, mode: mode, previous: firstSnapshot, capture: func(message proto.Message) {
+			mu.Lock()
+			defer mu.Unlock()
+			if firstSnapshot == nil {
+				firstSnapshot = proto.Clone(message)
+			}
+		}}, nil
+	}
+}
+
+type faultStream struct {
+	grpc.ClientStream
+	mode     string
+	reads    int
+	saved    proto.Message
+	previous proto.Message
+	capture  func(proto.Message)
+}
+
+func (s *faultStream) RecvMsg(message any) error {
+	s.reads++
+	if s.mode == "disconnect" && s.reads > 1 {
+		slog.Warn("fault injection changed an engine stream", "mode", s.mode)
+		return status.Error(codes.Unavailable, "fault injection: stream disconnected")
+	}
+	if s.saved != nil {
+		proto.Reset(message.(proto.Message))
+		proto.Merge(message.(proto.Message), s.saved)
+		s.saved = nil
+		slog.Warn("fault injection changed an engine stream", "mode", s.mode)
+		return nil
+	}
+	if err := s.ClientStream.RecvMsg(message); err != nil {
+		return err
+	}
+	if s.reads == 1 && s.capture != nil {
+		s.capture(message.(proto.Message))
+	}
+	if s.reads == 1 && (s.mode == "duplicate" || s.mode == "reorder") {
+		s.saved = proto.Clone(message.(proto.Message))
+		if s.mode == "reorder" {
+			// A bounded subscription often contains just its initial snapshot.
+			// Replay an earlier committed snapshot after this fresh one instead
+			// of waiting for two events that may outlive the observation window.
+			if s.previous != nil {
+				s.saved = proto.Clone(s.previous)
+				return nil
+			}
+			proto.Reset(message.(proto.Message))
+			if err := s.ClientStream.RecvMsg(message); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // onceSet holds armed targets. "target#N" drops only the Nth matching call.

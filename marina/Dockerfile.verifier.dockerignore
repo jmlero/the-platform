@@ -1,0 +1,13 @@
+.git
+.codex
+.agents
+.agent-suitup
+.aws
+.env*
+**/.DS_Store
+**/node_modules
+**/bin
+**/data
+**/.svelte-kit
+**/playwright-report
+**/test-results

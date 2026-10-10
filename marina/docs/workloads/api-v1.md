@@ -27,14 +27,16 @@ binary and `workload.publish` service grant. The installation preparation script
 adds that grant for newly prepared installations. Discovery and invocation do not
 enable task intake, override approvals or increase installation ceilings.
 Existing installations can use the offline
-[two-workload upgrade procedure](../../../deploy/kubernetes/agent-platform/README.md).
+[native-engine upgrade procedure](../../../deploy/kubernetes/agent-platform/README.md).
 The [combined local acceptance](../../../docs/validation/agent-11-13-2026-09-22.md)
 records API invocations, real Jobs, outputs and failure/recovery boundaries.
 
 Invocation requires the exact ID/digest returned by discovery. Copy the profile's
 authority into an explicit task budget, choose positive `max_tokens` and
 `time_minutes` within its ceilings, `max_concurrency: 1`, and enough attempts
-(repository: two; analysis: one). Set a cost cap in the configured currency.
+(repository: at least three). Use seven starts for one full repair or eleven for
+two, subject to the original model/time/cost limits. Set a cost cap in the
+configured currency with nonzero producer and reviewer rates.
 Context uses active project source revisions and explicitly selected message IDs
 at authorization time; inspect the resulting task's `context` references.
 
@@ -139,20 +141,20 @@ Prepare `invocation.json` with the discovered values and reviewed task budget:
 
 ```json
 {
-  "profile_id": "diagnostic-analysis/v1",
+  "profile_id": "repository/v2",
   "profile_digest": "<digest from discovery>",
   "task": {
-    "title": "Analyze blocked diagnostic runs",
-    "description": "Explain the selected diagnostic fixture.",
-    "acceptance_criteria": "Return validated findings with source quotes.",
+    "title": "Fix the inclusive range boundary",
+    "description": "Fix the boundary check in src and add a regression in tests.",
+    "acceptance_criteria": "The trusted checks and required CI pass on the exact landed commit.",
     "budget": {
       "time_minutes": 5,
-      "max_attempts": 1,
+      "max_attempts": 3,
       "max_tokens": 20000,
       "max_cost_minor": 10,
       "currency": "USD",
       "max_concurrency": 1,
-      "authority": ["analysis.run.<digest from discovery>"]
+      "authority": ["source.read", "source.write", "source.fast_forward"]
     }
   }
 }
@@ -163,7 +165,7 @@ cost cap is USD 0.10, subject to nonzero installed model price rates and ceiling
 Keep the same key for retries of this exact request:
 
 ```sh
-python3 workload_client.py invoke prj_default operator-analysis-001 invocation.json
+python3 workload_client.py invoke prj_default operator-repository-001 invocation.json
 python3 workload_client.py task TASK_ID
 python3 workload_client.py cancel RUN_ID
 python3 workload_client.py artifact TASK_ID ARTIFACT_DIGEST validation.json
@@ -179,20 +181,17 @@ Repository invocation uses the discovered digest for `repository/v1` (PR deliver
 or `repository/v2` (guarded fast-forward delivery). Each requires three explicit
 grants: source read/write plus PR creation or fast-forward, respectively. The
 landing profile waits for required CI on the exact task-branch commit before
-updating the unchanged base branch. Analysis has no source-write authority;
-only its revisioned harness may use selected project context and
-`read_context_source`. Both preserve the existing approval
-policy. Pause/resume/replan/retry and automatic revision loops remain unsupported.
+updating the unchanged base branch. Both repository profiles preserve the installed
+approval policy. Pause/resume/replan/retry and automatic revision loops remain
+unsupported. The retired diagnostic profile cannot be invoked.
 
-## Tool and diagnostics
+## Questions and diagnostics
 
-The worker's only added HTTP tool is
-`POST /workers/{attempt}/tools/read-context-source` on Marina, with its scoped
-attempt Bearer credential and `{"uri":"<exact URI from frozen context>"}`.
-Unknown arguments, non-selected sources, non-allowlisted tools and expired or
-revoked authority fail closed. The harness cannot choose a destination or obtain
-an upstream credential. The gateway records durable `tool.decision` events before
-serving selected bytes. This is a worker protocol, not a client invocation API.
+Conversation invocations use the configured agent and originating Deck thread.
+A pending question records its expiry. Exact answer replay returns the original
+human message; a changed answer conflicts. Expired or terminal-turn pending
+questions reject new answers. Marina routes an accepted answer to the same
+recorded waiting engine task. Uncertain delivery does not trigger a blind resend.
 
 Use the existing offline `marina diagnostics --journal-path /path/to/marina.db`
 command for correlated, redacted execution/attempt/model/tool/artifact records.

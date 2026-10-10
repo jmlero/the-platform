@@ -1,0 +1,38 @@
+{
+  "manifestVersion": 2,
+  "adapters": [
+    "claude",
+    "codex",
+    "grok"
+  ],
+  "components": [
+    {
+      "id": "block/completion-evidence",
+      "scope": "project"
+    },
+    {
+      "id": "block/focused-changes",
+      "scope": "project"
+    },
+    {
+      "id": "block/no-unfinished-ui",
+      "scope": "project"
+    },
+    {
+      "id": "block/ponytail",
+      "scope": "project"
+    },
+    {
+      "id": "block/secure-defaults",
+      "scope": "project"
+    },
+    {
+      "id": "block/tdd",
+      "scope": "project"
+    },
+    {
+      "id": "block/transparent-shortcuts",
+      "scope": "project"
+    }
+  ]
+}

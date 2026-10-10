@@ -30,6 +30,8 @@ type ConversationTaskInput struct {
 }
 
 type ConversationOutcomeInput struct {
+	PRDTasks            *PRDTaskProposal       `json:"prd_tasks,omitempty"`
+	PRD                 *PRDDraft              `json:"prd,omitempty"`
 	InvocationMessageID string                 `json:"invocation_message_id"`
 	AgentID             string                 `json:"agent_id"`
 	Status              string                 `json:"status"`
@@ -60,6 +62,7 @@ type ConversationQuestionInput struct {
 	QuestionID          string   `json:"question_id"`
 	Text                string   `json:"text"`
 	Choices             []string `json:"choices,omitempty"`
+	ExpiresAt           int64    `json:"expires_at,omitempty"`
 }
 
 type ConversationQuestion struct {
@@ -73,6 +76,8 @@ type ConversationQuestion struct {
 	Status              string `json:"status"`
 	AnswerMessageID     string `json:"answer_message_id"`
 	Answer              string `json:"answer"`
+	ExpiresAt           int64  `json:"expires_at,omitempty"`
+	ClosedAt            int64  `json:"closed_at,omitempty"`
 }
 
 type ConversationInvocation struct {
@@ -82,6 +87,9 @@ type ConversationInvocation struct {
 }
 
 type ConversationMessage struct {
+	PRDTasks            *PRDTaskPlan           `json:"prd_tasks,omitempty"`
+	PromotedTaskID      *string                `json:"promoted_task_id,omitempty"`
+	PRD                 *PRDDocument           `json:"prd,omitempty"`
 	References          ConversationReferences `json:"references"`
 	ID                  string                 `json:"id"`
 	ChannelID           string                 `json:"channel_id"`

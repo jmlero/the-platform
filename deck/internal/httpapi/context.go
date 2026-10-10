@@ -19,6 +19,25 @@ func (s *Server) contextRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/operator/runs/{id}/context", s.requireOperator(s.runContext))
 	mux.HandleFunc("GET /api/v1/projects/{project}/context/sources", s.requireService(capabilityContextRead, s.listContextSources))
 	mux.HandleFunc("GET /api/v1/runs/{id}/context", s.requireService(capabilityContextRead, s.runContext))
+	mux.HandleFunc("GET /api/v1/conversation/invocations/{id}/context", s.requireService(capabilityConversationContext, s.conversationContext))
+}
+
+func (s *Server) conversationContext(w http.ResponseWriter, r *http.Request) {
+	invocation, err := s.store.GetChannelMessage(r.Context(), r.PathValue("id"))
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	if !s.requireProject(w, r, invocation.ProjectID) {
+		return
+	}
+	result, err := s.store.ResolveConversationContext(r.Context(), invocation.ID)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (s *Server) listContextSources(w http.ResponseWriter, r *http.Request) {

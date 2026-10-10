@@ -1382,9 +1382,17 @@ paths:
       tags: [Runs]
       operationId: completeRun
       x-capability: run.complete
+      x-landing-capability: run.complete.landed
       security:
         - serviceBearer: []
       summary: Complete a verified run with evidence
+      description: >-
+        Without landing, version-1 execution completion retains human result acceptance.
+        Providers advertising run.complete.landed accept the optional exact landing
+        observation with current independent semantic_review, test and landing
+        evidence on that commit. Landing evidence records required CI and the
+        source-provider observation. Deck completes and records source availability
+        atomically without creating a human acceptance record.
       requestBody:
         required: true
         content:
@@ -1398,6 +1406,8 @@ paths:
                 fence_token: { type: integer, format: int64, minimum: 1 }
                 summary:
                   type: string
+                landing:
+                  $ref: "#/components/schemas/LandingObservation"
                 evidence_ids:
                   type: array
                   minItems: 1
@@ -1637,6 +1647,34 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "422": { $ref: "#/components/responses/InvalidInput" }
 
+  /conversation/invocations/{id}/context:
+    get:
+      tags: [Context, Channels]
+      operationId: getConversationContext
+      x-capability: conversation.context.read
+      security: [{serviceBearer: []}]
+      summary: Resolve the project context frozen for an explicit agent invocation
+      description: >-
+        Captures active selected project source revisions and the safe repository
+        binding when the operator invokes the agent. Replays and restarts resolve
+        those exact revisions, with current revocation state. Later edits cannot
+        enter an existing invocation. Thread messages remain immutable data in
+        the channel ledger. Requires conversation.context.read and the invocation's exact
+        project grant. Ordinary messages and invocations predating this feature
+        have no snapshot and return 404. Context cannot expand authority or budgets.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Frozen invocation context with current revocation state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ResolvedContext" }
+        "401": { $ref: "#/components/responses/AuthenticationRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
   /conversation/questions:
     post:
       tags: [Channels]
@@ -1648,6 +1686,8 @@ paths:
         Requires the exact project grant for the invoked message. The pair of
         invocation_message_id and question_id is replay safe. A changed question
         conflicts. The response includes the canonical answer, if already given.
+        Optional expires_at binds the question to the turn deadline. New questions
+        are rejected after the invocation's terminal outcome.
       requestBody:
         required: true
         content:
@@ -1661,6 +1701,7 @@ paths:
                 question_id: {type: string}
                 text: {type: string}
                 choices: {type: array, items: {type: string}}
+                expires_at: {type: integer, format: int64, minimum: 1}
       responses:
         "200":
           description: Canonical question and current answer state
@@ -1673,11 +1714,140 @@ paths:
         "409": {$ref: "#/components/responses/Conflict"}
         "422": {$ref: "#/components/responses/InvalidInput"}
 
+  /operator/messages/{message}/prd/tasks/approve:
+    post:
+      tags: [Channels]
+      operationId: approvePRDTasks
+      security: [{operatorSession: []}]
+      summary: Approve one immutable ordered PRD task proposal
+      description: >-
+        Requires the exact proposal digest, repository/v2 profile and explicit per-task budget.
+        Creates all tasks atomically with dependencies enforcing their approved order.
+        Each task retains the PRD path and landed revision. Changed input conflicts;
+        a new-key duplicate returns the original tasks. Service bearer credentials are rejected.
+      parameters:
+        - {name: message, in: path, required: true, schema: {type: string}}
+        - {$ref: "#/components/parameters/IdempotencyKey"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [digest, profile_digest, budget]
+              properties:
+                digest: {type: string}
+                profile_digest: {type: string}
+                budget: {$ref: "#/components/schemas/Budget"}
+      responses:
+        "201":
+          description: The unique ordered implementation tasks
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: "#/components/schemas/Task"}}
+        "401": {$ref: "#/components/responses/AuthenticationRequired"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+        "422": {$ref: "#/components/responses/InvalidInput"}
+
+  /operator/tasks/{task}/prd:
+    get:
+      tags: [Channels]
+      operationId: getPRDProgress
+      security: [{operatorSession: []}]
+      summary: Inspect a published PRD, proposals, tasks and landing results
+      parameters:
+        - {name: task, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: Current PRD progress and retained acceptance
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PRDProgress"}
+        "401": {$ref: "#/components/responses/AuthenticationRequired"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+        "422": {$ref: "#/components/responses/InvalidInput"}
+
+  /operator/tasks/{task}/prd/accept:
+    post:
+      tags: [Channels]
+      operationId: acceptPRD
+      security: [{operatorSession: []}]
+      summary: Accept the current PRD result set as the operator
+      description: Requires all approved tasks landed with current evidence and the exact results digest; records acceptance in the originating thread. Service credentials cannot accept.
+      parameters:
+        - {name: task, in: path, required: true, schema: {type: string}}
+        - {$ref: "#/components/parameters/IdempotencyKey"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [results_digest]
+              properties:
+                results_digest: {type: string}
+      responses:
+        "200":
+          description: Accepted PRD result set
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PRDProgress"}
+        "401": {$ref: "#/components/responses/AuthenticationRequired"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+        "422": {$ref: "#/components/responses/InvalidInput"}
+
+  /operator/messages/{message}/prd/approve:
+    post:
+      tags: [Channels]
+      operationId: approvePRD
+      security: [{operatorSession: []}]
+      summary: Approve an immutable PRD draft and authorize one publication task
+      description: >-
+        Requires an operator session (or trusted local operator mode), Idempotency-Key,
+        the exact draft digest and a current repository/v2 profile with explicit bounded
+        budget. Service bearer credentials cannot approve. Changed drafts, repository
+        bindings, profiles or replay budgets conflict. Duplicate approval, including with
+        a new key, returns the original task. The task freezes the approved path and text,
+        links the originating thread, and uses normal review, verification, CI and landing.
+      parameters:
+        - {name: message, in: path, required: true, schema: {type: string}}
+        - {$ref: "#/components/parameters/IdempotencyKey"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [digest, profile_digest, budget]
+              properties:
+                digest: {type: string}
+                profile_digest: {type: string}
+                budget: {$ref: "#/components/schemas/Budget"}
+      responses:
+        "201":
+          description: The unique publication task
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Task"}
+        "401": {$ref: "#/components/responses/AuthenticationRequired"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+        "422": {$ref: "#/components/responses/InvalidInput"}
+
   /conversation/outcomes:
     post:
       tags: [Channels]
       operationId: publishConversationOutcome
       x-capability: conversation.outcome.publish
+      x-prd-capability: conversation.prd.draft
+      x-prd-tasks-capability: conversation.prd.tasks
       security: [{serviceBearer: []}]
       summary: Publish one terminal conversation result to its originating thread
       description: >-
@@ -1689,6 +1859,10 @@ paths:
         it creates a new task without changing the original. Exact retries return
         the original message and task; changed payloads conflict. The agent
         cannot grant itself execution authority through its text output.
+        Providers advertising conversation.prd.draft also accept an immutable PRD draft.
+        A PRD is mutually exclusive with task delegation and grants no execution authority.
+        Providers advertising conversation.prd.tasks also accept prd_tasks proposals, mutually exclusive with PRD drafts and delegation. The exact source must already have landed in this thread.
+        Deck binds it to the invocation repository; an operator approves its exact digest separately.
       requestBody:
         required: true
         content:
@@ -1703,6 +1877,8 @@ paths:
                 body: {type: string, minLength: 1, maxLength: 8192}
                 result_digest: {type: string}
                 task: {$ref: "#/components/schemas/CreateTask"}
+                prd: {$ref: "#/components/schemas/PRDDraft"}
+                prd_tasks: {$ref: "#/components/schemas/PRDTaskProposal"}
                 followup_task_id: {type: string}
       responses:
         "200":
@@ -1791,7 +1967,8 @@ paths:
       description: >-
         Requires CSRF. The answer becomes a human message in the originating
         thread. Replaying the same request_id and answer returns the same
-        message; another answer conflicts. It does not authorize a task.
+        message; another answer conflicts. Expired questions and questions closed
+        by a terminal turn outcome reject new answers. It does not authorize a task.
       parameters:
         - {name: id, in: path, required: true, schema: {type: string}}
       requestBody:
@@ -2211,6 +2388,7 @@ components:
         "properties": {
           "id": {
             "type": "string",
+            "description": "Installed workload identity. diagnostic-analysis/v1 is retained for historical version-1 records; current Marina installations do not publish it.",
             "enum": [
               "repository/v1",
               "repository/v2",
@@ -2240,6 +2418,7 @@ components:
           },
           "min_attempts": {
             "type": "integer",
+            "description": "Minimum runtime starts for invocation. Repository profiles retain the legacy minimum of 2 or advertise 3 for independent review; task budgets must meet the selected profile's minimum.",
             "minimum": 1
           },
           "tools": {
@@ -2643,6 +2822,99 @@ components:
         accepted_at: {type: integer, format: int64}
         task_version: {type: integer, minimum: 1}
         source_available: {type: boolean, description: Operator attestation of base-branch code availability}
+    LandingObservation:
+      type: object
+      required: [repository, base_branch, commit, observed_at]
+      properties:
+        repository: {type: string, description: Exact authorized owner/repository}
+        base_branch: {type: string, description: Exact authorized base branch}
+        commit: {type: string, pattern: '^(?:[0-9a-f]{40}|[0-9a-f]{64})$'}
+        observed_at: {type: integer, format: int64, minimum: 1}
+    TaskLanding:
+      type: object
+      x-fixture: ./fixtures/v1/task-landing.json
+      allOf:
+        - $ref: "#/components/schemas/LandingObservation"
+        - type: object
+          required: [run_id, evidence_ids]
+          properties:
+            run_id: {type: string}
+            evidence_ids: {type: array, minItems: 3, uniqueItems: true, items: {type: string}}
+    PRDTaskDraft:
+      type: object
+      required: [title, description, acceptance_criteria]
+      properties:
+        title: {type: string, minLength: 1, maxLength: 200}
+        description: {type: string, minLength: 1, maxLength: 4000}
+        acceptance_criteria: {type: string, minLength: 1, maxLength: 2000}
+    PRDTaskProposal:
+      type: object
+      required: [publication_task_id, revision, tasks]
+      properties:
+        publication_task_id: {type: string}
+        revision: {type: string, description: Exact landed PRD commit}
+        tasks: {type: array, minItems: 1, maxItems: 8, items: {$ref: "#/components/schemas/PRDTaskDraft"}}
+    PRDReference:
+      type: object
+      required: [publication_task_id, plan_message_id, path, revision, digest, repository]
+      properties:
+        publication_task_id: {type: string}
+        plan_message_id: {type: string}
+        path: {type: string}
+        revision: {type: string}
+        digest: {type: string}
+        repository: {$ref: "#/components/schemas/RepositoryBinding"}
+    PRDTaskPlan:
+      x-canonical-fixture: ./fixtures/v1/prd-task-plan.json
+      allOf:
+        - {$ref: "#/components/schemas/PRDTaskProposal"}
+        - type: object
+          required: [source, digest]
+          properties:
+            source: {$ref: "#/components/schemas/PRDReference"}
+            digest: {type: string}
+            approval_digest: {type: string}
+            approved_by: {type: string}
+            approved_at: {type: integer, format: int64}
+            task_ids: {type: array, items: {type: string}}
+    PRDAcceptance:
+      type: object
+      required: [results_digest, accepted_by, accepted_at]
+      properties:
+        results_digest: {type: string}
+        accepted_by: {type: string}
+        accepted_at: {type: integer, format: int64}
+    PRDProgress:
+      type: object
+      required: [publication, plans, tasks, results_digest, ready_to_accept]
+      properties:
+        publication: {$ref: "#/components/schemas/Task"}
+        plans: {type: array, items: {$ref: "#/components/schemas/PRDTaskPlan"}}
+        tasks: {type: array, items: {$ref: "#/components/schemas/Task"}}
+        results_digest: {type: string}
+        ready_to_accept: {type: boolean}
+        acceptance: {$ref: "#/components/schemas/PRDAcceptance"}
+    PRDDraft:
+      type: object
+      required: [title, path, content]
+      properties:
+        title: {type: string, minLength: 1, maxLength: 160}
+        path: {type: string, maxLength: 240, description: Normalized relative Markdown path under docs/prd/}
+        content: {type: string, minLength: 1, maxLength: 16384, description: Exact UTF-8 Markdown bytes; no normalization on approval}
+    PRDDocument:
+      x-canonical-fixture: ./fixtures/v1/prd-document.json
+      allOf:
+        - {$ref: "#/components/schemas/PRDDraft"}
+        - type: object
+          required: [message_id, repository, digest]
+          properties:
+            message_id: {type: string}
+            repository: {$ref: "#/components/schemas/RepositoryBinding"}
+            digest: {type: string, description: SHA-256 of the canonical draft and repository binding}
+            approval_digest: {type: string}
+            approved_by: {type: string}
+            approved_at: {type: integer, format: int64}
+
     Task:
       type: object
       x-fixture: ./fixtures/v1/task.json
@@ -2660,8 +2932,13 @@ components:
         - created_at
         - updated_at
       properties:
+        prd_reference: {$ref: "#/components/schemas/PRDReference"}
+        prd_acceptance: {$ref: "#/components/schemas/PRDAcceptance"}
+        prd: {$ref: "#/components/schemas/PRDDocument"}
         review:
           $ref: "#/components/schemas/TaskReview"
+        landing:
+          $ref: "#/components/schemas/TaskLanding"
         depends_on:
           type: array
           items: {type: string}
@@ -3341,6 +3618,8 @@ components:
         answered_by: {type: string}
         created_at: {type: integer, format: int64}
         answered_at: {type: integer, format: int64}
+        expires_at: {type: integer, format: int64, description: Optional immutable turn deadline in Unix milliseconds.}
+        closed_at: {type: integer, format: int64, description: Terminal outcome time; a pending question with this field cannot be answered.}
 
     ConversationOutcome:
       type: object
@@ -3359,6 +3638,8 @@ components:
       type: object
       required: [id, channel_id, project_id, author_type, author_id, body, references, created_at]
       properties:
+        prd_tasks: {$ref: "#/components/schemas/PRDTaskPlan"}
+        prd: {$ref: "#/components/schemas/PRDDocument"}
         id: { type: string }
         channel_id: { type: string }
         project_id: { type: string }

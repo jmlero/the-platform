@@ -12,16 +12,12 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"reflect"
-	"slices"
 	"strings"
 	"time"
 
-	"github.com/jmlero/the-platform/marina/internal/analysis"
 	"github.com/jmlero/the-platform/marina/internal/artifacts"
 	"github.com/jmlero/the-platform/marina/internal/execution"
 	"github.com/jmlero/the-platform/marina/internal/journal/sqlite"
-	"github.com/jmlero/the-platform/marina/internal/kubernetes"
 	runtimeapi "github.com/jmlero/the-platform/marina/internal/runtime"
 	"github.com/jmlero/the-platform/marina/internal/workcontrol"
 	"github.com/jmlero/the-platform/marina/internal/worker"
@@ -39,6 +35,7 @@ type Model struct {
 }
 
 type Config struct {
+	ProjectID         string
 	ContextCheck      func(context.Context, execution.Execution) error
 	SourceBinding     func(context.Context, execution.Execution) (string, string, error)
 	PublicURL         string
@@ -47,6 +44,7 @@ type Config struct {
 	SourceTokenFile   string
 	ArtifactTokenFile string
 	Model             Model
+	ReviewerModel     *Model
 }
 
 type Server struct {
@@ -72,15 +70,12 @@ func New(config Config, journal *sqlite.Store, store *artifacts.Store, provider 
 	server.mux.HandleFunc("POST /workers/{id}/result", server.result)
 	server.mux.HandleFunc("GET /workers/{id}/git/info/refs", server.source)
 	server.mux.HandleFunc("POST /workers/{id}/git/git-upload-pack", server.source)
-	server.mux.HandleFunc("POST /workers/{id}/model/v1/responses", server.model)
 	server.mux.HandleFunc("GET /artifacts/{digest}", server.artifact)
-	server.mux.HandleFunc("POST /workers/{id}/tools/read-context-source", server.contextTool)
 	server.mux.HandleFunc("POST /engine/model/v1/responses", server.engineRoute(server.model))
 	server.mux.HandleFunc("GET /engine/input", server.engineRoute(server.input))
 	server.mux.HandleFunc("GET /engine/authority", server.engineRoute(server.authority))
 	server.mux.HandleFunc("GET /engine/git/info/refs", server.engineRoute(server.source))
 	server.mux.HandleFunc("POST /engine/git/git-upload-pack", server.engineRoute(server.source))
-	server.mux.HandleFunc("POST /engine/tools/read-context-source", server.engineRoute(server.contextTool))
 	return server
 }
 
@@ -91,7 +86,7 @@ func (server *Server) authorize(ctx context.Context, id, token string) (runtimea
 	if err != nil {
 		return attempt, execution.Execution{}, err
 	}
-	want := kubernetes.Token(server.config.SigningKey, attempt.Specification)
+	want := runtimeapi.CredentialToken(server.config.SigningKey, attempt.Specification)
 	if len(server.config.SigningKey) < 32 || subtle.ConstantTimeCompare([]byte(token), []byte(want)) != 1 {
 		return attempt, execution.Execution{}, errors.New("invalid worker credential")
 	}
@@ -108,6 +103,9 @@ func (server *Server) authorizeState(ctx context.Context, attempt runtimeapi.Att
 	record, err := server.journal.GetExecution(ctx, attempt.ExecutionID)
 	if err != nil {
 		return attempt, record, err
+	}
+	if server.config.ProjectID != "" && record.ProjectID != server.config.ProjectID {
+		return attempt, record, errors.New("attempt belongs to another project")
 	}
 	now := time.Now().UTC()
 	if attempt.Specification.Engine != nil {
@@ -163,6 +161,13 @@ func (server *Server) admit(w http.ResponseWriter, r *http.Request) (runtimeapi.
 }
 
 func (server *Server) Input(ctx context.Context, attempt runtimeapi.Attempt) (worker.Input, error) {
+	if attempt.Specification.Engine != nil {
+		stage := attempt.Specification.Stage
+		if stage == "" {
+			stage = "implement"
+		}
+		return worker.Input{Stage: stage, SourceRevision: attempt.Specification.SourceRevision}, nil
+	}
 	checkpoint, err := server.journal.GetCheckpoint(ctx, attempt.ExecutionID, "worker-input:"+attempt.ID)
 	if err != nil {
 		return worker.Input{}, err
@@ -176,12 +181,8 @@ func (server *Server) Input(ctx context.Context, attempt runtimeapi.Attempt) (wo
 	if err == nil && input.Context != nil && (input.Context.Digest != attempt.Specification.ContextDigest || input.Context.ExecutionID != attempt.ExecutionID || input.Context.Validate() != nil) {
 		return worker.Input{}, errors.New("worker context differs from immutable specification")
 	}
-	if err == nil && input.Stage == "analyze" {
-		if input.Analysis == nil || input.Analysis.Version != 1 || attempt.Specification.Workload != analysis.Kind ||
-			input.Analysis.InputDigest != attempt.Specification.InputDigest || input.Analysis.ProfileDigest != attempt.Specification.ProfileDigest ||
-			input.Analysis.InputDigest != analysis.Digest(input.Analysis.Sources) || !slices.Equal(input.Analysis.Tools, attempt.Specification.Tools) || !reflect.DeepEqual(input.Analysis.Context, input.Context) {
-			return worker.Input{}, errors.New("analysis input differs from its immutable specification")
-		}
+	if err == nil && input.Stage != "verify" {
+		return worker.Input{}, errors.New("legacy worker input is retired")
 	}
 	return input, err
 }
@@ -244,13 +245,6 @@ func (server *Server) result(w http.ResponseWriter, r *http.Request) {
 	}
 	want := workresult.Expected{Stage: input.Stage, SourceRevision: input.SourceRevision, AllowedPaths: input.AllowedPaths, Checks: input.Checks,
 		NotBefore: attempt.CreatedAt.Add(-time.Minute), Now: time.Now()}
-	if input.Stage == "analyze" {
-		if input.Analysis == nil {
-			http.Error(w, "analysis input is unavailable", 503)
-			return
-		}
-		want.InputDigest, want.ProfileDigest = input.Analysis.InputDigest, input.Analysis.ProfileDigest
-	}
 	result, err := workresult.Parse(data, want)
 	if err != nil {
 		http.Error(w, "result does not match the immutable worker input", 409)
@@ -328,7 +322,7 @@ func (server *Server) source(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if attempt.Specification.Workload == analysis.Kind || attempt.Specification.RepositoryURI == "" {
+	if attempt.Specification.RepositoryURI == "" || attempt.Specification.Stage == "review" {
 		http.Error(w, "this workload has no source authority", 403)
 		return
 	}

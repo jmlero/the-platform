@@ -118,11 +118,8 @@ func RunRemote(ctx context.Context) error {
 	if err = json.Unmarshal(b, &input); err != nil {
 		return err
 	}
-	if input.Stage == "implement" || input.Stage == "verify" {
+	if input.Stage == "verify" {
 		input.GitAuthorization = token
-	}
-	if input.Stage == "implement" || input.Stage == "analyze" {
-		input.Environment = append(input.Environment, "MARINA_WORKER_TOKEN="+token)
 	}
 	if ca != "" {
 		input.Environment = append(input.Environment, "SSL_CERT_FILE="+ca, "NODE_EXTRA_CA_CERTS="+ca, "GIT_SSL_CAINFO="+ca)
@@ -145,9 +142,6 @@ func RunRemote(ctx context.Context) error {
 	}
 	if len(b) > MaxResultBytes {
 		return errors.New("worker result exceeds transfer limit")
-	}
-	if input.Stage == "analyze" {
-		b = []byte(strings.ReplaceAll(string(b), token, "[redacted]"))
 	}
 	for retry := 0; retry < 3; retry++ {
 		if _, err = request(ctx, "POST", "/result", b); err == nil {

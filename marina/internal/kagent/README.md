@@ -1,12 +1,12 @@
 # Pinned kagent runtime adapter
 
-KINT-03 implements `runtime.Adapter` using the public
+The adapter implements `runtime.Adapter` using the public
 `kagent.api.v1alpha1.AgentInstanceService` and A2A v1 gRPC APIs from the
 [locked source](../../../deploy/kubernetes/kagent-trial/lock.json).
-The [KINT-04 gateway](../workerapi/README.md) implements governed admission and
-access. `marina serve` can select this adapter for an explicit repository pilot
-profile; the installed configuration still selects the supported worker until
-KINT-06 live acceptance. No new operator capability is advertised.
+The [gateway](../workerapi/README.md) implements governed admission and access.
+Repository implementation uses native Codex; conversation turns use the BYO
+actor. Kubernetes Jobs run independent verification only. Supported behavior and
+acceptance evidence belong in [current state](../../../docs/status.md).
 
 The caller supplies a `grpc.ClientConnInterface`, its installed
 endpoint identity, the SQLite journal, the existing artifact store and a required
@@ -15,7 +15,8 @@ runtime specification must select the backend/version, endpoint, namespace,
 harness/template and exact prepared revision, plus profile and context digests.
 The digest-addressed artifact named by `ContextURI` contains the initial message;
 `ContextDigest` separately binds the frozen selected context package. This is the
-lifecycle transport boundary, not the later workload-specific input contract.
+lifecycle transport boundary. Repository result requirements remain owned by
+the workflow and independent verifier.
 The adapter calls admission before instance creation and message delivery,
 including recovery. The gateway rechecks calls and owns source access and budget
 reservations. A missing admission fails closed; this adapter alone cannot grant
@@ -32,7 +33,7 @@ Old runtime specifications omit `engine`, preserving their serialized digests.
 | Creating, no instance ID | Replay `CreateAgentInstance` with the recorded request key. |
 | Instance bound, ready | Verify its complete identity and exact revision; persist send intent, then send once. |
 | Sending, no task ID | Inspect stored task history for the recorded message ID. Never resend. |
-| Active | Get the bound task and retain its normalized observation. |
+| Active | Get the bound task, follow its committed stream and retain its normalized observation. |
 | Revision mismatch | Block without sending; retain the instance for explicit cancellation. |
 | Cancellation/deletion requested | Delete the exact instance, then observe `NotFound` before acknowledging termination. |
 | Deleted | Return the retained observation; never recreate, even if the upstream key was deleted. |
@@ -47,17 +48,24 @@ before the send. Task/history lookup is bounded to ten pages of 100 tasks and
 
 Both cancellation modes use the synchronous instance deletion API; this includes
 Substrate suspension and deletion. A task's `CANCELED` state alone is insufficient.
-Input/auth-required tasks retain their task identity and block pending KINT-08.
-Resume remains unsupported.
+One typed input-required question retains the original task identity. The exact
+answer has a durable message ID and digest; ambiguous delivery is inspected,
+never resent. Deck rejects changed replays, expired questions and questions on
+terminal turns. Unsupported authentication requests block. General operator
+resume remains unsupported.
 
 Successful/failed task outputs are collected before normal cleanup. The adapter
 stores bounded A2A artifact envelopes in Marina's existing content-addressed
 store and runtime artifact journal. It never fetches engine-supplied URLs and
-does not treat these envelopes as workflow evidence. KINT-05 owns result
+does not treat these envelopes as workflow evidence. The workflow owns result
 translation and independent validation. Cancellation may discard uncollected
 outputs; cleanup is repeatable and previously collected artifacts survive it.
 
-All RPCs are bounded by a 60-second operation timeout. Upstream error bodies are
+RPC operations are bounded by a 60-second timeout. Stream observation drains at
+most 64 events for five seconds. Three consecutive unavailable observations stop
+the original instance without replacement work; normal observation timeouts do
+not count as unavailable compute. Cleanup failures remain durable and retryable.
+Upstream error bodies are
 not exposed in adapter errors. The upstream module requires Go 1.27; its
 Substrate module replacement is repeated explicitly in `marina/go.mod` because
 Go does not inherit dependency replacements. No kagent internal package or
@@ -83,5 +91,6 @@ go test -v ./internal/kagent -run '^TestLiveIsolatedLifecycle$' -count=1
 
 It drops successful real create/delete responses and interrupts message delivery
 before admission, so it dispatches no model task. Accepted-message recovery,
-artifacts, changed revisions and other failure paths use deterministic gRPC
-servers plus real SQLite. See the [KINT-03 evidence](../../../docs/validation/kint-03-2026-09-22.md).
+artifacts, changed revisions and other failure paths also have deterministic gRPC
+coverage with real SQLite. See the [initial lifecycle evidence](../../../docs/validation/kint-03-2026-09-22.md)
+and [final removal and failure acceptance](../../../docs/validation/kint-12-17-2026-10-01.md).

@@ -68,3 +68,9 @@ type ResolvedContext struct {
 type ContextInspection interface {
 	GetRunContext(context.Context, string) (ResolvedContext, error)
 }
+
+// ConversationContextInspection resolves the exact project sources captured at
+// invocation. A later edit cannot change them; revocation remains observable.
+type ConversationContextInspection interface {
+	GetConversationContext(context.Context, string) (ResolvedContext, error)
+}

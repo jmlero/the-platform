@@ -14,6 +14,9 @@ import (
 )
 
 type Fixtures struct {
+	PRDTasks   workcontrol.PRDTaskPlan
+	PRD        workcontrol.PRDDocument
+	Landing    workcontrol.TaskLanding
 	Workloads  workcontrol.WorkloadCatalog
 	Context    workcontrol.ResolvedContext
 	Repository workcontrol.RepositoryRequest
@@ -195,9 +198,24 @@ func LoadFixtures(root string) (Fixtures, error) {
 		}
 
 		switch entry.Kind {
+		case "prd_task_plan":
+			err = decodeFile(path, &fixtures.PRDTasks)
+			if err == nil && (fixtures.PRDTasks.Validate() != nil || fixtures.PRDTasks.Digest != fixtures.PRDTasks.ContentDigest()) {
+				err = fmt.Errorf("invalid PRD task fixture")
+			}
+		case "prd_document":
+			err = decodeFile(path, &fixtures.PRD)
+			if err == nil && (fixtures.PRD.Validate() != nil || fixtures.PRD.Digest != fixtures.PRD.ContentDigest()) {
+				err = fmt.Errorf("invalid PRD fixture")
+			}
+		case "task_landing":
+			err = decodeFile(path, &fixtures.Landing)
+			if err == nil && (fixtures.Landing.RunID == "" || len(fixtures.Landing.Commit) != 40 || len(fixtures.Landing.EvidenceIDs) < 3) {
+				err = fmt.Errorf("invalid landing fixture")
+			}
 		case "workloads":
 			err = decodeFile(path, &fixtures.Workloads)
-		case "context":
+		case "context", "conversation_context":
 			err = decodeFile(path, &fixtures.Context)
 			if err == nil {
 				err = workcontrol.ValidateResolvedContext(fixtures.Context.Selection, fixtures.Context)
