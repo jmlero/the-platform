@@ -53,8 +53,8 @@ each task's outcome and acceptance is in the
 | ID | State | Owner | Outcome |
 | --- | --- | --- | --- |
 | PLAT-00 | Done | Operator | Direction recorded in [decision 0032](decisions/0032-agent-and-application-platform.md). |
-| PLAT-01–09, PLAT-11–13, PLAT-15, PLAT-17 | Open | Ops/Marina/Joint | Footprint baseline, Argo CD config and slot manifest, External Secrets and Kyverno, agentgateway, kgateway and MCP tools, OpenTelemetry with Jaeger, Prometheus and Perses, experiments, OpenFGA tool access and Knative apps deployed by Argo CD. |
-| PLAT-10, PLAT-14, PLAT-16 | Later | Ops/Joint | Langfuse (too heavy for the laptop now), SPIFFE/SPIRE workload identity and Keycloak sign-in. Triggers are in the plan. |
+| PLAT-01–02, PLAT-04–09, PLAT-11, PLAT-17 | Open | Ops/Marina/Joint | One working stack first: footprint baseline, Argo CD config, External Secrets and Kyverno, agentgateway, kgateway and MCP tools, OpenTelemetry with Jaeger, Prometheus and Perses, and Knative apps deployed by Argo CD. |
+| PLAT-03, PLAT-10, PLAT-12–16 | Later | Ops/Joint | The slot manifest, Langfuse (too heavy for the laptop now), experiments that compare components, SPIFFE/SPIRE workload identity, OpenFGA tool access and Keycloak sign-in. Standard benchmarks are not planned. Triggers are in the plan. |
 
 ### Feedback loop and review
 

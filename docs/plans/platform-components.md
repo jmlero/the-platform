@@ -95,7 +95,7 @@ Order follows dependencies. Each task stores redacted evidence under
 | ID | Outcome | Acceptance |
 | --- | --- | --- |
 | PLAT-02 | Argo CD on local Kind manages Deck, Marina and kagent from a Git path: Kustomize overlays for our services, Helm charts for kagent and later components, one Argo CD Application per slot. Private values come from PLAT-04, not Git. | Fresh install and upgrade from Git only; `make check-installation` passes; Argo CD shows all apps synced and healthy; restart and recovery checks still pass. |
-| PLAT-03 | Platform manifest `platform/v1`: one versioned YAML, mounted from a ConfigMap, that names the component in each slot (gateway, tools, telemetry, evaluation). Marina validates it offline, fails closed on unknown fields, and freezes the digest in each attempt like profiles today. | `marina check-config` covers it; changing the manifest never changes active work. |
+| PLAT-03 | Later, by operator decision (2026-10-17): with one stack there is nothing to swap yet. Trigger: PLAT-12. Platform manifest `platform/v1`: one versioned YAML, mounted from a ConfigMap, that names the component in each slot (gateway, tools, telemetry, evaluation). Marina validates it offline, fails closed on unknown fields, and freezes the digest in each attempt like profiles today. | `marina check-config` covers it; changing the manifest never changes active work. |
 
 ### Phase 2: secrets and policy
 
@@ -108,7 +108,7 @@ Order follows dependencies. Each task stores redacted evidence under
 
 | ID | Outcome | Acceptance |
 | --- | --- | --- |
-| PLAT-06 | agentgateway as the model routing layer behind Marina's gateway: actor -> Marina (lease, fence, budget, usage) -> agentgateway (provider routing, retries, telemetry) -> OpenRouter. The provider key moves to agentgateway only. Selected through PLAT-03. | Repository and chat work pass with and without agentgateway; budget, cancellation and lost-response cases from [0023](../decisions/0023-focus-kagent-cutover.md) still pass; no direct provider route from actors. |
+| PLAT-06 | agentgateway as the model routing layer behind Marina's gateway: actor -> Marina (lease, fence, budget, usage) -> agentgateway (provider routing, retries, telemetry) -> OpenRouter. The provider key moves to agentgateway only. Selected by the model endpoint in the existing workflow configuration. | Repository and chat work pass with and without agentgateway; budget, cancellation and lost-response cases from [0023](../decisions/0023-focus-kagent-cutover.md) still pass; no direct provider route from actors. |
 | PLAT-07 | kgateway as the Gateway API controller for ingress to Deck (`https://localhost:8443`) and apps. Then decide, with evidence, whether kgateway also manages agentgateway. | Deck reachable through kgateway; written decision on the second point. |
 | PLAT-08 | MCP servers as tools: in-cluster MCP servers federated by agentgateway. Each profile lists allowed tools; Marina freezes the list in the attempt and counts tool calls against the budget. Start with read-only tools, including the existing repository read tools exposed over MCP. | An agent uses an allowed MCP tool; a disallowed tool is rejected at the gateway; tool output stays untrusted data; cancellation during a tool call still works. |
 
@@ -129,15 +129,15 @@ graduated) can run evaluation pipelines but is heavy for a laptop.
 
 | ID | Outcome | Acceptance |
 | --- | --- | --- |
-| PLAT-12 | Experiments: an `Experiment` custom resource, watched by Marina, names a fixed task set on a scratch repository and two or more variants (model, gateway, engine settings). Marina runs each variant with landing disabled and records the real check result as the main score, plus review verdict, cost, tokens, time and attempts, in Marina's journal. The resource status shows progress per variant, and Marina exports a comparison report as an artifact. | Two model variants on the same tasks produce a comparable result table; nothing lands on a real main; budgets apply per run. |
-| PLAT-13 | Trace-based scoring with agentevals or openevals over PLAT-09 traces (trajectory and tool-use checks), as a supplementary score next to deterministic evidence. | Scores appear next to PLAT-12 results; they never complete or block a task. |
+| PLAT-12 | Later, by operator decision (2026-10-17): first confirm one working stack. Trigger: PLAT-01–02, PLAT-04–09, PLAT-11 and PLAT-17 accepted. Experiments: an `Experiment` custom resource, watched by Marina, names a fixed task set on a scratch repository and two or more variants (model, gateway, engine settings). Marina runs each variant with landing disabled and records the real check result as the main score, plus review verdict, cost, tokens, time and attempts, in Marina's journal. The resource status shows progress per variant, and Marina exports a comparison report as an artifact. | Two model variants on the same tasks produce a comparable result table; nothing lands on a real main; budgets apply per run. |
+| PLAT-13 | Later, with PLAT-12. Trace-based scoring with agentevals or openevals over PLAT-09 traces (trajectory and tool-use checks), as a supplementary score next to deterministic evidence. | Scores appear next to PLAT-12 results; they never complete or block a task. |
 
 ### Phase 6: identity and authorization
 
 | ID | Outcome | Acceptance |
 | --- | --- | --- |
 | PLAT-14 | Later, by operator decision. SPIFFE/SPIRE workload identity for Deck, Marina, gateways and verifier Jobs; mTLS between services where the component supports SVIDs, replacing the private installation CA there. | Services authenticate with SVIDs; existing scoped service credentials and fencing still apply. |
-| PLAT-15 | OpenFGA for tool and agent access: relations of project, agent and MCP tool, checked by the gateway on each tool call, keyed by Marina's attempt identity until PLAT-14 exists. | A tool allowed for one project is denied for another; Deck task authorization is unchanged. |
+| PLAT-15 | Later, by operator decision (2026-10-17): the per-profile tool allowlist of PLAT-08 covers one stack. OpenFGA for tool and agent access: relations of project, agent and MCP tool, checked by the gateway on each tool call, keyed by Marina's attempt identity until PLAT-14 exists. | A tool allowed for one project is denied for another; Deck task authorization is unchanged. |
 | PLAT-16 | Keycloak sign-in for Deck. Later: the local install opens without sign-in by operator decision. | Trigger: LATER-07 or another user. |
 
 ### Phase 7: apps
