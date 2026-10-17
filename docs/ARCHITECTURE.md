@@ -5,7 +5,7 @@ tech stack and the rules that keep work safe. Why it exists is in
 [VISION.md](VISION.md); what is supported today is in [status.md](status.md).
 Planned changes are in [plans/](plans/) until they ship.
 
-Last reviewed: 2026-10-04.
+Last reviewed: 2026-10-17.
 
 ## Components
 
@@ -32,6 +32,34 @@ databases, identities, images, deployments and migrations. Neither imports the
 other's code or reads the other's database. They meet only through Deck's
 versioned HTTP/JSON API.
 
+## Target: the platform
+
+Marina is becoming the agent and application platform, with the software
+factory as one workload on it
+([decision 0032](decisions/0032-agent-and-application-platform.md)). None of
+this is built yet; the tasks are in the
+[platform components plan](plans/platform-components.md).
+
+```text
+ workloads     software factory (Deck + repository workflow) │ apps │ other agents
+ ───────────────────────────────────────────────────────────────────────────────
+ governance    Marina: leases, fences, budgets, frozen inputs, evidence, recovery
+ ───────────────────────────────────────────────────────────────────────────────
+ slots         runtime │ sandbox │ AI gateway │ ingress │ MCP tools │ telemetry
+               evaluation │ secrets │ policy │ authorization │ app runtime
+ ───────────────────────────────────────────────────────────────────────────────
+ config        Git -> Argo CD -> Kustomize and Helm
+ ───────────────────────────────────────────────────────────────────────────────
+ substrate     Kubernetes (local Kind, GKE)
+```
+
+- Slots are filled by open-source components, CNCF first. Components meet at
+  open protocols: A2A, MCP, OpenAI-compatible model APIs, OTLP and Gateway API.
+- Marina stays in the request path for model and tool calls, so every component
+  is still bound by the live lease, fence and budget.
+- One versioned manifest names the component in each slot; Marina freezes it per
+  attempt like a profile. Custom resources are added only where they add value.
+
 ## How the loops map to components
 
 | Part of the vision | Today | Target ([decision 0022](decisions/0022-autonomous-software-factory.md)) |
@@ -39,7 +67,7 @@ versioned HTTP/JSON API.
 | **Outer loop** (me and the chat agent) | Deck channels and threads. The explicitly invoked chat agent reads a pinned repository and selected project context through Marina's bounded read tools ([0027](decisions/0027-read-only-repository-context-for-chat.md)). It replies in the thread, can ask one typed clarification, and can create a Backlog draft or a Ready task within a fixed budget. Tasks can also be created by hand or promoted from messages. Typed PRD proposals and exact operator approval use the normal publication workflow ([0029](decisions/0029-approved-prd-publication.md)); see [acceptance status](status.md). | The chat agent drafts a PRD; after my approval Marina commits it to the project repository, and top-level tasks are derived from it. Agent-maintained notes and knowledge bases come later. |
 | **Inner loop** (agents) | Native Codex produces a candidate at a pinned revision. A text-only reviewer using a different model passes its exact patch before commit; a separate clean verification Job runs the checks. Failed reviews or checks enter bounded diagnosis and repair. See [0026](decisions/0026-read-only-review-and-exact-patch.md) and [installation acceptance](status.md). | The same review, repair and verification gates on the installed engine. |
 | **Landing** | Marina observes the exact commit on main and records its selected evidence; Deck completes the task automatically. A moved base uses bounded rebase and fresh gates ([0028](decisions/0028-evidenced-landing-and-rebase.md)); installation acceptance is in [status](status.md). | No pull request: clean verification (unit and end-to-end tests), push to a task branch, required GitHub CI on that commit, then fast-forward main. |
-| **CI and deployment** | GitHub. | GitHub. The platform observes CI and never deploys. |
+| **CI and deployment** | GitHub CI. The platform does not deploy. | GitHub CI. Apps deploy on the platform from Git ([decision 0032](decisions/0032-agent-and-application-platform.md)); the factory still only lands commits. |
 | **Deck UI** | Three columns: projects, a middle column (in progress, to do, recently landed or accepted), and the chat, plus a task drawer. | Three columns: projects, a simple middle column (in progress, to do, recently landed), and the chat. |
 
 The LangChain diagnostic workflow is retired

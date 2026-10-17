@@ -17,17 +17,18 @@ Treat these documents as the current product source of truth. A new explicit use
 
 ## Mission
 
-Marina is the execution side of the software factory described in [the vision](../docs/VISION.md): it runs the agents' inner loop on Kubernetes: authorized tasks become verified, evidence-backed changes or focused blockers.
+Marina is the agent and application platform described in [the vision](../docs/VISION.md) and [decision 0032](../docs/decisions/0032-agent-and-application-platform.md). Today it is the execution side of the software factory: it runs the agents' inner loop on Kubernetes, and authorized tasks become verified, evidence-backed changes or focused blockers. The target adds pluggable slots for gateways, tools, observability, evaluation, secrets, policy and app hosting, following the [platform components plan](../docs/plans/platform-components.md).
 
 ## Current product boundary
 
 - Start from scratch. Marina is a new concept, not a port, rewrite, migration, successor, or cloud-neutral version of `platform-marina`.
 - Carry forward the creator's experience from `platform-marina`, not its architecture, code, backlog, layer model, providers, or assumptions.
 - Design for one operator and personal repositories first. Do not add multi-tenancy, organization administration, team RBAC, or billing without an explicit requirement.
-- Use Kubernetes as Marina's native installation and first execution substrate, but do not expose Kubernetes-specific concepts as Marina's public product model.
+- Use Kubernetes as Marina's native installation and execution substrate. Keep the Deck–Marina work-control contract independent of Kubernetes; installation and slot configuration may use Kubernetes resources.
+- Fill platform slots with open-source components, CNCF projects first, and swap them at open protocols rather than with one adapter per product.
 - Use Deck over HTTP/JSON as the supported work-control provider. Keep the core provider-neutral; alternative providers and headless packaging remain future work.
 - Keep work-control surfaces, agent harnesses, models, workflow engines, runtimes, context sources, policy and verification systems, delivery integrations, and platform services replaceable behind explicit governed contracts.
-- Verified work lands directly on main after the clean verification Job and required GitHub CI on the exact commit ([decision 0022](../docs/decisions/0022-autonomous-software-factory.md), LAND-01). The `repository/v1` pull-request profile remains for installations that select it. Marina never deploys.
+- Verified work lands directly on main after the clean verification Job and required GitHub CI on the exact commit ([decision 0022](../docs/decisions/0022-autonomous-software-factory.md), LAND-01). The `repository/v1` pull-request profile remains for installations that select it. The repository workflow never deploys; app deployment from Git is a planned platform capability (PLAT-17).
 
 ## Vocabulary and boundaries
 
@@ -56,7 +57,7 @@ Marina owns internal execution and reconciliation state. The configured work-con
 ### Kubernetes-native, not Kubernetes-shaped
 
 - Prefer ordinary services and ephemeral Jobs for the first implementation.
-- Add custom resources or operators only after a proven reconciliation need.
+- Configure declaratively from Git (Argo CD, Kustomize, Helm). Add a custom resource only where it adds value over a versioned manifest file, such as live status; add no custom operator unless one is needed.
 - Keep public contracts for work, runs, events, artifacts, evidence, policy, and runtimes independent of Pods, Jobs, and CRDs.
 - Preserve a local container or process path for development where practical.
 - Do not pretend an external managed runtime is a Kubernetes Pod.

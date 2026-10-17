@@ -12,17 +12,18 @@ means a decision made the item obsolete.
 
 ## Priority now
 
-Everything serves the [first milestone](VISION.md#direction): one real
-repository, one PRD born in the chat, and agents landing its tasks on main
-without me touching the code.
+The platform work comes first (operator decision, 2026-10-17), then the
+[first milestone](VISION.md#direction): one real repository, one PRD born in the
+chat, and agents landing its tasks on main without me touching the code.
 
 The engine, the chat agent, native Codex and landing on main are accepted on
 local Kind (KINT-09–11, KINT-16, CHAT-04–11, AUTO-02–06, AUTO-08, LAND-01, UI-01).
 Next, in order:
 
-1. **Landing and tests** (LAND-02–03, VER-01, TEST-01).
-2. **PRDs from the chat** (PRD).
-3. **The milestone proof** (FLOW-01).
+1. **The platform** (PLAT). Its phases can run in any order.
+2. **Landing and tests** (LAND-02–03, VER-01, TEST-01).
+3. **PRDs from the chat** (PRD).
+4. **The milestone proof** (FLOW-01).
 
 ## Now
 
@@ -42,6 +43,18 @@ Next, in order:
 | UI-01 | Done | Deck | Three columns are built and [accepted on local Kind](validation/ui-01-2026-09-26.md): projects; a middle column with In progress, To do, and Recently completed; and chat. The last group becomes Recently landed with LAND-02. |
 
 ## Next
+
+### The platform
+
+Direction in [decision 0032](decisions/0032-agent-and-application-platform.md);
+each task's outcome and acceptance is in the
+[platform components plan](plans/platform-components.md).
+
+| ID | State | Owner | Outcome |
+| --- | --- | --- | --- |
+| PLAT-00 | Done | Operator | Direction recorded in [decision 0032](decisions/0032-agent-and-application-platform.md). |
+| PLAT-01–09, PLAT-11–13, PLAT-15, PLAT-17 | Open | Ops/Marina/Joint | Footprint baseline, Argo CD config and slot manifest, External Secrets and Kyverno, agentgateway, kgateway and MCP tools, OpenTelemetry with Jaeger, Prometheus and Perses, experiments, OpenFGA tool access and Knative apps deployed by Argo CD. |
+| PLAT-10, PLAT-14, PLAT-16 | Later | Ops/Joint | Langfuse (too heavy for the laptop now), SPIFFE/SPIRE workload identity and Keycloak sign-in. Triggers are in the plan. |
 
 ### Feedback loop and review
 

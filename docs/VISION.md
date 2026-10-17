@@ -4,14 +4,29 @@ What The Platform is for and why it exists. How it is built is in
 [ARCHITECTURE.md](ARCHITECTURE.md); what works today is in [status.md](status.md);
 the order of work is in [backlog.md](backlog.md).
 
-Last reviewed: 2026-09-25.
+Last reviewed: 2026-10-17.
 
 ## In one sentence
 
-The Platform is an **autonomous software factory on my own Kubernetes**: I shape
-the product in a chat, and agents build it with minimal supervision.
+The Platform is an **agent and application platform on my own Kubernetes**
+(Marina) with an **autonomous software factory** on top: I shape the product in
+a chat, and agents build it with minimal supervision.
 
 ## What
+
+### The platform
+
+Marina gives agents and apps what they need to run: agent runtime, sandboxing,
+gateways for models, tools and agents, MCP tools, observability, evaluation,
+identity, secrets, policy and app hosting. Each capability is a slot filled by
+open-source components, CNCF projects first. Everything is declared in Git.
+
+The platform is also a lab: I swap a component, run the same work, and compare
+cost, time and results. Marina's governance (budgets, limits, evidence) is the
+glue that stays the same whatever fills the slots
+([decision 0032](decisions/0032-agent-and-application-platform.md)).
+
+The software factory below is one workload on the platform.
 
 ### Two loops
 
@@ -46,7 +61,8 @@ Tests are what make this safe. Every change comes with unit and end-to-end tests
 and the reviewer rejects changes that weaken them. If the agent cannot pass the
 checks within its limits, it stops and tells me why.
 
-CI and deployment stay on GitHub. The platform does not deploy.
+CI stays on GitHub. Apps run on the platform and deploy from Git; the factory
+lands commits, and deployment follows from main.
 
 ### The product experience
 
@@ -72,6 +88,9 @@ PRD level: does the product now do what the PRD describes?
 
 ## Why
 
+- **I want to try components, not only use one stack.** The agent ecosystem moves
+  fast. A platform where parts can be swapped and compared tells me what actually
+  works.
 - **It runs on Kubernetes I control**, in the cloud or on-premises. Agent work
   runs on infrastructure I own, not only in a vendor's cloud. While I develop the
   platform it runs on my laptop; later it moves to an independent cluster.
@@ -107,10 +126,14 @@ PRD level: does the product now do what the PRD describes?
 5. **Explicit steering.** My decisions are recorded and acknowledged.
 6. **Infrastructure I control.** Plain Kubernetes, in the cloud or on-premises.
    Every external data destination is explicit.
-7. **Replaceable parts.** Agents, models and engines can be swapped behind narrow
-   contracts.
-8. **Small and inspectable.** One process and one SQLite database per service
-   until a measured need justifies more.
+7. **Open, replaceable parts.** Every capability is a slot filled by open-source
+   components, CNCF first, swapped at open protocols (A2A, MCP, OpenAI-compatible
+   models, OpenTelemetry, Gateway API).
+8. **Small and inspectable.** Deck and Marina stay one process and one SQLite
+   database each until a measured need justifies more. New capabilities come from
+   proven components, not new code.
+9. **Declarative.** The installation is declared in Git and applied by GitOps.
+   Custom resources only where they add value; no custom operator unless needed.
 
 ## Direction
 
@@ -129,10 +152,13 @@ outline:
 4. **PRDs from the chat.** The chat agent drafts a PRD, I approve it, it is
    committed to the repository, and top-level tasks are derived from it (PRD).
 5. **The simple three-column Deck** (UI-01).
-6. **Later:** context and knowledge bases for agents, several tasks in parallel,
-   and a move to an independent Kubernetes cluster.
+6. **The platform:** declarative config, secrets and policy, gateways and MCP
+   tools, observability, evaluation and app hosting
+   ([plan](plans/platform-components.md), PLAT).
+7. **Later:** workload identity, context and knowledge bases for agents, several
+   tasks in parallel, and a move to an independent Kubernetes cluster.
 
 **First milestone:** one real repository, one PRD born in the chat, and agents
 landing its tasks on main without me touching the code.
 
-Not planned now: deployment, multiple users, team permissions, high availability.
+Not planned now: multiple users, team permissions, high availability.
