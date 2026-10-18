@@ -22,13 +22,17 @@ const (
 )
 
 type runner struct {
-	deckURL    string
-	tokenFile  string
-	timeout    time.Duration
-	jsonOutput bool
-	stdout     io.Writer
-	stderr     io.Writer
-	getenv     func(string) string
+	deckURL         string
+	tokenFile       string
+	marinaURL       string
+	marinaTokenFile string
+	marinaCAFile    string
+	namespace       string
+	timeout         time.Duration
+	jsonOutput      bool
+	stdout          io.Writer
+	stderr          io.Writer
+	getenv          func(string) string
 }
 
 func Run(
@@ -60,18 +64,27 @@ func Run(
 		deckURL = defaultDeckURL
 	}
 	r := runner{
-		deckURL:   deckURL,
-		tokenFile: strings.TrimSpace(getenv("DECK_TOKEN_FILE")),
-		timeout:   defaultTimeout,
-		stdout:    stdout,
-		stderr:    stderr,
-		getenv:    getenv,
+		deckURL:         deckURL,
+		tokenFile:       strings.TrimSpace(getenv("DECK_TOKEN_FILE")),
+		marinaURL:       envOr(getenv, "MARINA_URL", defaultMarinaURL),
+		marinaTokenFile: strings.TrimSpace(getenv("MARINA_TOKEN_FILE")),
+		marinaCAFile:    strings.TrimSpace(getenv("MARINA_CA_FILE")),
+		namespace:       envOr(getenv, "MARINA_NAMESPACE", defaultMarinaNamespace),
+		timeout:         defaultTimeout,
+		stdout:          stdout,
+		stderr:          stderr,
+		getenv:          getenv,
 	}
 
 	flags := flag.NewFlagSet("platformctl", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	flags.StringVar(&r.deckURL, "deck-url", r.deckURL, "Deck base URL")
 	flags.StringVar(&r.tokenFile, "token-file", r.tokenFile, "file containing a Deck operator login token")
+	flags.StringVar(&r.marinaURL, "marina-url", r.marinaURL, "Marina platform API base URL")
+	flags.StringVar(&r.marinaTokenFile, "marina-token-file", r.marinaTokenFile, "file containing a Kubernetes token for Marina")
+	flags.StringVar(&r.marinaCAFile, "marina-ca-file", r.marinaCAFile, "extra CA bundle that signs Marina's certificate")
+	flags.StringVar(&r.namespace, "namespace", r.namespace, "Marina namespace")
+	flags.StringVar(&r.namespace, "n", r.namespace, "Marina namespace (shorthand)")
 	flags.DurationVar(&r.timeout, "timeout", r.timeout, "request timeout")
 	flags.BoolVar(&r.jsonOutput, "json", false, "write JSON output")
 	showVersion := flags.Bool("version", false, "print version")
@@ -105,6 +118,12 @@ func Run(
 		return r.runTasks(ctx, commandArgs)
 	case "runs":
 		return r.runRuns(ctx, commandArgs)
+	case "capabilities":
+		return r.runCapabilities(ctx, commandArgs)
+	case "turns":
+		return r.runTurns(ctx, commandArgs)
+	case "decisions":
+		return r.runDecisions(ctx, commandArgs)
 	case "help":
 		writeRootUsage(stdout)
 		return 0
@@ -119,8 +138,23 @@ func (r runner) runRuns(ctx context.Context, args []string) int {
 	}
 	commandType := args[0]
 	switch commandType {
-	case "pause", "resume", "cancel", "replan", "retry":
+	case "cancel":
+		// With --reason, cancel is Deck's durable operator command; without
+		// it, cancel goes to Marina's platform API.
+		if hasFlag(args[1:], "reason") {
+			return r.runCreateCommand(ctx, commandType, args[1:])
+		}
+		return r.runMarinaRunCancel(ctx, args[1:])
+	case "pause", "resume", "replan", "retry":
 		return r.runCreateCommand(ctx, commandType, args[1:])
+	case "create":
+		return r.runMarinaRunCreate(ctx, args[1:])
+	case "list":
+		return r.runMarinaRunList(ctx, args[1:])
+	case "get":
+		return r.runMarinaRunGet(ctx, args[1:])
+	case "events":
+		return r.runMarinaRunEvents(ctx, args[1:])
 	case "help":
 		writeRunsUsage(r.stdout)
 		return 0
@@ -340,7 +374,12 @@ func (r runner) token() (string, error) {
 	if strings.TrimSpace(r.tokenFile) == "" {
 		return strings.TrimSpace(r.getenv("DECK_TOKEN")), nil
 	}
-	file, err := os.Open(r.tokenFile)
+	return readTokenFile(r.tokenFile)
+}
+
+// readTokenFile accepts only a regular, owner-only file of bounded size.
+func readTokenFile(path string) (string, error) {
+	file, err := os.Open(path)
 	if err != nil {
 		return "", fmt.Errorf("open token file: %w", err)
 	}
@@ -387,6 +426,27 @@ func (r runner) failure(err error) int {
 	return 1
 }
 
+func envOr(getenv func(string) string, name, fallback string) string {
+	if value := strings.TrimSpace(getenv(name)); value != "" {
+		return value
+	}
+	return fallback
+}
+
+// hasFlag reports whether args set the named flag before any "--".
+func hasFlag(args []string, name string) bool {
+	for _, arg := range args {
+		if arg == "--" {
+			return false
+		}
+		trimmed := strings.TrimLeft(arg, "-")
+		if trimmed != arg && (trimmed == name || strings.HasPrefix(trimmed, name+"=")) {
+			return true
+		}
+	}
+	return false
+}
+
 func parseFlags(flags *flag.FlagSet, args []string) int {
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -431,29 +491,44 @@ func validPriority(value string) bool {
 
 func writeRootUsage(writer io.Writer) {
 	_, _ = fmt.Fprintln(writer, `Usage:
-  platformctl [global options] health
-  platformctl [global options] tasks <command> [options]
-  platformctl [global options] runs <command> [options] <run-id>
+  platformctl [global options] <command> [options]
 
-Commands:
+Marina platform API commands:
+  capabilities      Show what the Marina installation offers
+  runs create       Create a Run (the name is the idempotency key)
+  runs list         List Runs in the namespace
+  runs get          Show a Run, its usage and evidence
+  runs events       Show a Run's events; --follow streams them
+  runs cancel       Cancel a Run (without --reason)
+  turns create      Ask one agent turn
+  turns get         Show a Turn and its reply
+  decisions list    List Decisions in the namespace
+  decisions answer  Answer a Decision
+
+Deck operator API commands:
   health          Verify that Deck is reachable
   tasks list      List work from the operator workspace
   tasks get       Inspect a task and its runs
   tasks create    Create backlog or ready work
   runs pause      Request a durable pause command
   runs resume     Request a durable resume command
-  runs cancel     Request a durable cancel command
+  runs cancel     Request a durable cancel command (with --reason)
   runs replan     Request a durable replan command
   runs retry      Request a durable retry command
 
 Global options:
-  --deck-url URL    Deck base URL (default: DECK_URL or http://localhost:8080)
+  --marina-url URL           Marina base URL (default: MARINA_URL or http://localhost:8090)
+  --marina-token-file PATH   Kubernetes token file (default: MARINA_TOKEN_FILE, then MARINA_TOKEN)
+  --marina-ca-file PATH      Extra CA bundle for Marina (default: MARINA_CA_FILE)
+  -n, --namespace NAME       Marina namespace (default: MARINA_NAMESPACE or default)
+  --deck-url URL       Deck base URL (default: DECK_URL or http://localhost:8080)
   --token-file PATH    Operator-token file (default: DECK_TOKEN_FILE)
   --timeout DURATION   Request timeout (default: 10s)
   --json               Write JSON output
   --version            Print version
 
-Run "platformctl tasks help" or "platformctl runs help" for more.`)
+Run "platformctl runs help", "platformctl turns help", "platformctl decisions help"
+or "platformctl tasks help" for more.`)
 }
 
 func writeTasksUsage(writer io.Writer) {
@@ -487,7 +562,16 @@ Options:
 }
 
 func writeRunsUsage(writer io.Writer) {
-	_, _ = fmt.Fprintln(writer, `Usage:
+	_, _ = fmt.Fprintln(writer, `Usage (Marina):
+  platformctl [global options] runs create NAME --project PROJECT --title TITLE
+      --criteria CRITERIA --minutes N --tokens N --attempts N [--workload NAME]
+      [--description TEXT] [--context NAME=PATH ...]
+  platformctl [global options] runs list
+  platformctl [global options] runs get NAME
+  platformctl [global options] runs events NAME [--after N] [--follow]
+  platformctl [global options] runs cancel NAME
+
+Usage (Deck):
   platformctl [global options] runs pause --reason REASON <run-id>
   platformctl [global options] runs resume --reason REASON <run-id>
   platformctl [global options] runs cancel --reason REASON <run-id>

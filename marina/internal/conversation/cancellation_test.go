@@ -72,3 +72,46 @@ func TestCancelledConversationCollectsBeforeCleanup(t *testing.T) {
 		t.Fatalf("cancelled turn not closed: %+v %v", turn, err)
 	}
 }
+
+type cancellingSource struct {
+	testSource
+	cancelled map[string]bool
+}
+
+func (s cancellingSource) TurnCancelRequested(_ context.Context, id string) (bool, error) {
+	return s.cancelled[id], nil
+}
+
+func TestClientCancelStopsARunningTurn(t *testing.T) {
+	ctx := context.Background()
+	journal, err := sqlite.Open(ctx, t.TempDir()+"/journal.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer journal.Close()
+	blobs, err := artifacts.New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	message := workcontrol.ConversationMessage{ID: "msg_cancel", ProjectID: "prj_1", ChannelID: "chn_1", ThreadID: "thr_1", AuthorType: "human", Body: "Explain", InvokedAgentID: "agt_1", InvocationRequestID: "req_cancel", CreatedAt: time.Now().UnixMilli()}
+	model := workerapi.Model{Name: "fixture", MaxOutputTokens: 100, Currency: "USD"}
+	engine := &cancellationEngine{}
+	profile := Profile{Engine: rt.EngineSelection{Backend: "kagent", Version: kagent.Version, Endpoint: "kint-engine-controller.kint-engine.svc:8083", Namespace: "kint-engine", Harness: "kint-conversation-byo"}, MaxTokens: 5000, BudgetMinutes: 5}
+	source := cancellingSource{testSource: testSource{message: message}, cancelled: map[string]bool{}}
+	controller := Controller{ProjectID: "prj_1", AgentID: "agt_1", PolicyVersion: "test", Source: source, Journal: journal, Blobs: blobs, Engine: engine, Templates: &fakeTemplates{},
+		Profile: profile, Model: model, Gateway: NewGateway(journal, []byte(strings.Repeat("k", 32)), model, profile.Digest(model), "test", nil),
+		InstallCredential: func(context.Context, rt.Specification, string) error { return nil }}
+	if failures := controller.Cycle(ctx); len(failures) != 0 {
+		t.Fatal(failures)
+	}
+	turn, _ := journal.GetConversationTurn(ctx, message.ID)
+	if _, err := journal.ConversationEngineJournal().EnsureEngineAttempt(ctx, turn.Specification); err != nil {
+		t.Fatal(err)
+	}
+	source.cancelled[message.ID] = true
+	controller.Cycle(ctx)
+	turn, err = journal.GetConversationTurn(ctx, message.ID)
+	if err != nil || turn.Status != "blocked" || !strings.Contains(turn.Reason, "cancelled this turn") || !engine.collected {
+		t.Fatalf("cancel did not stop the turn: %+v %v", turn, err)
+	}
+}

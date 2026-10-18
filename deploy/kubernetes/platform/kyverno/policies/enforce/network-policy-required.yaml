@@ -1,0 +1,20 @@
+# Pods start only in a namespace that already has a NetworkPolicy.
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: network-policy-required
+spec:
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE]
+        resources: [pods]
+  evaluation:
+    admission: {enabled: true}
+    background: {enabled: false}
+  validations:
+    - expression: >-
+        size(resource.List('networking.k8s.io/v1', 'networkpolicies',
+        namespaceObject.metadata.name).items) > 0
+      message: The namespace needs a NetworkPolicy before Pods can start.

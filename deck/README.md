@@ -1,48 +1,43 @@
 # Deck
 
-Deck is the operator surface and authoritative work-control ledger for tasks run
-by Marina. It stores human intent, budgets, runs, plans, decisions, commands,
-events, evidence metadata, project context, and conversation history in SQLite.
-It does not execute workers or own Marina's journal.
+Deck is the operator surface for work that Marina executes: projects, chat
+threads, PRDs, backlog, dependencies and acceptance. Deck is a client of
+Marina's platform API ([decision 0033](../docs/decisions/0033-marina-platform-api.md),
+contract in [marina/api](../marina/api/README.md)). It submits Ready tasks as
+Marina Runs and chat requests as Marina Turns, forwards the operator's answers
+and cancellations, and mirrors Marina's status, decisions, events and evidence
+into its SQLite ledger so the browser can show them. Marina never calls Deck.
 
 The workspace has projects, a work overview and a project conversation, with
-task details and project context available alongside them. Each new project has
-one channel and one GitHub repository association request. An evidenced landing
-completes its task automatically and shows its exact commit. Other completed
-results retain their operator acceptance flow. Operators can create and
-authorize tasks, approve a plan, cancel a run, inspect immutable inputs and usage,
-and download digest-checked evidence.
+task details and project context available alongside them. An evidenced
+landing completes its task automatically and shows its exact commit. Other
+completed results retain their operator acceptance flow. Operators can create
+and authorize tasks, approve a plan, cancel a run, inspect immutable inputs and
+download digest-checked evidence.
 
-Use the [paired workflow guide](../deploy/kubernetes/first-release/README.md) for
-repository work and the
-[native installation guide](../deploy/kubernetes/agent-platform/README.md) for
-the engine and prepackaged verification toolchain. [VISION.md](../docs/VISION.md) describes the direction,
+[VISION.md](../docs/VISION.md) describes the direction,
 [status.md](../docs/status.md) the current state, and
-[ARCHITECTURE.md](../docs/ARCHITECTURE.md) the Deck–Marina boundary.
+[ARCHITECTURE.md](../docs/ARCHITECTURE.md) the Deck and Marina boundary.
 
 ## Current behavior
 
 Deck provides:
 
-- persistent projects, tasks, structured budgets, runs, plan revisions,
-  decisions, commands, events, channels, artifacts, and evidence;
+- persistent projects, tasks, structured budgets, dependencies, channels,
+  threads, PRDs, project context and acceptance records;
 - optional operator sessions with CSRF-protected browser mutations;
-- scoped service identities and explicit project/capability grants;
-- atomic claims, lease expiry, monotonic versions, fence tokens, and idempotent
-  replay of successful mutations;
-- immutable task, acceptance-criteria, workload-profile, repository, and context
-  selections for active runs;
-- project-authored context sources and selected conversation excerpts;
-- versioned repository-association requests reconciled by Marina;
+- immutable task, acceptance-criteria and context selections frozen when a task
+  becomes Ready and sent to Marina as the Run spec;
+- a mirror of each Marina Run: plan revisions, decisions, progress events,
+  evidence, landing, blocked, failed and cancelled outcomes;
+- chat turns answered by Marina, including clarification questions and task
+  proposals, published into the originating thread;
 - live server-sent event updates and paginated channel history;
 - deterministic project export/import; and
 - an embedded Svelte frontend in the Go binary.
 
-The repository workflow supports cancellation and can finish with an evidenced
-commit on main, a verified PR under the legacy profile, or a blocker. Deck can record additional command types, but the current
-Marina workflow rejects pause/resume, replan, retry, and authority reduction.
-Deck also exposes installed workload discovery and idempotent invocation for the
-bounded repository profile.
+Marina offers cancel only; Deck rejects pause, resume, replan and retry with
+409 and shows no control for them.
 
 ## Quick start
 
@@ -53,9 +48,9 @@ make setup
 make run
 ```
 
-Open [http://localhost:8080](http://localhost:8080). A new development database
-seeds a demo workspace and the Atlas demo agent. Runtime data defaults to
-`./data/deck.db`.
+Open [http://localhost:8080](http://localhost:8080). Runtime data defaults to
+`./data/deck.db`. Without `DECK_MARINA_URL` Deck has no executor: work stays
+Ready and the provider status shows Marina as unavailable.
 
 For separate backend and frontend processes:
 
@@ -77,13 +72,19 @@ make image
 make manifests
 ```
 
-Run the browser suite with `make browser-test`. It builds the embedded frontend
-and starts a disposable Deck process with isolated stores and deterministic
-service-API fixtures. On macOS it uses installed Google Chrome. Linux setup uses
+`make conformance` builds Marina's API sandbox (`MARINA_REPO`, default
+`../marina`) and a real Deck, and drives Deck's operator API through plan
+approval and landing, a blocked run, cancellation, a restart without duplicate
+Runs, chat replies, a clarification question and a task proposal.
+
+Run the browser suite with `make browser-test`. It builds the embedded frontend,
+Deck and the Marina API sandbox, and starts both as disposable processes. On
+macOS it uses installed Google Chrome. Linux setup uses
 `web/node_modules/.bin/playwright install --with-deps chromium`; CI performs this
 before testing, and verification images package the same browser during build.
 Tests never install browsers. `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` can select an
 existing executable; `PLAYWRIGHT_BROWSERS_PATH` selects the frozen browser cache.
+The sandbox simulates no PRD drafts, so store and HTTP tests cover the PRD flows.
 
 The frontend design tokens and interaction rules are in
 [web/DESIGN.md](web/DESIGN.md).
@@ -94,11 +95,27 @@ The frontend design tokens and interaction rules are in
 | --- | --- | --- |
 | `DECK_ADDR` | `:8080` | HTTP listen address |
 | `DECK_DATA_DIR` | `./data` | Directory containing `deck.db` |
-| `DECK_DEMO_AGENT` | `true` | Seed demo tasks and run Atlas |
 | `DECK_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, or `error` |
-| `DECK_SERVICE_AUTH_FILE` | unset | Service identities and capability grants |
 | `DECK_OPERATOR_AUTH_FILE` | unset | Operator IDs and token fingerprints |
 | `DECK_OPERATOR_COOKIE_SECURE` | `true` | Require HTTPS for session cookies |
+| `DECK_MARINA_URL` | unset | Marina's platform API; https except on loopback. Unset means no executor |
+| `DECK_MARINA_TOKEN_FILE` | `/var/run/secrets/kubernetes.io/serviceaccount/token` | Kubernetes token Deck presents; reread for every request |
+| `DECK_MARINA_CA_FILE` | unset | PEM bundle trusted in addition to the system roots |
+| `DECK_MARINA_PROJECTS_FILE` | unset | JSON mapping of Deck projects to Marina; reread every cycle |
+
+The projects file maps each Deck project to a Marina namespace, Project and
+Workloads:
+
+```json
+[{"deck_project": "prj_default", "namespace": "factory", "project": "acceptance",
+  "workloads": {"repository/v2": "land-on-main"}, "conversation_workload": "chat"}]
+```
+
+`repository/v2` lands on main and must map to a Workload with
+`delivery.mode: land-on-main`; `repository/v1` opens a pull request and must map
+to a `pull-request` Workload. Deck submits no work to a Workload whose delivery
+does not match. An invalid file fails closed. Deck's identity needs the
+`marina-factory` Role in each mapped namespace.
 
 When operator authentication is enabled, the policy contains a stable operator
 ID and one or more SHA-256 fingerprints of tokens with at least 256 bits of
@@ -112,51 +129,52 @@ The local Podman/Kind profile uses this mode at the operator's request and opens
 directly without sign-in. Its browser header has no import/export or session
 controls.
 
-Service authentication uses the same fingerprint pattern plus explicit project
-and capability grants. Deck reloads the policy on every request, rejects
-wildcards, and requires TLS outside loopback. Marina's credential cannot create
-an operator session. See
-[decision 0003](../docs/decisions/0003-service-authentication.md).
+## How Deck uses Marina
 
-## Public API
+A loop in the Deck process runs every second:
 
-The canonical machine contract is [api/openapi.yaml](api/openapi.yaml).
-`GET /api/v1/provider` publishes the protocol version, server time, and
-implemented capabilities.
+1. **Project sync** (every 30 seconds per project): reads the Marina Project and
+   records its bound repository as the project's read-only repository binding,
+   and publishes the mapped Workloads as the project's workload profiles.
+2. **Dispatch**: each Ready task whose dependencies are satisfied and whose
+   profile is mapped is claimed and recorded with its exact Run spec in one
+   transaction, then created in Marina. The Run is named from the task
+   (`deck-<task>-<attempt>`), so a lost response is replayed (HTTP 200) instead
+   of creating a second Run, also after a restart. Marina's refusal blocks the
+   task with Marina's message.
+3. **Mirror**: for each active Run, Deck reads the Run, its Decisions and its
+   events after the last mirrored sequence, and applies the matching Deck
+   transitions: plan revision and approval decision, start, verification,
+   evidence, completion with landing, block, failure or cancellation. Every step
+   is idempotent, so replays change nothing. A landing completes the task only
+   when Deck's own landing checks pass; otherwise the result waits for operator
+   acceptance.
+4. **Turns**: each chat request addressed to the Marina agent becomes one Turn
+   with the thread and project context frozen at invocation. A clarification
+   Decision appears as a question in the thread; a reply, a task proposal
+   (created in Backlog), a PRD draft or ordered PRD tasks are published through
+   Deck's own outcome rules. A failed Turn posts a visible reply.
 
-Every claim and run mutation requires `Idempotency-Key`. Deck stores the key,
-normalized request digest, and successful result in the same transaction as the
-state change. An exact retry returns the original result; a changed payload
-returns `409 conflict`. Active-run mutations also require the stable logical
-agent ID, exact run version, and current fence token.
+Operator answers to plan approvals and chat questions, and cancellations, go to
+Marina first with a stable `Idempotency-Key`; Deck records them only after Marina
+accepts. Evidence downloads are proxied from Marina's artifact endpoint and
+checked against their digest. The provider status shows whether Marina was
+reachable on the last cycle and the last refusal reason; details are in Deck's
+log.
 
-The normal service lifecycle is:
+## Operator API
 
-1. register a logical agent and inspect provider capabilities;
-2. discover and atomically claim ready work;
-3. renew the lease and submit an immutable plan revision;
-4. wait for any revision-bound decision and start the approved run;
-5. publish progress, usage, operational state, artifacts, and evidence; and
-6. complete or block using the current evidence IDs.
-
-Commands are durable records. Marina consumes them after a persisted cursor and
-acknowledges each result idempotently. Projected events are deduplicated by
-producer ID and execution sequence.
+The contract is [api/openapi.yaml](api/openapi.yaml). Every route requires an
+operator session when operator authentication is enabled. Deck serves no route
+for an executor.
 
 Repository tasks require acceptance criteria, at least two attempts, and explicit
-`source.read`, `source.write`, and `pull_request.create` authority before
-entering Ready. Drafts can remain in Backlog. This admission check does not
-provide credentials or guarantee cluster/model readiness.
-
-Channel messages can become Backlog drafts before criteria are complete.
-Readiness remains the authorization point, with acceptance criteria, budgets and
-permissions checked before eligible repository execution. Evidenced landed
-prerequisites release dependent tasks without operator acceptance; Marina checks
-their commits remain on the authorized base branch. Other results retain human
-acceptance and code-availability confirmation. The composer can record explicit agent requests for the optional
-conversation profile. Automatic summary maintenance remains planned. Workload invocation
-similarly selects an installed immutable profile and creates one task through an
-idempotent operator request.
+`source.read`, `source.write`, and `pull_request.create` or
+`source.fast_forward` authority before entering Ready. Drafts can remain in
+Backlog. Channel messages can become Backlog drafts before criteria are
+complete. Evidenced landed prerequisites release dependent tasks without
+operator acceptance. Other results retain human acceptance and
+code-availability confirmation.
 
 ## Conversation threads and invocation
 
@@ -186,57 +204,32 @@ links; unrelated channel messages remain unthreaded. Linked drafts must be
 archived rather than deleted. Thread linkage does not automatically select
 additional messages for an execution snapshot.
 
-CHAT-03 adds a focused browser thread view and `POST
-/api/v1/operator/channels/{id}/invocations`. A service registers a logical agent
-with an installation ID and `conversation.invoke.{project_id}` capability before Deck offers
-it in the composer. The first invocation fixes that agent for the thread;
-subsequent Send actions address it without another mention. A leading `@name`
-can select a configured agent. The API records the human message, thread, agent
-selection, and request ID atomically. Retrying the same request ID recovers the
-same message; changing the request conflicts. An existing human message can also
-be explicitly invoked. Thread URLs restore the view after reload, and selected
-agents and invocation records survive project export/import.
-
-Marina reads explicit requests through `GET /api/v1/conversation/invocations`
-with `project_id` and an exclusive `after_id` event cursor. The service identity
-needs `conversation.invocation.list` and that project's grant. Event order also
-covers invoking a message posted earlier in the channel; each item includes the
-canonical message and invocation time.
+`POST /api/v1/operator/channels/{id}/invocations` addresses a configured agent.
+Deck offers an agent in the composer when it has an installation ID and the
+`conversation.invoke.{project_id}` capability; Deck registers the Marina agent
+(`marina`) with that capability for every mapped project. The first invocation
+fixes that agent for the thread; subsequent Send actions address it without
+another mention. A leading `@name` can select a configured agent. The API records
+the human message, thread, agent selection, and request ID atomically. Retrying
+the same request ID recovers the same message; changing the request conflicts.
+An existing human message can also be explicitly invoked. Thread URLs restore
+the view after reload, and selected agents and invocation records survive
+project export/import.
 
 Each new invocation also freezes the selected active project-source revisions
-and safe repository binding in the same transaction. `GET
-/api/v1/conversation/invocations/{id}/context` resolves that snapshot through the
-`conversation.context.read` capability and exact project grant. Edits affect new
-invocations; explicit revocation remains visible on the original revisions.
-Restart, request replay and project export/import preserve the selection.
-Invocations created before this snapshot capability return 404 instead of
-silently resolving current project context. The wire shape is the existing
-`ResolvedContext`; thread messages remain canonical immutable data.
+and safe repository binding in the same transaction. Deck sends that snapshot,
+with the thread up to the invoked message, as the Turn spec. Edits affect new
+invocations; explicit revocation is respected.
 
-Invocation is an operator intent record, not a task or model response. An
-optional Marina profile can consume it through a bounded read-only kagent turn
-and retain the result, but that profile is not installed in the regular local
-environment. When its engine asks a typed question, Marina posts it through
-`POST /api/v1/conversation/questions` with the invoked message and engine
-question IDs. Deck records one agent question in the originating thread.
+Invocation is an operator intent record, not a task or model response. When
+Marina asks a clarification question, Deck records it in the originating thread.
 `GET /api/v1/operator/threads/{id}/questions` restores pending questions;
-`POST /api/v1/operator/conversation/questions/{id}/answer` appends one human
-reply and rejects a changed or second answer. Marina recovers that exact answer
-through its replay-safe question request and sends it to the waiting attempt.
-Answering does not authorize a task. The service needs
-`conversation.question.write` and the project grant. Marina publishes one
-terminal reply and optional task through `POST /api/v1/conversation/outcomes`.
-Ready work uses `POST /api/v1/conversation/delegations` with the separate
-`conversation.task.delegate` capability, installed repository profile and
-explicit budget. Deck links the task to the originating thread and mirrors
-selected run events there with canonical evidence references. A linked follow-up
-creates new work from feedback and leaves the completed task intact. Local
-engine and browser acceptance remains pending; see
-[CHAT-06–08 evidence](../docs/validation/chat-06-08-2026-09-25.md).
-
-Run `make -C deck conformance` from the repository root for the temporary
-real-process, two-session persistence check; root `make conformance` includes it.
-See [CHAT-02 evidence](../docs/validation/chat-02-2026-09-23.md).
+`POST /api/v1/operator/conversation/questions/{id}/answer` sends the answer to
+Marina's Decision and then appends one human reply, rejecting a changed or second
+answer. Answering does not authorize a task. Marina's reply and optional
+proposal are published once in the thread; a proposed task is created in Backlog
+and grants no execution authority. Deck links tasks to their originating thread
+and mirrors selected run events there with canonical evidence references.
 
 ## Delete and archive tasks
 
@@ -250,7 +243,7 @@ retaining its status, runs, PR links, evidence and history. Active runs must sto
 before archiving; Ready work must first return to Backlog. The **Archived** view
 supports search, inspection and **Restore task**. Restore preserves the original
 status and does not authorize execution. Both actions check the current task
-version; archived tasks cannot be edited, requeued or claimed until restored.
+version; archived tasks cannot be edited, requeued or submitted to Marina until restored.
 Archive state survives restart and project export/import.
 
 ## Project context
@@ -262,12 +255,14 @@ Conversation excerpts remain task data.
 
 When a task becomes Ready, Deck freezes selected source and message revisions.
 The task's **Sources** view shows the interpreted outcome, repository binding,
-immutable worker snapshot, provenance, trust, and omissions. Revision,
+provenance and trust. Deck sends exactly this selection, with content digests,
+in the Run spec. Revision,
 deactivation, and revocation have distinct meanings; active work keeps its
 recorded revisions, while revocation denies further use.
 
-Marina owns repository configuration and validates association requests. Changing
-the repository never grants source-write or PR authority. See
+Marina's Project owns the repository binding; Deck shows it read-only and
+freezes it into tasks that become Ready. Changing the repository never grants
+source-write or PR authority. See
 [decision 0014](../docs/decisions/0014-project-repository-and-knowledge.md).
 
 ## Deployment and boundary
@@ -278,9 +273,9 @@ base under [deploy/kubernetes/](deploy/kubernetes/) uses one replica,
 storage, TLS, ingress, authentication, and backup in a private overlay. Do not
 share the SQLite file between replicas.
 
-Deck stores artifact metadata and proxies authorized downloads; Marina owns
-workflow artifact bytes. Deck does not schedule runtimes, mutate source, call
-models, or read Marina's database. Multi-user permissions, federated identity,
+Deck stores evidence metadata and proxies authorized downloads from Marina's
+artifact endpoint; Marina owns the bytes. Deck does not schedule runtimes, mutate
+source, call models, or read Marina's database; it uses only Marina's public API. Multi-user permissions, federated identity,
 HA, agent-maintained knowledge, and deployment authority are outside the
 current release.
 
@@ -290,8 +285,8 @@ current release.
 cmd/deck/          application entry point
 internal/domain/   ledger model
 internal/store/    SQLite repositories and migrations
-internal/httpapi/  operator and service HTTP/SSE APIs
-internal/demo/     Atlas development agent
+internal/httpapi/  operator HTTP/SSE API and Marina forwarding
+internal/marina/   Marina API client, dispatch and mirror loop
 internal/webui/    embedded frontend
 web/               SvelteKit application
 api/               OpenAPI and canonical fixtures
@@ -299,7 +294,7 @@ api/               OpenAPI and canonical fixtures
 
 ## PRD drafts and approval
 
-A conversation outcome may contain `prd: {title, path, content}` instead of a
+A Marina Turn may propose a PRD draft (`title`, `path`, `content`) instead of a
 task. Deck binds the immutable draft to the invoked repository and displays its
 complete text in the originating thread. Review the draft, choose the time/token
 limits and use **Approve PRD and publish**. Approval authorizes publishing that
@@ -307,8 +302,9 @@ exact document, not implementing its requirements.
 
 `POST /api/v1/operator/messages/{id}/prd/approve` takes `digest`,
 `profile_digest` and `budget`, with an `Idempotency-Key`. It requires an operator
-session (or local operator mode), rejects service bearer credentials and creates
-one thread-linked `repository/v2` task. Exact replay, including a new request key,
+session (or local operator mode), rejects bearer credentials and creates
+one thread-linked `repository/v2` task, which Marina runs with the document as
+the Run's `publish` input. Exact replay, including a new request key,
 returns the original task. Changed content, repository bindings or approval
 budgets conflict. Task details and the originating thread retain the landed
 commit through the normal workflow. See [decision 0029](../docs/decisions/0029-approved-prd-publication.md)
@@ -333,6 +329,5 @@ Earlier tasks and acceptance history remain readable. See
 The operator APIs are `POST /api/v1/operator/messages/{id}/prd/tasks/approve`,
 `GET /api/v1/operator/tasks/{publication}/prd`, and
 `POST /api/v1/operator/tasks/{publication}/prd/accept`. Mutations require an
-idempotency key and reject service bearer credentials. Matching provider/consumer
-releases advertise `conversation.prd.tasks`; proposals use the existing bounded
-conversation outcome route and grant no execution authority.
+idempotency key and reject bearer credentials. Proposals arrive as Marina Turn
+outcomes and grant no execution authority.

@@ -1,0 +1,45 @@
+# agentgateway v1.6.0 standalone (PLAT-06). Marina's gateway keeps leases,
+# fences and budgets; this layer holds the provider key and routes to it.
+config:
+  statsAddr: 0.0.0.0:15020
+  readinessAddr: 0.0.0.0:15021
+frontendPolicies:
+  tracing:
+    host: otel-collector.platform-observability.svc:4317
+    protocol: grpc
+    randomSampling: true
+gateways:
+  default:
+    port: 8443
+    tls:
+      cert: /tls/tls.crt
+      key: /tls/tls.key
+llm:
+  policies:
+    apiKey:
+      mode: strict
+      keys:
+        - key: "${MARINA_CLIENT_KEY}"
+          metadata: {client: marina}
+  models:
+    - name: "*"
+      provider: openrouter
+      params:
+        apiKey:
+          file: /secrets/provider/api-key
+# Read-only MCP tools at /mcp (PLAT-08). Marina's chat gateway applies its
+# own allow-list too; these rules hide every other tool from tools/list.
+mcp:
+  policies:
+    apiKey:
+      mode: strict
+      keys:
+        - key: "${MARINA_CLIENT_KEY}"
+          metadata: {client: marina}
+    mcpAuthorization:
+      rules:
+        - 'mcp.tool.target == "jaeger" && mcp.tool.name in ["get_services", "search_traces", "get_trace_topology", "get_trace_errors"]'
+  targets:
+    - name: jaeger
+      mcp:
+        host: http://jaeger.platform-observability.svc:16686/api/ai/mcp/

@@ -1,0 +1,21 @@
+# Report only, for components the platform installs but does not build.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namePrefix: audit-
+resources: [../base]
+patches:
+  - target: {kind: ValidatingPolicy}
+    patch: |-
+      - op: add
+        path: /spec/validationActions
+        value: [Audit]
+      - op: add
+        path: /spec/failurePolicy
+        value: Ignore
+      - op: add
+        path: /spec/matchConstraints/namespaceSelector
+        value:
+          matchExpressions:
+            - key: kubernetes.io/metadata.name
+              operator: In
+              values: [ate-system, kgateway-system, kint-engine, kyverno, podcertificate-controller-system]

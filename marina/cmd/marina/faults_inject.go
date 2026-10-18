@@ -23,17 +23,15 @@ import (
 // MARINA_FAULTS lists responses this process drops once, after the upstream
 // accepted the request, for live lost-response acceptance, for example:
 // "grpc:/kagent.api.v1alpha1.AgentInstanceService/CreateAgentInstance,http:PATCH /git/refs/heads/main".
-// "http:" targets the Git provider and "deck:" the work-control provider.
+// "http:" targets the Git provider.
 func init() {
-	var methods, routes, deckRoutes []string
+	var methods, routes []string
 	for _, item := range strings.Split(os.Getenv("MARINA_FAULTS"), ",") {
 		item = strings.TrimSpace(item)
 		if method, ok := strings.CutPrefix(item, "grpc:"); ok {
 			methods = append(methods, method)
 		} else if route, ok := strings.CutPrefix(item, "http:"); ok {
 			routes = append(routes, route)
-		} else if route, ok := strings.CutPrefix(item, "deck:"); ok {
-			deckRoutes = append(deckRoutes, route)
 		}
 	}
 	if len(methods) > 0 {
@@ -44,9 +42,6 @@ func init() {
 	}
 	if len(routes) > 0 {
 		sourceTransport = &dropTransport{next: http.DefaultTransport, armed: &onceSet{pending: routes}}
-	}
-	if len(deckRoutes) > 0 {
-		deckTransport = &dropTransport{next: http.DefaultTransport, armed: &onceSet{pending: deckRoutes}}
 	}
 	// Hold only the first real provider response so live tests can revoke
 	// authority during an accepted call. Release builds have no delay hook.

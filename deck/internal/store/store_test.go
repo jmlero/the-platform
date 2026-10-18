@@ -59,11 +59,6 @@ func TestHumanAgentLifecycle(t *testing.T) {
 	if err := appStore.StartRun(ctx, testMutation("start-lifecycle"), run.ID); err != nil {
 		t.Fatalf("start run: %v", err)
 	}
-	if err := appStore.ReportProgress(
-		ctx, testMutation("progress-lifecycle"), run.ID, "Work completed", map[string]any{"percent": 90},
-	); err != nil {
-		t.Fatalf("report progress: %v", err)
-	}
 	if err := appStore.BeginVerification(ctx, testMutation("verify-lifecycle"), run.ID); err != nil {
 		t.Fatalf("begin verification: %v", err)
 	}
@@ -87,8 +82,8 @@ func TestHumanAgentLifecycle(t *testing.T) {
 	if len(detail.Artifacts) != 1 {
 		t.Fatalf("artifacts = %d, want 1", len(detail.Artifacts))
 	}
-	if len(detail.Events) < 7 {
-		t.Fatalf("events = %d, want at least 7", len(detail.Events))
+	if len(detail.Events) < 6 {
+		t.Fatalf("events = %d, want at least 6", len(detail.Events))
 	}
 }
 
@@ -250,30 +245,6 @@ func TestAllRunMutationsReplayWithoutDuplicateEffects(t *testing.T) {
 		t.Fatalf("claim task: %v", err)
 	}
 
-	heartbeat := testMutation("heartbeat-complete")
-	if err := appStore.HeartbeatRun(ctx, heartbeat, run.ID, run.AgentID, 2*time.Minute); err != nil {
-		t.Fatalf("heartbeat run: %v", err)
-	}
-	afterHeartbeat, err := appStore.GetTaskDetail(ctx, task.ID)
-	if err != nil {
-		t.Fatalf("inspect heartbeat: %v", err)
-	}
-	heartbeatLease := *afterHeartbeat.Runs[0].LeaseExpiresAt
-	time.Sleep(2 * time.Millisecond)
-	if err := appStore.HeartbeatRun(ctx, heartbeat, run.ID, run.AgentID, 2*time.Minute); err != nil {
-		t.Fatalf("replay heartbeat: %v", err)
-	}
-	afterReplay, err := appStore.GetTaskDetail(ctx, task.ID)
-	if err != nil {
-		t.Fatalf("inspect replayed heartbeat: %v", err)
-	}
-	if got := *afterReplay.Runs[0].LeaseExpiresAt; got != heartbeatLease {
-		t.Fatalf("replayed heartbeat changed lease from %d to %d", heartbeatLease, got)
-	}
-	if err := appStore.HeartbeatRun(ctx, heartbeat, run.ID, run.AgentID, 3*time.Minute); !errors.Is(err, domain.ErrConflict) {
-		t.Fatalf("changed heartbeat payload error = %v, want conflict", err)
-	}
-
 	planMutation := testMutation("plan-complete")
 	decision, err := appStore.SubmitPlan(ctx, planMutation, run.ID, "Implement and verify.", true)
 	if err != nil {
@@ -300,25 +271,6 @@ func TestAllRunMutationsReplayWithoutDuplicateEffects(t *testing.T) {
 	if err := appStore.StartRun(ctx, startMutation, run.ID); err != nil {
 		t.Fatalf("replay start: %v", err)
 	}
-	progressMutation := testMutation("progress-complete")
-	progressPayload := map[string]any{"percent": 75}
-	if err := appStore.ReportProgress(ctx, progressMutation, run.ID, "Work saved", progressPayload); err != nil {
-		t.Fatalf("report progress: %v", err)
-	}
-	if err := appStore.ReportProgress(ctx, progressMutation, run.ID, "Work saved", progressPayload); err != nil {
-		t.Fatalf("replay progress: %v", err)
-	}
-	if err := appStore.ReportProgress(ctx, progressMutation, run.ID, "Different progress", progressPayload); !errors.Is(err, domain.ErrConflict) {
-		t.Fatalf("changed progress payload error = %v, want conflict", err)
-	}
-	progressEvents, err := appStore.CountRunEvents(ctx, run.ID, "run.progress")
-	if err != nil {
-		t.Fatalf("count progress events: %v", err)
-	}
-	if progressEvents != 1 {
-		t.Fatalf("progress events after replay = %d, want 1", progressEvents)
-	}
-
 	verifyMutation := testMutation("verify-complete")
 	if err := appStore.BeginVerification(ctx, verifyMutation, run.ID); err != nil {
 		t.Fatalf("begin verification: %v", err)
@@ -381,8 +333,8 @@ func TestAllRunMutationsReplayWithoutDuplicateEffects(t *testing.T) {
 	}
 
 	wantOperations := map[string]int{
-		operationClaimTask: 2, operationHeartbeatRun: 1, operationSubmitPlan: 2,
-		operationStartRun: 1, operationReportProgress: 1, operationBeginVerification: 1,
+		operationClaimTask: 2, operationSubmitPlan: 2,
+		operationStartRun: 1, operationBeginVerification: 1,
 		operationCompleteRun: 1, operationBlockRun: 1,
 	}
 	rows, err := appStore.db.QueryContext(ctx, `

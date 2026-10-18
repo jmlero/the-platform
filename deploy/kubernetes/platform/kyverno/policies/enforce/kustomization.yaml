@@ -1,0 +1,22 @@
+# Deny, for the namespaces that run Deck, Marina and verification Jobs.
+# failurePolicy Fail: while Kyverno is unavailable, new Pods here wait.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namePrefix: enforce-
+resources: [../base, network-policy-required.yaml]
+patches:
+  - target: {kind: ValidatingPolicy}
+    patch: |-
+      - op: add
+        path: /spec/validationActions
+        value: [Deny]
+      - op: add
+        path: /spec/failurePolicy
+        value: Fail
+      - op: add
+        path: /spec/matchConstraints/namespaceSelector
+        value:
+          matchExpressions:
+            - key: kubernetes.io/metadata.name
+              operator: In
+              values: [marina-system, marina-workers, platform-gateway, platform-ingress, platform-observability]

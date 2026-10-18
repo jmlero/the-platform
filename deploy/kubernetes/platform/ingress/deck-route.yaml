@@ -1,0 +1,11 @@
+# Deck by SNI host name. Add the environment's own host names in its overlay.
+apiVersion: gateway.networking.k8s.io/v1
+kind: TLSRoute
+metadata: {name: deck, namespace: marina-system}
+spec:
+  parentRefs:
+    - {name: platform, namespace: platform-ingress, sectionName: tls}
+  hostnames: [localhost]
+  rules:
+    - backendRefs:
+        - {name: deck, port: 8080}

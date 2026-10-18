@@ -1,0 +1,2 @@
+{"apiVersion":"marina.dev/v1","kind":"Workload","metadata":{"name":"chat","namespace":"factory-default"},
+ "spec":{"type":"conversation","conversation":{"model":"openai/gpt-6-luna","repositoryTools":true,"mcpTools":["search_traces","get_trace_errors"],"proposals":{"task":true,"prd":true,"prdTasks":true},"limits":{"maxTimeMinutes":15,"maxTokens":40000}}}}

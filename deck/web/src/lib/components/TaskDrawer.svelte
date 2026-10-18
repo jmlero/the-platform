@@ -255,9 +255,8 @@
       </section>
 
       <details class="technical"><summary>Execution details</summary><section class="provider-truth state-{detail.provider_status.connectivity}">
-        <div><span>Provider</span><strong>{detail.provider_status.connectivity}</strong></div>
+        <div><span>Marina</span><strong>{detail.provider_status.connectivity}</strong></div>
         <div><span>Synchronization</span><strong>{detail.provider_status.sync_state}</strong><small>{Math.round(detail.provider_status.sync_lag_millis / 1000)}s lag</small></div>
-        <div><span>Lease</span><strong>{detail.provider_status.lease_state}</strong>{#if detail.provider_status.lease_expires_at}<small>{formatDate(detail.provider_status.lease_expires_at)}</small>{/if}</div>
         <div><span>Projections</span><strong>{detail.provider_status.rejected_projection_count} rejected</strong><small>{detail.provider_status.stale_projection_count} stale</small></div>
         {#if detail.provider_status.degraded_dependencies.length}
           <p>Degraded: {detail.provider_status.degraded_dependencies.join(', ')}</p>

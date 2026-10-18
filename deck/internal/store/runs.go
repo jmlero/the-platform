@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/jmlero/the-platform/deck/internal/domain"
 )
@@ -206,86 +205,34 @@ func (s *Store) ListAgents(ctx context.Context) ([]domain.Agent, error) {
 	return agents, rows.Err()
 }
 
-func (s *Store) ClaimTask(
-	ctx context.Context,
-	mutation Mutation,
-	taskID string,
-	agentID string,
-	lease time.Duration,
-) (domain.Run, error) {
-	return s.ClaimTaskVersioned(ctx, mutation, taskID, 0, agentID, lease)
-}
-
-func (s *Store) ClaimTaskVersioned(
-	ctx context.Context,
-	mutation Mutation,
-	taskID string,
-	expectedTaskVersion int,
-	agentID string,
-	lease time.Duration,
-) (domain.Run, error) {
-	task, err := s.GetTask(ctx, taskID)
-	if err != nil {
-		return domain.Run{}, err
-	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return domain.Run{}, fmt.Errorf("begin claim: %w", err)
-	}
-	defer tx.Rollback()
-	attempt, replayResult, replayed, err := beginIdempotentMutation(
-		ctx,
-		tx,
-		mutation,
-		task.ProjectID,
-		operationClaimTask,
-		taskID,
-		struct {
-			TaskID              string `json:"task_id"`
-			ExpectedTaskVersion int    `json:"expected_task_version"`
-			AgentID             string `json:"agent_id"`
-			LeaseNanos          int64  `json:"lease_nanos"`
-		}{TaskID: taskID, ExpectedTaskVersion: expectedTaskVersion, AgentID: agentID, LeaseNanos: int64(lease)},
-	)
-	if err != nil {
-		return domain.Run{}, err
-	}
-	if replayed {
-		var original domain.Run
-		if err := decodeIdempotencyResult(replayResult, &original); err != nil {
-			return domain.Run{}, err
-		}
-		return original, nil
-	}
+// claimTaskTx moves a Ready task whose dependencies are satisfied into a new
+// planning run. A nil lease records a run whose liveness is the executor's.
+func claimTaskTx(ctx context.Context, tx *sql.Tx, taskID string, expectedTaskVersion int, agentID, runID string, leaseExpires *int64, message string) (domain.Run, domain.Event, error) {
 	if _, err := getAgentTx(ctx, tx, agentID); err != nil {
-		return domain.Run{}, fmt.Errorf("claiming agent: %w", err)
-	}
-	if lease <= 0 {
-		lease = 30 * time.Second
+		return domain.Run{}, domain.Event{}, fmt.Errorf("claiming agent: %w", err)
 	}
 	now := nowMillis()
-	leaseExpires := time.Now().UTC().Add(lease).UnixMilli()
 	currentTask, err := getTaskTx(ctx, tx, taskID)
 	if err != nil {
-		return domain.Run{}, err
+		return domain.Run{}, domain.Event{}, err
 	}
 	if expectedTaskVersion == 0 {
 		expectedTaskVersion = currentTask.Version
 	}
 	if expectedTaskVersion < 1 || currentTask.Version != expectedTaskVersion {
-		return domain.Run{}, fmt.Errorf("task version is stale: %w", domain.ErrConflict)
+		return domain.Run{}, domain.Event{}, fmt.Errorf("task version is stale: %w", domain.ErrConflict)
 	}
 	var fenceToken int64
 	if err := tx.QueryRowContext(ctx, "SELECT next_fence_token FROM tasks WHERE id = ?", taskID).Scan(&fenceToken); err != nil {
-		return domain.Run{}, fmt.Errorf("load task fence: %w", err)
+		return domain.Run{}, domain.Event{}, fmt.Errorf("load task fence: %w", err)
 	}
 	digestValue := sha256.Sum256([]byte(currentTask.AcceptanceCriteria))
 	acceptanceDigest := hex.EncodeToString(digestValue[:])
 	run := domain.Run{
-		ID: newID("run"), TaskID: taskID, AgentID: agentID, Status: domain.RunPlanning,
+		ID: runID, TaskID: taskID, AgentID: agentID, Status: domain.RunPlanning,
 		Version: 1, FenceToken: fenceToken, TaskVersion: currentTask.Version,
 		AcceptanceCriteriaDigest: acceptanceDigest,
-		LeaseExpiresAt:           &leaseExpires, StartedAt: now, UpdatedAt: now,
+		LeaseExpiresAt:           leaseExpires, StartedAt: now, UpdatedAt: now,
 	}
 	result, err := tx.ExecContext(ctx, `
 		UPDATE tasks
@@ -294,14 +241,14 @@ func (s *Store) ClaimTaskVersioned(
 		WHERE id = ? AND status = 'ready' AND version = ? AND archived = 0 AND `+dependenciesEligibleSQL+`
 	`, agentID, now, taskID, expectedTaskVersion)
 	if err != nil {
-		return domain.Run{}, fmt.Errorf("claim task: %w", err)
+		return domain.Run{}, domain.Event{}, fmt.Errorf("claim task: %w", err)
 	}
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return domain.Run{}, fmt.Errorf("read claim result: %w", err)
+		return domain.Run{}, domain.Event{}, fmt.Errorf("read claim result: %w", err)
 	}
 	if rows == 0 {
-		return domain.Run{}, fmt.Errorf("task is not available to claim: %w", domain.ErrConflict)
+		return domain.Run{}, domain.Event{}, fmt.Errorf("task is not available to claim: %w", domain.ErrConflict)
 	}
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO runs (
@@ -309,211 +256,28 @@ func (s *Store) ClaimTaskVersioned(
 			lease_expires_at, started_at, updated_at, version, fence_token,
 			task_version, acceptance_criteria_digest
 		) VALUES (?, ?, ?, 'planning', '', '', ?, ?, ?, 1, ?, ?, ?)
-	`, run.ID, run.TaskID, run.AgentID, leaseExpires, now, now, fenceToken, currentTask.Version, acceptanceDigest)
+	`, run.ID, run.TaskID, run.AgentID, nullableInt64(leaseExpires), now, now, fenceToken, currentTask.Version, acceptanceDigest)
 	if err != nil {
-		return domain.Run{}, fmt.Errorf("create run: %w", err)
+		return domain.Run{}, domain.Event{}, fmt.Errorf("create run: %w", err)
 	}
 	if _, err = tx.ExecContext(ctx, "INSERT INTO run_context(run_id, context_json) VALUES (?, ?)", run.ID, marshalJSON(currentTask.Context)); err != nil {
-		return domain.Run{}, err
+		return domain.Run{}, domain.Event{}, err
 	}
 	if _, err := tx.ExecContext(ctx,
 		"UPDATE agents SET status = 'active', last_seen_at = ? WHERE id = ?",
 		now, agentID,
 	); err != nil {
-		return domain.Run{}, fmt.Errorf("activate agent: %w", err)
+		return domain.Run{}, domain.Event{}, fmt.Errorf("activate agent: %w", err)
 	}
-	event, err := insertEventTx(
-		ctx, tx, &taskID, &run.ID, &agentID,
-		"run.claimed", "Agent claimed the task and started planning",
-		map[string]any{"lease_expires_at": leaseExpires, "run_version": 1, "fence_token": fenceToken, "task_version": currentTask.Version, "acceptance_criteria_digest": acceptanceDigest},
-	)
+	payload := map[string]any{"run_version": 1, "fence_token": fenceToken, "task_version": currentTask.Version, "acceptance_criteria_digest": acceptanceDigest}
+	if leaseExpires != nil {
+		payload["lease_expires_at"] = *leaseExpires
+	}
+	event, err := insertEventTx(ctx, tx, &taskID, &run.ID, &agentID, "run.claimed", message, payload)
 	if err != nil {
-		return domain.Run{}, fmt.Errorf("create claim event: %w", err)
+		return domain.Run{}, domain.Event{}, fmt.Errorf("create claim event: %w", err)
 	}
-	if err := finishIdempotentMutation(ctx, tx, attempt, run); err != nil {
-		return domain.Run{}, err
-	}
-	if err := tx.Commit(); err != nil {
-		return domain.Run{}, fmt.Errorf("commit claim: %w", err)
-	}
-	s.publish(event)
-	return run, nil
-}
-
-func (s *Store) HeartbeatRun(
-	ctx context.Context,
-	mutation Mutation,
-	runID string,
-	agentID string,
-	lease time.Duration,
-) error {
-	projectID, err := s.ProjectIDForRun(ctx, runID)
-	if err != nil {
-		return err
-	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin heartbeat: %w", err)
-	}
-	defer tx.Rollback()
-	attempt, replayResult, replayed, err := beginIdempotentMutation(
-		ctx,
-		tx,
-		mutation,
-		projectID,
-		operationHeartbeatRun,
-		runID,
-		struct {
-			RunID      string    `json:"run_id"`
-			AgentID    string    `json:"agent_id"`
-			LeaseNanos int64     `json:"lease_nanos"`
-			Guard      *RunGuard `json:"guard,omitempty"`
-		}{RunID: runID, AgentID: agentID, LeaseNanos: int64(lease), Guard: mutation.Guard},
-	)
-	if err != nil {
-		return err
-	}
-	if replayed {
-		var original struct{}
-		return decodeIdempotencyResult(replayResult, &original)
-	}
-	if lease <= 0 {
-		lease = 30 * time.Second
-	}
-	run, err := getRunTx(ctx, tx, runID)
-	if err != nil {
-		return err
-	}
-	if err := validateRunGuard(run, mutation.Guard); err != nil {
-		return err
-	}
-	now := nowMillis()
-	leaseExpires := time.Now().UTC().Add(lease).UnixMilli()
-	result, err := tx.ExecContext(ctx, `
-		UPDATE runs
-		SET lease_expires_at = ?, version = version + 1, updated_at = ?
-		WHERE id = ? AND agent_id = ? AND version = ?
-		  AND status IN ('planning', 'waiting_decision', 'running', 'verifying')
-	`, leaseExpires, now, runID, agentID, run.Version)
-	if err != nil {
-		return fmt.Errorf("heartbeat run: %w", err)
-	}
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("read heartbeat result: %w", err)
-	}
-	if rows == 0 {
-		return domain.ErrConflict
-	}
-	if _, err := tx.ExecContext(ctx, `
-		UPDATE agents
-		SET status = CASE
-			WHEN (SELECT status FROM runs WHERE id = ?) = 'waiting_decision' THEN 'waiting'
-			ELSE 'active'
-		END,
-		last_seen_at = ?
-		WHERE id = ?
-	`,
-		runID, now, agentID,
-	); err != nil {
-		return fmt.Errorf("heartbeat agent: %w", err)
-	}
-	if err := finishIdempotentMutation(ctx, tx, attempt, struct{}{}); err != nil {
-		return err
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit heartbeat: %w", err)
-	}
-	s.publish(domain.Event{
-		RunID: &runID, AgentID: &agentID, Type: "agent.heartbeat",
-		Message: "Agent heartbeat", Payload: map[string]any{"lease_expires_at": leaseExpires}, CreatedAt: now,
-	})
-	return nil
-}
-
-func (s *Store) GetActiveRunForAgent(ctx context.Context, agentID string) (domain.ActiveRun, error) {
-	row := s.db.QueryRowContext(ctx, `
-		SELECT
-			r.id, r.task_id, r.agent_id, r.status, r.plan, r.result_summary,
-			r.lease_expires_at, r.started_at, r.finished_at, r.updated_at,
-			r.version, r.fence_token, r.task_version, r.acceptance_criteria_digest,
-			r.active_plan_revision_id,
-			t.id, t.project_id, t.title, t.description, t.acceptance_criteria, t.status,
-			t.priority, t.budget_minutes, t.deadline_at, t.max_attempts, t.max_tokens,
-			t.max_cost_minor, t.currency, t.max_concurrency, t.authority_json,
-			t.assigned_agent_id, t.version, t.created_at, t.updated_at
-		FROM runs r
-		JOIN tasks t ON t.id = r.task_id
-		WHERE r.agent_id = ?
-		  AND r.status IN ('planning', 'waiting_decision', 'running', 'verifying')
-		ORDER BY r.updated_at DESC
-		LIMIT 1
-	`, agentID)
-	var active domain.ActiveRun
-	var leaseExpiresAt, finishedAt sql.NullInt64
-	var assignedAgentID, activePlanRevisionID sql.NullString
-	var deadlineAt sql.NullInt64
-	var authority string
-	if err := row.Scan(
-		&active.Run.ID,
-		&active.Run.TaskID,
-		&active.Run.AgentID,
-		&active.Run.Status,
-		&active.Run.Plan,
-		&active.Run.ResultSummary,
-		&leaseExpiresAt,
-		&active.Run.StartedAt,
-		&finishedAt,
-		&active.Run.UpdatedAt,
-		&active.Run.Version,
-		&active.Run.FenceToken,
-		&active.Run.TaskVersion,
-		&active.Run.AcceptanceCriteriaDigest,
-		&activePlanRevisionID,
-		&active.Task.ID,
-		&active.Task.ProjectID,
-		&active.Task.Title,
-		&active.Task.Description,
-		&active.Task.AcceptanceCriteria,
-		&active.Task.Status,
-		&active.Task.Priority,
-		&active.Task.BudgetMinutes,
-		&deadlineAt,
-		&active.Task.Budget.MaxAttempts,
-		&active.Task.Budget.MaxTokens,
-		&active.Task.Budget.MaxCostMinor,
-		&active.Task.Budget.Currency,
-		&active.Task.Budget.MaxConcurrency,
-		&authority,
-		&assignedAgentID,
-		&active.Task.Version,
-		&active.Task.CreatedAt,
-		&active.Task.UpdatedAt,
-	); err != nil {
-		return domain.ActiveRun{}, normalizeStoreError(err)
-	}
-	if leaseExpiresAt.Valid {
-		value := leaseExpiresAt.Int64
-		active.Run.LeaseExpiresAt = &value
-	}
-	if finishedAt.Valid {
-		value := finishedAt.Int64
-		active.Run.FinishedAt = &value
-	}
-	if assignedAgentID.Valid {
-		active.Task.AssignedAgentID = stringPtr(assignedAgentID.String)
-	}
-	if activePlanRevisionID.Valid {
-		value := activePlanRevisionID.String
-		active.Run.ActivePlanRevisionID = &value
-	}
-	active.Task.Budget.TimeMinutes = active.Task.BudgetMinutes
-	if deadlineAt.Valid {
-		value := deadlineAt.Int64
-		active.Task.Budget.DeadlineAt = &value
-	}
-	active.Task.Budget.Authority = unmarshalStrings(authority)
-	return active, nil
+	return run, event, nil
 }
 
 func (s *Store) StartRun(ctx context.Context, mutation Mutation, runID string) error {
@@ -612,81 +376,6 @@ func (s *Store) StartRun(ctx context.Context, mutation Mutation, runID string) e
 	return nil
 }
 
-func (s *Store) ReportProgress(
-	ctx context.Context,
-	mutation Mutation,
-	runID string,
-	message string,
-	payload map[string]any,
-) error {
-	projectID, err := s.ProjectIDForRun(ctx, runID)
-	if err != nil {
-		return err
-	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin progress event: %w", err)
-	}
-	defer tx.Rollback()
-	attempt, replayResult, replayed, err := beginIdempotentMutation(
-		ctx,
-		tx,
-		mutation,
-		projectID,
-		operationReportProgress,
-		runID,
-		struct {
-			RunID   string         `json:"run_id"`
-			Message string         `json:"message"`
-			Payload map[string]any `json:"payload"`
-			Guard   *RunGuard      `json:"guard,omitempty"`
-		}{RunID: runID, Message: message, Payload: payload, Guard: mutation.Guard},
-	)
-	if err != nil {
-		return err
-	}
-	if replayed {
-		var original struct{}
-		return decodeIdempotencyResult(replayResult, &original)
-	}
-	run, err := getRunTx(ctx, tx, runID)
-	if err != nil {
-		return err
-	}
-	if err := validateRunGuard(run, mutation.Guard); err != nil {
-		return err
-	}
-	message = strings.TrimSpace(message)
-	if message == "" {
-		return fmt.Errorf("progress message is required: %w", domain.ErrInvalidInput)
-	}
-	if run.Status != domain.RunRunning {
-		return fmt.Errorf("run is not executing: %w", domain.ErrInvalidTransition)
-	}
-	event, err := insertEventTx(
-		ctx, tx, &run.TaskID, &run.ID, &run.AgentID,
-		"run.progress", message, payload,
-	)
-	if err != nil {
-		return fmt.Errorf("insert progress event: %w", err)
-	}
-	result, err := tx.ExecContext(ctx, "UPDATE runs SET version = version + 1, updated_at = ? WHERE id = ? AND version = ?", nowMillis(), runID, run.Version)
-	if err != nil {
-		return fmt.Errorf("touch run: %w", err)
-	}
-	if rows, _ := result.RowsAffected(); rows != 1 {
-		return domain.ErrConflict
-	}
-	if err := finishIdempotentMutation(ctx, tx, attempt, struct{}{}); err != nil {
-		return err
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit progress event: %w", err)
-	}
-	s.publish(event)
-	return nil
-}
-
 func (s *Store) BeginVerification(ctx context.Context, mutation Mutation, runID string) error {
 	projectID, err := s.ProjectIDForRun(ctx, runID)
 	if err != nil {
@@ -762,6 +451,19 @@ func (s *Store) BeginVerification(ctx context.Context, mutation Mutation, runID 
 }
 
 func (s *Store) BlockRun(ctx context.Context, mutation Mutation, runID, reason string) error {
+	return s.endRun(ctx, mutation, runID, reason, domain.RunBlocked)
+}
+
+// FailRun ends a run whose executor reported failure without a result.
+func (s *Store) FailRun(ctx context.Context, mutation Mutation, runID, reason string) error {
+	return s.endRun(ctx, mutation, runID, reason, domain.RunFailed)
+}
+
+func (s *Store) endRun(ctx context.Context, mutation Mutation, runID, reason, status string) error {
+	operation, label := operationBlockRun, "blocked"
+	if status == domain.RunFailed {
+		operation, label = operationFailRun, "failed"
+	}
 	projectID, err := s.ProjectIDForRun(ctx, runID)
 	if err != nil {
 		return err
@@ -776,7 +478,7 @@ func (s *Store) BlockRun(ctx context.Context, mutation Mutation, runID, reason s
 		tx,
 		mutation,
 		projectID,
-		operationBlockRun,
+		operation,
 		runID,
 		struct {
 			RunID  string    `json:"run_id"`
@@ -803,10 +505,10 @@ func (s *Store) BlockRun(ctx context.Context, mutation Mutation, runID, reason s
 	}
 	now := nowMillis()
 	result, err := tx.ExecContext(ctx, `
-		UPDATE runs SET status = 'blocked', result_summary = ?, lease_expires_at = NULL,
+		UPDATE runs SET status = ?, result_summary = ?, lease_expires_at = NULL,
 			finished_at = ?, version = version + 1, updated_at = ?
 		WHERE id = ? AND version = ? AND status IN ('planning', 'waiting_decision', 'running', 'verifying')
-	`, reason, now, now, runID, run.Version)
+	`, status, reason, now, now, runID, run.Version)
 	if err != nil {
 		return fmt.Errorf("block run: %w", err)
 	}
@@ -821,9 +523,9 @@ func (s *Store) BlockRun(ctx context.Context, mutation Mutation, runID, reason s
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `
-		UPDATE tasks SET status = 'blocked', assigned_agent_id = NULL,
+		UPDATE tasks SET status = ?, assigned_agent_id = NULL,
 			version = version + 1, updated_at = ? WHERE id = ?
-	`, now, run.TaskID); err != nil {
+	`, status, now, run.TaskID); err != nil {
 		return fmt.Errorf("block task: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx,
@@ -834,7 +536,7 @@ func (s *Store) BlockRun(ctx context.Context, mutation Mutation, runID, reason s
 	}
 	event, err := insertEventTx(
 		ctx, tx, &run.TaskID, &run.ID, &run.AgentID,
-		"run.blocked", "Run blocked: "+reason, map[string]any{"reason": reason},
+		"run."+label, "Run "+label+": "+reason, map[string]any{"reason": reason},
 	)
 	if err != nil {
 		return fmt.Errorf("create blocked event: %w", err)
@@ -847,16 +549,6 @@ func (s *Store) BlockRun(ctx context.Context, mutation Mutation, runID, reason s
 	}
 	s.publish(event)
 	return nil
-}
-
-func (s *Store) CountRunEvents(ctx context.Context, runID, eventType string) (int, error) {
-	var count int
-	if err := s.db.QueryRowContext(ctx,
-		"SELECT COUNT(*) FROM events WHERE run_id = ? AND type = ?", runID, eventType,
-	).Scan(&count); err != nil {
-		return 0, fmt.Errorf("count run events: %w", err)
-	}
-	return count, nil
 }
 
 func (s *Store) GetRun(ctx context.Context, id string) (domain.Run, error) {
@@ -941,95 +633,4 @@ func (s *Store) listRunsForTask(ctx context.Context, taskID string) ([]domain.Ru
 		runs = append(runs, run)
 	}
 	return runs, rows.Err()
-}
-
-func (s *Store) ExpireLeases(ctx context.Context) (int, error) {
-	now := nowMillis()
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT id FROM runs
-		WHERE status IN ('planning', 'waiting_decision', 'running', 'verifying')
-		  AND lease_expires_at IS NOT NULL
-		  AND lease_expires_at < ?
-	`, now)
-	if err != nil {
-		return 0, fmt.Errorf("find expired leases: %w", err)
-	}
-	ids := make([]string, 0)
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			rows.Close()
-			return 0, fmt.Errorf("scan expired lease: %w", err)
-		}
-		ids = append(ids, id)
-	}
-	rows.Close()
-	expired := 0
-	for _, id := range ids {
-		applied, err := s.failExpiredRun(ctx, id)
-		if err != nil {
-			return expired, err
-		}
-		if applied {
-			expired++
-		}
-	}
-	return expired, nil
-}
-
-func (s *Store) failExpiredRun(ctx context.Context, runID string) (bool, error) {
-	run, err := s.GetRun(ctx, runID)
-	if err != nil {
-		return false, err
-	}
-	now := nowMillis()
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return false, fmt.Errorf("begin lease expiry: %w", err)
-	}
-	defer tx.Rollback()
-	// Keep the expiry predicate on the UPDATE so a heartbeat that wins the
-	// list-then-update window is left intact.
-	result, err := tx.ExecContext(ctx, `
-		UPDATE runs SET status = 'failed', result_summary = 'Lease expired',
-			lease_expires_at = NULL, finished_at = ?, version = version + 1,
-			fence_token = fence_token + 1, updated_at = ?
-		WHERE id = ? AND version = ?
-		  AND status IN ('planning', 'waiting_decision', 'running', 'verifying')
-		  AND lease_expires_at IS NOT NULL
-		  AND lease_expires_at < ?
-	`, now, now, runID, run.Version, now)
-	if err != nil {
-		return false, fmt.Errorf("expire run lease: %w", err)
-	}
-	count, _ := result.RowsAffected()
-	if count == 0 {
-		return false, nil
-	}
-	if err := closeEngineQuestionsTx(ctx, tx, runID, "expired"); err != nil {
-		return false, err
-	}
-	if _, err := tx.ExecContext(ctx, `
-		UPDATE tasks SET status = 'ready', assigned_agent_id = NULL,
-			version = version + 1, updated_at = ? WHERE id = ?
-	`, now, run.TaskID); err != nil {
-		return false, fmt.Errorf("requeue expired task: %w", err)
-	}
-	if _, err := tx.ExecContext(ctx,
-		"UPDATE agents SET status = 'idle' WHERE id = ?", run.AgentID,
-	); err != nil {
-		return false, fmt.Errorf("idle expired agent: %w", err)
-	}
-	event, err := insertEventTx(
-		ctx, tx, &run.TaskID, &run.ID, &run.AgentID,
-		"run.lease_expired", "Agent lease expired; task returned to ready", nil,
-	)
-	if err != nil {
-		return false, fmt.Errorf("create lease expiry event: %w", err)
-	}
-	if err := tx.Commit(); err != nil {
-		return false, fmt.Errorf("commit lease expiry: %w", err)
-	}
-	s.publish(event)
-	return true, nil
 }

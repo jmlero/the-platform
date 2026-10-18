@@ -614,22 +614,6 @@ func manualTransitionAllowed(from, to string) bool {
 	}
 }
 
-func (s *Store) NextReadyTask(ctx context.Context) (domain.Task, error) {
-	task, err := scanTask(s.db.QueryRowContext(ctx, `
-		SELECT `+taskColumns+`
-		FROM tasks
-		WHERE status = 'ready' AND archived = 0 AND `+dependenciesEligibleSQL+`
-		ORDER BY
-			CASE priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
-			created_at ASC
-		LIMIT 1
-	`))
-	if err != nil {
-		return domain.Task{}, normalizeStoreError(err)
-	}
-	return task, nil
-}
-
 // ListEvents returns events newer than afterID in ascending order, or the
 // newest events when afterID is zero. A non-nil projectIDs keeps only task
 // events in those projects; filtering before LIMIT lets scoped readers page
@@ -749,54 +733,4 @@ func (s *Store) TaskCount(ctx context.Context) (int, error) {
 		return 0, fmt.Errorf("count tasks: %w", err)
 	}
 	return count, nil
-}
-
-func (s *Store) SeedDemo(ctx context.Context) error {
-	count, err := s.TaskCount(ctx)
-	if err != nil {
-		return err
-	}
-	if count > 0 {
-		return nil
-	}
-	seed := []domain.CreateTaskInput{
-		{
-			Title:              "Capture the Deck product vision",
-			Description:        "Write down the control-plane vision and keep the first release focused.",
-			AcceptanceCriteria: "A committed vision document explains principles, lifecycle, architecture, and non-goals.",
-			Status:             domain.TaskDone,
-			Priority:           "high",
-			BudgetMinutes:      30,
-		},
-		{
-			Title:              "Validate the human approval loop",
-			Description:        "Have an agent claim this task, propose a plan, wait for a decision, and finish with evidence.",
-			AcceptanceCriteria: "The full lifecycle is visible in the timeline and the run includes a verification artifact.",
-			Status:             domain.TaskReady,
-			Priority:           "urgent",
-			BudgetMinutes:      20,
-		},
-		{
-			Title:              "Draft the first MCP tool contract",
-			Description:        "Describe the smallest set of tools an external agent needs to participate in Deck.",
-			AcceptanceCriteria: "The proposal covers discovery, claiming, planning, decisions, heartbeats, events, and completion.",
-			Status:             domain.TaskBacklog,
-			Priority:           "high",
-			BudgetMinutes:      45,
-		},
-		{
-			Title:              "Define run permission budgets",
-			Description:        "Model time, attempts, tool permissions, and cost boundaries for a run.",
-			AcceptanceCriteria: "A task can express enforceable budgets without storing secrets in its description.",
-			Status:             domain.TaskBacklog,
-			Priority:           "medium",
-			BudgetMinutes:      60,
-		},
-	}
-	for _, input := range seed {
-		if _, err := s.CreateTask(ctx, input); err != nil {
-			return fmt.Errorf("seed task %q: %w", input.Title, err)
-		}
-	}
-	return nil
 }

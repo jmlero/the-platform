@@ -43,9 +43,13 @@ type Config struct {
 	RequiredCI                 []string                    `json:"required_ci"`
 	Delivery                   string                      `json:"delivery,omitempty"`
 	RequireApproval            bool                        `json:"require_approval"`
-	MaxTokens                  int64                       `json:"max_tokens"`
-	BudgetMinutes              int                         `json:"budget_minutes"`
-	PolicyVersion              string                      `json:"policy_version"`
+	// SkipReview and RepairFailures come only from a Run's Workload choices;
+	// omitted, they keep the installation's review and three-failure limit.
+	SkipReview     bool   `json:"skip_review,omitempty"`
+	RepairFailures *int   `json:"repair_failures,omitempty"`
+	MaxTokens      int64  `json:"max_tokens"`
+	BudgetMinutes  int    `json:"budget_minutes"`
+	PolicyVersion  string `json:"policy_version"`
 }
 
 func safeURL(value string) bool {

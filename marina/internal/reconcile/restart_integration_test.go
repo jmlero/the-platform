@@ -1,20 +1,15 @@
 package reconcile_test
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"io"
-	"net/http"
 	"path/filepath"
-	"reflect"
 	"testing"
 	"time"
 
-	"github.com/jmlero/the-platform/marina/internal/deck"
 	"github.com/jmlero/the-platform/marina/internal/execution"
 	"github.com/jmlero/the-platform/marina/internal/journal/sqlite"
 	"github.com/jmlero/the-platform/marina/internal/reconcile"
+	"github.com/jmlero/the-platform/marina/internal/workcontrol"
 )
 
 func TestRestartCycleRenewsExactPersistedRunWithoutClaiming(t *testing.T) {
@@ -25,26 +20,22 @@ func TestRestartCycleRenewsExactPersistedRunWithoutClaiming(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open journal: %v", err)
 	}
-	record, _, err := store.EnsureExecution(ctx, execution.NewExecution{
-		WorkProvider:   "deck",
-		ExternalWorkID: "task-1",
-		ExternalRunID:  "run-1",
-		AgentID:        "marina-1",
-		LeaseExpiresAt: journalTime.Add(5 * time.Minute),
-		Budget: execution.Budget{
-			DeadlineAt:  journalTime.Add(time.Hour),
-			MaxAttempts: 3,
-			MaxTokens:   10_000,
-		},
-	})
+	platform := store.Platform()
+	if _, _, err := platform.SubmitWork(ctx, sqlite.NewPlatformWork{Namespace: "factory", Name: "task-1", UID: "uid-1", ProjectID: "factory.acceptance",
+		Item: workcontrol.WorkItem{Title: "Persisted work", AcceptanceCriteria: "A test passes", BudgetMinutes: 60}}); err != nil {
+		t.Fatal(err)
+	}
+	run, err := platform.ClaimWork(ctx, "factory.task-1", workcontrol.Claim{IdempotencyKey: "claim", AgentID: "marina-1", ExpectedTaskVersion: 1, Lease: 5 * time.Minute})
+	if err != nil {
+		t.Fatal(err)
+	}
+	record, _, err := store.EnsureExecution(ctx, execution.NewExecution{WorkProvider: "marina", ExternalWorkID: "factory.task-1", ExternalRunID: run.ID, AgentID: "marina-1",
+		ExternalRunVersion: run.Version, FenceToken: run.FenceToken, LeaseExpiresAt: *run.LeaseExpiresAt,
+		Budget: execution.Budget{DeadlineAt: journalTime.Add(time.Hour), MaxAttempts: 3, MaxTokens: 10_000}})
 	if err != nil {
 		t.Fatalf("ensure execution: %v", err)
 	}
-	record, err = store.Transition(ctx, record.ID, execution.Transition{
-		ExpectedVersion: record.Version,
-		Target:          execution.StateRunning,
-		Message:         "runtime started before restart",
-	})
+	record, err = store.Transition(ctx, record.ID, execution.Transition{ExpectedVersion: record.Version, Target: execution.StateRunning, Message: "runtime started before restart"})
 	if err != nil {
 		t.Fatalf("transition execution: %v", err)
 	}
@@ -58,77 +49,13 @@ func TestRestartCycleRenewsExactPersistedRunWithoutClaiming(t *testing.T) {
 		t.Fatalf("reopen journal: %v", err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
-
-	providerLease := journalTime.Add(-time.Minute)
-	providerVersion := int64(1)
-	heartbeatSeen := false
-	calls := make([]string, 0, 4)
-	client, err := deck.New("http://deck.test", &http.Client{Transport: integrationRoundTripFunc(func(request *http.Request) (*http.Response, error) {
-		calls = append(calls, request.Method+" "+request.URL.Path)
-		switch request.Method + " " + request.URL.Path {
-		case "GET /api/v1/provider":
-			return integrationJSONResponse(http.StatusOK, map[string]any{
-				"provider":         "deck",
-				"protocol_version": "1.0",
-				"capabilities": []string{
-					"provider.info", "agent.register", "work.ready.list", "work.inspect",
-					"work.claim.atomic", "work.claim.lookup", "run.assigned.list",
-					"run.lease.renew", "run.block", "command.list", "command.ack", "event.append",
-				},
-				"server_time": journalTime.UnixMilli(),
-				"ready":       true,
-				"readiness":   map[string]string{"store": "available"},
-			}), nil
-		case "GET /api/v1/tasks/task-1":
-			return integrationJSONResponse(http.StatusOK, map[string]any{
-				"task": map[string]any{
-					"id":         "task-1",
-					"project_id": "project-1",
-					"title":      "Persisted work",
-					"status":     "running",
-				},
-				"runs": []map[string]any{{
-					"id":                         "run-1",
-					"task_id":                    "task-1",
-					"agent_id":                   "marina-1",
-					"status":                     "running",
-					"version":                    providerVersion,
-					"fence_token":                1,
-					"task_version":               1,
-					"acceptance_criteria_digest": "legacy:task-1",
-					"lease_expires_at":           providerLease.UnixMilli(),
-				}},
-			}), nil
-		case "POST /api/v1/runs/run-1/heartbeat":
-			var body struct {
-				AgentID      string `json:"agent_id"`
-				LeaseSeconds int    `json:"lease_seconds"`
-			}
-			if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
-				return nil, err
-			}
-			if body.AgentID != "marina-1" || body.LeaseSeconds != 30 {
-				t.Errorf("unexpected heartbeat: %#v", body)
-			}
-			heartbeatSeen = true
-			providerVersion++
-			providerLease = journalTime.Add(30 * time.Second)
-			return integrationJSONResponse(http.StatusNoContent, nil), nil
-		default:
-			t.Fatalf("unexpected provider call %s %s", request.Method, request.URL.Path)
-			return nil, nil
-		}
-	})})
-	if err != nil {
-		t.Fatalf("create Deck adapter: %v", err)
-	}
-
+	platform = store.Platform()
 	planner, err := reconcile.NewPlanner(store, 10*time.Second)
 	if err != nil {
 		t.Fatalf("new planner: %v", err)
 	}
 	planner.WithClock(func() time.Time { return journalTime })
-	providerReconciler, err := reconcile.NewLeaseReconciler(client, store, 30*time.Second)
+	providerReconciler, err := reconcile.NewLeaseReconciler(platform, store, 30*time.Second)
 	if err != nil {
 		t.Fatalf("new lease reconciler: %v", err)
 	}
@@ -146,42 +73,15 @@ func TestRestartCycleRenewsExactPersistedRunWithoutClaiming(t *testing.T) {
 	if cycle.Attempts[0].Intent.Action != execution.RecoveryReconcileLease || cycle.Attempts[0].Result.Status != reconcile.LeaseRenewed {
 		t.Fatalf("restart attempt = %#v", cycle.Attempts[0])
 	}
-	if !heartbeatSeen {
-		t.Fatal("persisted provider run was not heartbeated")
+	detail, err := platform.GetWork(ctx, "factory.task-1")
+	if err != nil || len(detail.Runs) != 1 || detail.Runs[0].ID != run.ID || detail.Runs[0].Version != run.Version+1 {
+		t.Fatalf("the persisted run was not renewed in place: %+v %v", detail.Runs, err)
 	}
-	wantCalls := []string{
-		"GET /api/v1/provider",
-		"GET /api/v1/tasks/task-1",
-		"POST /api/v1/runs/run-1/heartbeat",
-		"GET /api/v1/tasks/task-1",
-	}
-	if !reflect.DeepEqual(calls, wantCalls) {
-		t.Fatalf("provider calls = %#v, want %#v", calls, wantCalls)
-	}
-
 	persisted, err := store.GetExecution(ctx, record.ID)
 	if err != nil {
 		t.Fatalf("load reconciled execution: %v", err)
 	}
-	if persisted.State != execution.StateRunning || !persisted.LeaseExpiresAt.Equal(providerLease) || persisted.Version != record.Version+1 {
-		t.Fatalf("persisted execution = %#v", persisted)
-	}
-}
-
-type integrationRoundTripFunc func(*http.Request) (*http.Response, error)
-
-func (roundTrip integrationRoundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
-	return roundTrip(request)
-}
-
-func integrationJSONResponse(status int, payload any) *http.Response {
-	var body bytes.Buffer
-	if payload != nil {
-		_ = json.NewEncoder(&body).Encode(payload)
-	}
-	return &http.Response{
-		StatusCode: status,
-		Header:     http.Header{"Content-Type": []string{"application/json"}},
-		Body:       io.NopCloser(bytes.NewReader(body.Bytes())),
+	if persisted.State != execution.StateRunning || !persisted.LeaseExpiresAt.Equal(*detail.Runs[0].LeaseExpiresAt) {
+		t.Fatalf("persisted execution = %#v, ledger lease %v", persisted, detail.Runs[0].LeaseExpiresAt)
 	}
 }

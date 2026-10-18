@@ -24,9 +24,9 @@ Marina is the agent and application platform described in [the vision](../docs/V
 - Start from scratch. Marina is a new concept, not a port, rewrite, migration, successor, or cloud-neutral version of `platform-marina`.
 - Carry forward the creator's experience from `platform-marina`, not its architecture, code, backlog, layer model, providers, or assumptions.
 - Design for one operator and personal repositories first. Do not add multi-tenancy, organization administration, team RBAC, or billing without an explicit requirement.
-- Use Kubernetes as Marina's native installation and execution substrate. Keep the Deck–Marina work-control contract independent of Kubernetes; installation and slot configuration may use Kubernetes resources.
+- Use Kubernetes as Marina's native installation and execution substrate. Marina's platform API is Kubernetes-native: the same objects are served as HTTP/JSON and as `marina.dev` resources, with Kubernetes identity and RBAC.
 - Fill platform slots with open-source components, CNCF projects first, and swap them at open protocols rather than with one adapter per product.
-- Use Deck over HTTP/JSON as the supported work-control provider. Keep the core provider-neutral; alternative providers and headless packaging remain future work.
+- Marina owns the platform API ([decision 0033](../docs/decisions/0033-marina-platform-api.md), [contract](api/README.md)) and execution state; Deck, `platformctl` and factories are clients, and Marina calls none of them. The installed release still runs the earlier Deck-provider pair until the cutover (MAR-10). Enforce platform invariants in Marina and leave factory rules to workload profiles; never expose engine or sandbox names in the API.
 - Keep work-control surfaces, agent harnesses, models, workflow engines, runtimes, context sources, policy and verification systems, delivery integrations, and platform services replaceable behind explicit governed contracts.
 - Verified work lands directly on main after the clean verification Job and required GitHub CI on the exact commit ([decision 0022](../docs/decisions/0022-autonomous-software-factory.md), LAND-01). The `repository/v1` pull-request profile remains for installations that select it. The repository workflow never deploys; app deployment from Git is a planned platform capability (PLAT-17).
 
@@ -43,7 +43,7 @@ Marina is the agent and application platform described in [the vision](../docs/V
 | Factory | The governed system coordinating many loops from intent through production feedback. |
 | Evidence | Current, source-bound proof supporting a lifecycle transition; an agent assertion alone is not evidence. |
 
-Marina owns internal execution and reconciliation state. The configured work-control plugin owns the human-facing task, decision, and evidence ledger. Configure one authoritative work-control provider per project and reconcile after restarts; never create two competing sources of truth.
+Marina owns execution state, runs, decisions and evidence in its platform ledger; resource status mirrors it. Clients such as Deck own human-facing planning (backlog, threads, PRDs, acceptance) and must not keep a competing copy of run state.
 
 ## Non-negotiable design principles
 
@@ -58,7 +58,7 @@ Marina owns internal execution and reconciliation state. The configured work-con
 
 - Prefer ordinary services and ephemeral Jobs for the first implementation.
 - Configure declaratively from Git (Argo CD, Kustomize, Helm). Add a custom resource only where it adds value over a versioned manifest file, such as live status; add no custom operator unless one is needed.
-- Keep public contracts for work, runs, events, artifacts, evidence, policy, and runtimes independent of Pods, Jobs, and CRDs.
+- Keep public contracts for work, runs, events, artifacts, evidence, policy, and runtimes free of Pods, Jobs, engines and sandboxes; `marina.dev` resources are one surface of the same API.
 - Preserve a local container or process path for development where practical.
 - Do not pretend an external managed runtime is a Kubernetes Pod.
 
@@ -123,14 +123,14 @@ Prefer work that advances this complete repository workflow. Current acceptance
 uses local Podman/Kind with the Mac running and Deck on localhost; RUN-10 and
 second-device testing were removed from the local acceptance scope by the operator.
 
-1. The operator creates a bounded task through Deck.
-2. Marina claims it with a lease and persists the plan and execution state.
+1. The operator creates a bounded task through a client (Deck, `platformctl` or `kubectl`), which creates a Run.
+2. Marina admits the Run with a lease and persists the plan and execution state.
 3. Marina creates the attempt's own kagent template and starts native Codex at a pinned repository revision.
 4. The agent receives the frozen task, repository binding, and selected immutable context, then implements the change.
 5. An independent text-only review passes the exact candidate before commit; a separate clean verification Job produces deterministic check evidence. Preserve both gates and their distinct evidence.
 6. Marina pushes the exact commit to a task branch and observes required CI on it. Review and check failures enter bounded diagnosis and repair within the original budget; installation acceptance belongs in status.
 7. Marina fast-forwards main only if it still points at the task's base, then records evidence.
-8. Deck shows truthful state, cost, decisions, artifacts, and evidence across restarts. The run ends with the commit on main or a focused blocker. It never deploys.
+8. Clients show truthful state, cost, decisions, artifacts, and evidence across restarts. The run ends with the commit on main or a focused blocker. It never deploys.
 
 Prefer changes that strengthen this vertical slice or the next accepted backlog
 item over scaffolding for a hypothetical maturity stage.
@@ -141,7 +141,7 @@ the [workload profiles](docs/workloads/profiles-v1.md) and
 Keep historical journal readers and artifact access; the Kubernetes adapter
 serves independent verification only. Do not reintroduce agent launch loops or
 legacy configuration. Engine cancellation must remain possible after authority
-is lost, including when Deck is offline and the local lease expires.
+is lost, including when every client is offline and the local lease expires.
 
 ## Engineering workflow
 

@@ -336,18 +336,6 @@ func TestTaskDetailShowsTruthfulDisplayStateAndContinuousTrail(t *testing.T) {
 	if err != nil {
 		t.Fatalf("submit plan: %v", err)
 	}
-	state, err := appStore.RecordOperationalStateGuarded(ctx, testMutation("trail-operation"), domain.OperationalStateInput{
-		RunID: run.ID, Environment: "production", RolloutState: "canary",
-		ObservationStartedAt: int64Ptr(time.Now().UTC().UnixMilli()),
-		ObservationEndsAt:    int64Ptr(time.Now().UTC().Add(30 * time.Minute).UnixMilli()),
-		RollbackState:        "ready", PolicyVersion: "policy:trail", SourceRevision: "git:trail",
-	})
-	if err != nil {
-		t.Fatalf("record operational state: %v", err)
-	}
-	if state.Environment != "production" || state.RolloutState != "canary" {
-		t.Fatalf("operational state = %#v", state)
-	}
 	if err := appStore.BeginVerification(ctx, testMutation("trail-verification"), run.ID); err != nil {
 		t.Fatalf("begin verification: %v", err)
 	}
@@ -369,10 +357,7 @@ func TestTaskDetailShowsTruthfulDisplayStateAndContinuousTrail(t *testing.T) {
 	if detail.DisplayState != "stale-evidence" {
 		t.Fatalf("display state = %q, want stale-evidence", detail.DisplayState)
 	}
-	if len(detail.OperationalStates) != 1 {
-		t.Fatalf("operational states = %#v", detail.OperationalStates)
-	}
-	wantStages := map[string]bool{"change": false, "delivery": false, "observation": false, "verification": false}
+	wantStages := map[string]bool{"change": false, "verification": false}
 	for _, item := range detail.Trail {
 		if _, ok := wantStages[item.Stage]; ok {
 			wantStages[item.Stage] = true

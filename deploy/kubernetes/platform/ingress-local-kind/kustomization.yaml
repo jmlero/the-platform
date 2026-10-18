@@ -1,0 +1,13 @@
+# Local Kind: the Gateway takes the node port that kind.yaml publishes on
+# https://localhost:8443. Other clusters use a LoadBalancer or their own ingress.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources: [../ingress]
+patches:
+  - target: {kind: GatewayParameters, name: platform}
+    patch: |-
+      - op: replace
+        path: /spec/kube/service
+        value:
+          type: NodePort
+          ports: [{port: 8443, nodePort: 30443}]

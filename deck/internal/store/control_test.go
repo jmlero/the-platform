@@ -50,20 +50,6 @@ func TestGuardedAuthoritySnapshotAndCancellation(t *testing.T) {
 		t.Fatalf("run snapshot changed: %#v", persisted)
 	}
 
-	heartbeat := testMutation("heartbeat-guarded")
-	heartbeat.Guard = &RunGuard{AgentID: run.AgentID, ExpectedVersion: run.Version, FenceToken: run.FenceToken}
-	if err := appStore.HeartbeatRun(ctx, heartbeat, run.ID, run.AgentID, 2*time.Minute); err != nil {
-		t.Fatalf("heartbeat: %v", err)
-	}
-	if err := appStore.HeartbeatRun(ctx, heartbeat, run.ID, run.AgentID, 2*time.Minute); err != nil {
-		t.Fatalf("heartbeat replay: %v", err)
-	}
-	stale := testMutation("heartbeat-stale")
-	stale.Guard = heartbeat.Guard
-	if err := appStore.HeartbeatRun(ctx, stale, run.ID, run.AgentID, 2*time.Minute); !errors.Is(err, domain.ErrConflict) {
-		t.Fatalf("stale heartbeat = %v", err)
-	}
-
 	current, _ := appStore.GetRun(ctx, run.ID)
 	command, err := appStore.CreateCommand(ctx, run.ID, domain.CommandCancel, "operator stopped work", "operator:test")
 	if err != nil {
@@ -72,10 +58,10 @@ func TestGuardedAuthoritySnapshotAndCancellation(t *testing.T) {
 	if command.Sequence != 1 || command.RunVersion != current.Version+1 || command.FenceToken != current.FenceToken+1 {
 		t.Fatalf("cancel command = %#v", command)
 	}
-	oldFence := testMutation("heartbeat-old-fence-guarded")
+	oldFence := testMutation("block-old-fence-guarded")
 	oldFence.Guard = &RunGuard{AgentID: run.AgentID, ExpectedVersion: current.Version, FenceToken: current.FenceToken}
-	if err := appStore.HeartbeatRun(ctx, oldFence, run.ID, run.AgentID, time.Minute); !errors.Is(err, domain.ErrConflict) {
-		t.Fatalf("old fence heartbeat = %v", err)
+	if err := appStore.BlockRun(ctx, oldFence, run.ID, "stale writer"); !errors.Is(err, domain.ErrConflict) {
+		t.Fatalf("old fence block = %v", err)
 	}
 	ack := testMutation("ack-cancel")
 	ack.Guard = &RunGuard{AgentID: run.AgentID, ExpectedVersion: command.RunVersion, FenceToken: command.FenceToken}
@@ -140,76 +126,6 @@ func TestProjectedEventsDeduplicateProducerIdentityAndSequence(t *testing.T) {
 	outOfOrderMutation.Guard = &RunGuard{AgentID: afterReplay.AgentID, ExpectedVersion: afterReplay.Version, FenceToken: afterReplay.FenceToken}
 	if err := appStore.AppendProjectedEvent(ctx, outOfOrderMutation, run.ID, outOfOrder); !errors.Is(err, domain.ErrConflict) {
 		t.Fatalf("out-of-order producer sequence = %v", err)
-	}
-}
-
-func TestExpireLeasesLeavesRenewedRunIntact(t *testing.T) {
-	ctx := context.Background()
-	appStore, err := Open(ctx, filepath.Join(t.TempDir(), "lease-renew-race.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer appStore.Close()
-	if _, err := appStore.RegisterAgent(ctx, domain.Agent{ID: "agent-renew-race", InstallationID: "installation-renew-race", Name: "Marina"}); err != nil {
-		t.Fatal(err)
-	}
-	task, err := appStore.CreateTask(ctx, domain.CreateTaskInput{Title: "Keep renewed lease", Status: domain.TaskReady, Priority: "high", BudgetMinutes: 10})
-	if err != nil {
-		t.Fatal(err)
-	}
-	run, err := appStore.ClaimTaskVersioned(ctx, testMutation("claim-renew-race"), task.ID, task.Version, "agent-renew-race", time.Minute)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := appStore.db.ExecContext(ctx, "UPDATE runs SET lease_expires_at = ? WHERE id = ?", time.Now().UTC().Add(-time.Minute).UnixMilli(), run.ID); err != nil {
-		t.Fatal(err)
-	}
-	heartbeat := testMutation("heartbeat-after-expiry-list")
-	heartbeat.Guard = &RunGuard{AgentID: run.AgentID, ExpectedVersion: run.Version, FenceToken: run.FenceToken}
-	if err := appStore.HeartbeatRun(ctx, heartbeat, run.ID, run.AgentID, 2*time.Minute); err != nil {
-		t.Fatal(err)
-	}
-	applied, err := appStore.failExpiredRun(ctx, run.ID)
-	if err != nil || applied {
-		t.Fatalf("failExpiredRun after renewal = %t, %v", applied, err)
-	}
-	current, err := appStore.GetRun(ctx, run.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if current.Status != domain.RunPlanning || current.LeaseExpiresAt == nil || *current.LeaseExpiresAt <= nowMillis() {
-		t.Fatalf("renewed run was reaped: %#v", current)
-	}
-	if count, err := appStore.ExpireLeases(ctx); err != nil || count != 0 {
-		t.Fatalf("ExpireLeases after renewal = %d, %v", count, err)
-	}
-}
-
-func TestClaimLookupReturnsCurrentFencedStateAfterLeaseReaping(t *testing.T) {
-	ctx := context.Background()
-	appStore, err := Open(ctx, filepath.Join(t.TempDir(), "claim-reaping.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer appStore.Close()
-	_, _ = appStore.RegisterAgent(ctx, domain.Agent{ID: "agent-reaping", InstallationID: "installation-reaping", Name: "Marina"})
-	task, _ := appStore.CreateTask(ctx, domain.CreateTaskInput{Title: "Reap ambiguous claim", Status: domain.TaskReady, Priority: "high", BudgetMinutes: 10})
-	run, err := appStore.ClaimTaskVersioned(ctx, testMutation("claim-before-reaping"), task.ID, task.Version, "agent-reaping", time.Minute)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := appStore.db.ExecContext(ctx, "UPDATE runs SET lease_expires_at = ? WHERE id = ?", time.Now().UTC().Add(-time.Minute).UnixMilli(), run.ID); err != nil {
-		t.Fatal(err)
-	}
-	if count, err := appStore.ExpireLeases(ctx); err != nil || count != 1 {
-		t.Fatalf("expire leases = %d, %v", count, err)
-	}
-	recovered, err := appStore.LookupClaim(ctx, task.ProjectID, testMutation("unused").ActorID, "claim-before-reaping")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if recovered.Status != domain.RunFailed || recovered.LeaseExpiresAt != nil || recovered.Version != run.Version+1 || recovered.FenceToken != run.FenceToken+1 {
-		t.Fatalf("recovered claim authority = %#v", recovered)
 	}
 }
 

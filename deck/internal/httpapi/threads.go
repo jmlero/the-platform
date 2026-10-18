@@ -12,9 +12,6 @@ func (s *Server) invokeConversation(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, err)
 		return
 	}
-	if !s.requireProject(w, r, channel.ProjectID) {
-		return
-	}
 	var input domain.ConversationInvocationInput
 	if err := readJSON(r, &input); err != nil {
 		s.writeError(w, err)

@@ -58,8 +58,9 @@ func (s *Store) RequestEngineQuestion(ctx context.Context, mutation Mutation, ru
 	if err := validateRunGuard(run, mutation.Guard); err != nil {
 		return domain.Decision{}, err
 	}
-	if run.Status != domain.RunRunning || run.LeaseExpiresAt == nil || *run.LeaseExpiresAt <= nowMillis() {
-		return domain.Decision{}, fmt.Errorf("engine question requires a live running lease: %w", domain.ErrConflict)
+	// Marina-owned runs have no Deck lease; a recorded lease must still be live.
+	if run.Status != domain.RunRunning || run.LeaseExpiresAt != nil && *run.LeaseExpiresAt <= nowMillis() {
+		return domain.Decision{}, fmt.Errorf("engine question requires a live running run: %w", domain.ErrConflict)
 	}
 	var existing string
 	if err := tx.QueryRowContext(ctx, "SELECT id FROM decisions WHERE run_id = ? AND interaction_id = ?", runID, input.OperationID).Scan(&existing); err == nil {
@@ -211,7 +212,7 @@ func (s *Store) AnswerDecision(ctx context.Context, id, answer string) (domain.D
 		if runErr != nil {
 			return domain.Decision{}, runErr
 		}
-		if run.Status != domain.RunRunning || run.LeaseExpiresAt == nil || *run.LeaseExpiresAt <= now {
+		if run.Status != domain.RunRunning || run.LeaseExpiresAt != nil && *run.LeaseExpiresAt <= now {
 			return domain.Decision{}, fmt.Errorf("engine question belongs to an inactive run: %w", domain.ErrConflict)
 		}
 	}

@@ -1,0 +1,16 @@
+# agentgateway for model traffic (PLAT-06). Secrets come from a private
+# overlay: agentgateway-tls (tls.crt, tls.key), agentgateway-provider
+# (api-key) and agentgateway-clients (marina).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  - agentgateway.yaml
+  - network-policy.yaml
+configMapGenerator:
+  - name: agentgateway
+    namespace: platform-gateway
+    files: [config.yaml]
+labels:
+  - pairs: {app.kubernetes.io/part-of: the-platform}
+    includeSelectors: false

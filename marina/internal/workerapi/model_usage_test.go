@@ -10,6 +10,10 @@ import (
 	"testing"
 	"time"
 
+	"go.opentelemetry.io/otel"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+
 	"github.com/jmlero/the-platform/marina/internal/execution"
 	"github.com/jmlero/the-platform/marina/internal/journal/sqlite"
 	runtimeapi "github.com/jmlero/the-platform/marina/internal/runtime"
@@ -50,6 +54,10 @@ func TestModelBudgetRequiresCompleteTerminalUsage(t *testing.T) {
 				{name: "negative usage", payload: `{"status":"completed","usage":{"input_tokens":-2,"output_tokens":1}}`},
 			} {
 				t.Run(tc.name, func(t *testing.T) {
+					spans := tracetest.NewInMemoryExporter()
+					previous := otel.GetTracerProvider()
+					otel.SetTracerProvider(sdktrace.NewTracerProvider(sdktrace.WithSyncer(spans)))
+					defer otel.SetTracerProvider(previous)
 					ctx := context.Background()
 					path := filepath.Join(t.TempDir(), "journal.db")
 					journal, err := sqlite.Open(ctx, path)
@@ -109,6 +117,17 @@ func TestModelBudgetRequiresCompleteTerminalUsage(t *testing.T) {
 					tokens, cost, err := journal.ModelUsage(ctx, attempt.ID)
 					if err != nil {
 						t.Fatal(err)
+					}
+					recorded := spans.GetSpans()
+					if len(recorded) != 1 || recorded[0].Name != "chat fixture" {
+						t.Fatalf("model spans = %v", recorded)
+					}
+					hasUsage := false
+					for _, value := range recorded[0].Attributes {
+						hasUsage = hasUsage || value.Key == "gen_ai.usage.input_tokens"
+					}
+					if hasUsage != tc.final || (tc.status == 503) != (recorded[0].Status.Description == "model endpoint rejected the request") {
+						t.Fatalf("model span usage=%t status=%v", hasUsage, recorded[0].Status)
 					}
 					if tc.final {
 						if tokens != 3 || cost != 3 {

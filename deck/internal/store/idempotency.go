@@ -13,19 +13,15 @@ import (
 )
 
 const (
-	operationClaimTask             = "task.claim"
-	operationHeartbeatRun          = "run.heartbeat"
 	operationSubmitPlan            = "run.plan.submit"
 	operationRequestEngineQuestion = "run.engine-question.request"
 	operationStartRun              = "run.start"
-	operationReportProgress        = "run.progress"
 	operationBeginVerification     = "run.verify"
 	operationCompleteRun           = "run.complete"
 	operationBlockRun              = "run.block"
+	operationFailRun               = "run.fail"
 	operationAcknowledgeCommand    = "command.ack"
 	operationAppendProjectedEvent  = "event.append"
-	operationRecordEvidence        = "evidence.record"
-	operationReportOperational     = "operation.report"
 )
 
 // Mutation identifies one retriable request. Deck scopes keys by canonical

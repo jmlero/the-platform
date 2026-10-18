@@ -71,10 +71,10 @@ kubectl --context kind-marina-local apply --server-side -f /private/tmp/marina-c
 ```
 
 Kind's default CNI is disabled so Calico can enforce NetworkPolicy.
-`deck-host-ingress.yaml` permits the observed macOS Podman gateway
-`192.168.127.1/32`. If it differs, inspect
-`podman machine ssh podman-machine-default ip -j route` and change only that
-address. The published Deck port remains bound to `127.0.0.1`.
+Deck is reached through the platform ingress Gateway, which takes the node port
+that `kind.yaml` publishes; install it with the
+[platform components guide](../platform/README.md#ingress-kgateway-plat-07). The
+published port remains bound to `127.0.0.1`.
 
 Build and load the base images without a remote registry:
 

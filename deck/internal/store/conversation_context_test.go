@@ -24,13 +24,7 @@ func TestConversationContextKeepsInvokedRevisionsAcrossReplayRestartAndExport(t 
 	if _, err := s.RegisterAgent(ctx, domain.Agent{ID: "agt_chat", InstallationID: "chat", Name: "Chat", Capabilities: []string{"conversation.invoke.prj_default"}}); err != nil {
 		t.Fatal(err)
 	}
-	request, err := s.RequestRepository(ctx, "prj_default", domain.RepositoryRequestInput{Repository: "owner/one", BaseBranch: "main"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := s.RecordRepositoryResult(ctx, "prj_default", domain.RepositoryResult{RequestRevision: request.Revision, Status: "connected", Binding: &domain.RepositoryBinding{Version: 1, Repository: "owner/one", CloneURL: "https://github.com/owner/one.git", BaseBranch: "main"}}); err != nil {
-		t.Fatal(err)
-	}
+	bindRepository(t, s, "prj_default", "owner/one", 1)
 	input := domain.ContextSourceInput{ID: "rules", Kind: "instruction", Title: "Rules", Content: "Preserve the API", Trust: "guidance", State: "active"}
 	first, err := s.PutContextSource(ctx, "prj_default", input)
 	if err != nil {
@@ -46,13 +40,7 @@ func TestConversationContextKeepsInvokedRevisionsAcrossReplayRestartAndExport(t 
 	if err != nil {
 		t.Fatal(err)
 	}
-	request, err = s.RequestRepository(ctx, "prj_default", domain.RepositoryRequestInput{ExpectedRevision: request.Revision, ExpectedBindingVersion: 1, Repository: "owner/two", BaseBranch: "main"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := s.RecordRepositoryResult(ctx, "prj_default", domain.RepositoryResult{RequestRevision: request.Revision, Status: "connected", Binding: &domain.RepositoryBinding{Version: 2, Repository: "owner/two", CloneURL: "https://github.com/owner/two.git", BaseBranch: "main"}}); err != nil {
-		t.Fatal(err)
-	}
+	bindRepository(t, s, "prj_default", "owner/two", 2)
 	if _, err := s.InvokeConversation(ctx, invocationInput); err != nil {
 		t.Fatal(err)
 	}

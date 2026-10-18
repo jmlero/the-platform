@@ -1,0 +1,64 @@
+# Only Marina may call agentgateway. agentgateway may reach DNS, the
+# telemetry collector and HTTPS outside the cluster; narrow that to the model
+# provider's addresses in the environment overlay where they are known.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: default-deny, namespace: platform-gateway}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: agentgateway, namespace: platform-gateway}
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: agentgateway}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: marina-system}
+          podSelector:
+            matchLabels: {app.kubernetes.io/name: marina}
+      ports: [{protocol: TCP, port: 8443}]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: kube-system}
+          podSelector:
+            matchLabels: {k8s-app: kube-dns}
+      ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
+    - to:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: platform-observability}
+          podSelector:
+            matchLabels: {app.kubernetes.io/name: otel-collector}
+      ports: [{protocol: TCP, port: 4317}]
+    - to:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: platform-observability}
+          podSelector:
+            matchLabels: {app.kubernetes.io/name: jaeger}
+      ports: [{protocol: TCP, port: 16686}]
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 100.64.0.0/10]
+      ports: [{protocol: TCP, port: 443}]
+---
+# Marina reaches agentgateway for model calls.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: marina-to-agentgateway, namespace: marina-system}
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: marina}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: platform-gateway}
+          podSelector:
+            matchLabels: {app.kubernetes.io/name: agentgateway}
+      ports: [{protocol: TCP, port: 8443}]

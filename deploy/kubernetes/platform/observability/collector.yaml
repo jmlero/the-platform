@@ -1,0 +1,83 @@
+# One pipeline for every platform component. It drops credential-like
+# attributes before anything is stored.
+apiVersion: v1
+kind: ConfigMap
+metadata: {name: otel-collector, namespace: platform-observability}
+data:
+  config.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc: {endpoint: 0.0.0.0:4317}
+          http: {endpoint: 0.0.0.0:4318}
+    processors:
+      memory_limiter: {check_interval: 1s, limit_mib: 160, spike_limit_mib: 40}
+      attributes/credentials:
+        actions:
+          - pattern: (?i).*(authorization|cookie|api[-_.]?key|token|secret|password|credential).*
+            action: delete
+      redaction/values:
+        allow_all_keys: true
+        blocked_values:
+          - (?i)bearer\s+\S+
+          - sk-or-[A-Za-z0-9_-]{8,}
+          - gh[pousr]_[A-Za-z0-9]{20,}
+          - github_pat_[A-Za-z0-9_]{20,}
+      batch: {}
+    exporters:
+      otlp/jaeger:
+        endpoint: jaeger.platform-observability.svc:4317
+        tls: {insecure: true}
+    extensions:
+      health_check: {endpoint: 0.0.0.0:13133}
+    service:
+      extensions: [health_check]
+      telemetry:
+        metrics: {level: none}
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, attributes/credentials, redaction/values, batch]
+          exporters: [otlp/jaeger]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: otel-collector, namespace: platform-observability}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: otel-collector}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: otel-collector}
+    spec:
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: collector
+          image: docker.io/otel/opentelemetry-collector-contrib:0.161.0@sha256:fd328de2552466ad78385e1b1289c3f2402b1c45f265b252aab1955b42845ac1
+          args: [--config=/conf/config.yaml]
+          ports:
+            - {name: otlp-grpc, containerPort: 4317}
+            - {name: otlp-http, containerPort: 4318}
+            - {name: health, containerPort: 13133}
+          readinessProbe:
+            httpGet: {path: /, port: health}
+          resources:
+            requests: {cpu: 50m, memory: 96Mi}
+            limits: {cpu: 500m, memory: 224Mi}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          volumeMounts:
+            - {name: config, mountPath: /conf, readOnly: true}
+      volumes:
+        - name: config
+          configMap: {name: otel-collector}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: otel-collector, namespace: platform-observability}
+spec:
+  selector: {app.kubernetes.io/name: otel-collector}
+  ports:
+    - {name: otlp-grpc, port: 4317, targetPort: otlp-grpc}
+    - {name: otlp-http, port: 4318, targetPort: otlp-http}

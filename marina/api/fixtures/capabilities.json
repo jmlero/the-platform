@@ -1,0 +1,4 @@
+{"apiVersion":"marina.dev/v1","kind":"Capabilities","workloadTypes":["repository-change","conversation"],
+ "models":[{"name":"openai/gpt-6-luna","roles":["implement","conversation"]},{"name":"openai/gpt-5-mini","roles":["review"]}],
+ "tools":[{"name":"search_traces","description":"Search platform traces"},{"name":"get_trace_errors","description":"Error spans of one trace"}],
+ "limits":{"maxTimeMinutes":120,"maxTokens":400000,"maxAttempts":11}}

@@ -30,6 +30,7 @@ type Profile struct {
 	BudgetMinutes int                             `json:"budget_minutes"`
 	MaxTokens     int64                           `json:"max_tokens"`
 	Delegation    *workcontrol.ConversationBudget `json:"delegation,omitempty"`
+	MCP           *MCPTools                       `json:"mcp,omitempty"`
 }
 
 func (p Profile) Validate(model workerapi.Model) error {
@@ -41,6 +42,11 @@ func (p Profile) Validate(model workerapi.Model) error {
 		p.BudgetMinutes < 1 || p.BudgetMinutes > 30 || p.MaxTokens < 4096 || p.MaxTokens > 100000 ||
 		model.MaxOutputTokens < 1 || model.MaxOutputTokens > p.MaxTokens-2048 {
 		return errors.New("conversation requires the pinned read-only kagent BYO profile and bounded model budget")
+	}
+	if p.MCP != nil {
+		if err := p.MCP.Validate(); err != nil {
+			return err
+		}
 	}
 	if p.Delegation != nil {
 		b := p.Delegation
@@ -100,6 +106,22 @@ func (c *Controller) Cycle(ctx context.Context) []error {
 		return append(problems, err)
 	}
 	for _, turn := range turns {
+		// A client may cancel its turn; the engine stops before any outcome.
+		if source, ok := c.Source.(interface {
+			TurnCancelRequested(context.Context, string) (bool, error)
+		}); ok {
+			cancelled, err := source.TurnCancelRequested(ctx, turn.MessageID)
+			if err != nil {
+				problems = append(problems, err)
+				continue
+			}
+			if cancelled {
+				if err := c.stop(ctx, turn, "The client cancelled this turn"); err != nil {
+					problems = append(problems, fmt.Errorf("cancel conversation %s: %w", turn.MessageID, err))
+				}
+				continue
+			}
+		}
 		if err := c.advance(ctx, turn); err != nil {
 			problems = append(problems, fmt.Errorf("conversation %s: %w", turn.MessageID, err))
 		}

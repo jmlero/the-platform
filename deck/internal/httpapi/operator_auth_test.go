@@ -60,7 +60,6 @@ func TestOperatorAuthenticationProtectsEveryHumanRoute(t *testing.T) {
 		body   string
 	}{
 		{http.MethodGet, "/api/v1/bootstrap", ""},
-		{http.MethodGet, "/api/v1/operator/provider", ""},
 		{http.MethodGet, "/api/v1/operator/projects/prj_default/workloads", ""},
 		{http.MethodPost, "/api/v1/operator/projects/prj_default/workloads/invoke", `{}`},
 		{http.MethodPost, "/api/v1/tasks", `{}`},
@@ -193,15 +192,6 @@ func TestOperatorSessionLoginCSRFAndLogout(t *testing.T) {
 	reused := httptest.NewRecorder()
 	handler.ServeHTTP(reused, reusedRequest)
 	assertAPIError(t, reused, http.StatusUnauthorized, errorCodeUnauthenticated)
-}
-
-func TestOperatorAuthenticationDoesNotChangeServiceAuthentication(t *testing.T) {
-	_, handler, _ := newOperatorAuthTestHandler(t)
-	response := httptest.NewRecorder()
-	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/provider", nil))
-	if response.Code != http.StatusOK {
-		t.Fatalf("provider status = %d, want service behavior unchanged", response.Code)
-	}
 }
 
 func TestReadinessReflectsOperatorAuthenticationPolicyHealth(t *testing.T) {

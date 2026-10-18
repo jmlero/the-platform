@@ -1,0 +1,12 @@
+# One Gateway API entry point for Deck and apps (PLAT-07). TLS passes through
+# to each backend, so Deck keeps terminating its own TLS.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  - gateway.yaml
+  - deck-route.yaml
+  - network-policy.yaml
+labels:
+  - pairs: {app.kubernetes.io/part-of: the-platform}
+    includeSelectors: false

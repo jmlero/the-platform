@@ -1,8 +1,10 @@
 # Platform CLI
 
-`platformctl` is the small, standalone command-line client for operating The Platform through Deck's HTTP/JSON API. It owns no platform state and does not import Deck or Marina internals.
+`platformctl` is the small, standalone command-line client for The Platform. It talks to Marina's platform API (`marina.dev/v1`) and to Deck's operator API over HTTP/JSON. It owns no platform state and does not import Deck or Marina internals.
 
-The CLI can:
+With Marina, the CLI can show the installation's capabilities, create and inspect Runs and their evidence, follow a Run's events, cancel a Run, ask one agent Turn, and list and answer Decisions. See [Marina platform API](#marina-platform-api).
+
+With Deck, the CLI can:
 
 - verify that Deck is reachable;
 - list tasks from the operator workspace, optionally filtered by status or project;
@@ -32,16 +34,79 @@ make package VERSION=v0.1.0
 
 The archive is written to `dist/`. Tags matching `platformctl/v*` run the independent platformctl release workflow, which verifies the CLI, packages Linux, macOS, and Windows binaries for AMD64 and ARM64, publishes SHA-256 checksums, and creates a GitHub release. A manual workflow run builds the same artifacts without publishing a release.
 
+## Marina platform API
+
+These commands use Marina's API as described in [marina/api](../marina/api/README.md). Put the options before the command:
+
+| Flag | Environment | Default | Purpose |
+| --- | --- | --- | --- |
+| `--marina-url` | `MARINA_URL` | `http://localhost:8090` | Marina base URL |
+| `--marina-token-file` | `MARINA_TOKEN_FILE` | none | Protected file containing a Kubernetes token |
+| `--marina-ca-file` | `MARINA_CA_FILE` | none | Extra CA bundle that signs Marina's certificate |
+| `-n`, `--namespace` | `MARINA_NAMESPACE` | `default` | Namespace of the project |
+| `--timeout` | none | `10s` | Request deadline |
+| `--json` | none | off | Print the full API objects |
+
+The CLI sends the token as `Authorization: Bearer`; Marina checks it with TokenReview and RBAC. Use a service account or user token, for example from `kubectl create token` for a service account bound to the `marina-factory` Role. The token file follows the same rules as Deck's: a regular file readable only by its owner (mode `0600` on Unix). `MARINA_TOKEN` is a fallback when no file is set. Marina requires HTTPS outside loopback, and the CLI never follows redirects.
+
+```bash
+export MARINA_URL=https://marina.example:8090
+export MARINA_CA_FILE=/private/path/marina-ca.pem
+export MARINA_NAMESPACE=factory-default
+(umask 077 && kubectl -n factory-default create token factory-cli > /private/path/marina-token)
+export MARINA_TOKEN_FILE=/private/path/marina-token
+./bin/platformctl capabilities
+```
+
+Create a Run. The name is the idempotency key: running the same command again returns the existing Run, and a different spec under the same name fails with Marina's `AlreadyExists` message. Each `--context NAME=PATH` sends a local file as a data document with its SHA-256 digest.
+
+```bash
+./bin/platformctl runs create task-0042 \
+  --project acceptance --workload land-on-main \
+  --title "Reject an empty range" \
+  --criteria "A unit test covers min > max and passes." \
+  --minutes 60 --tokens 200000 --attempts 7 \
+  --context "Project goals=docs/goals.md"
+```
+
+Inspect and steer it:
+
+```bash
+./bin/platformctl runs list
+./bin/platformctl runs get task-0042
+./bin/platformctl runs events task-0042 --follow
+./bin/platformctl runs cancel task-0042
+```
+
+`runs events --follow` streams events and stops on Ctrl-C or when the Run is `Succeeded`, `Blocked`, `Failed` or `Cancelled`. `runs cancel NAME` without `--reason` goes to Marina; with `--reason` it remains Deck's operator command.
+
+Ask one agent turn and read the reply. The thread and message IDs come from the Turn name, so a retry sends the same spec. The budget defaults to 15 minutes and 40000 tokens.
+
+```bash
+./bin/platformctl turns create ask-1 --project acceptance --workload chat \
+  --message "Which file defines isStrictlyWithinRange?"
+./bin/platformctl turns get ask-1
+```
+
+Answer the decisions Marina needs:
+
+```bash
+./bin/platformctl decisions list
+./bin/platformctl decisions answer task-0042-plan-1 approve
+```
+
+API errors show Marina's Status message and reason and exit with code 1. Usage errors exit with code 2.
+
 ## Configuration
 
-The CLI reads these options before the command:
+For Deck, the CLI reads these options before the command:
 
 | Flag | Environment | Default | Purpose |
 | --- | --- | --- | --- |
 | `--deck-url` | `DECK_URL` | `http://localhost:8080` | Deck base URL |
 | `--token-file` | `DECK_TOKEN_FILE` | none | Protected file containing an operator login token |
-| `--timeout` | — | `10s` | Request deadline |
-| `--json` | — | off | Machine-readable output |
+| `--timeout` | none | `10s` | Request deadline |
+| `--json` | none | off | Machine-readable output |
 
 Use the raw operator token configured by `DECK_OPERATOR_AUTH_FILE`, not Marina's service token. The CLI exchanges it at `POST /api/v1/operator/session`, keeps session cookies only in memory, and echoes the CSRF cookie in `X-CSRF-Token` on mutations. It attempts logout when the command ends; interrupted or unavailable logout leaves a session valid until its server expiry. No credentials or cookies are written to CLI configuration.
 
@@ -104,7 +169,7 @@ Put global options before the command. For example:
 ./bin/platformctl --json --deck-url https://deck.example tasks list
 ```
 
-Run `platformctl help`, `platformctl tasks help`, or `platformctl runs help` for the concise command reference.
+Run `platformctl help`, `platformctl tasks help`, `platformctl runs help`, `platformctl turns help`, or `platformctl decisions help` for the concise command reference.
 
 ## Boundary
 

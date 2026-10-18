@@ -37,7 +37,7 @@ The first always-on cluster location remains an explicit product decision. These
 
 ## Authentication boundary
 
-The base deliberately creates neither an ingress nor authentication Secrets. An environment overlay that exposes Deck must mount the selected operator-authentication policy as a read-only Secret, set `DECK_OPERATOR_AUTH_FILE` to that path, retain secure cookies, and terminate authenticated TLS before Deck. Mount Marina's separate service-authorization policy and set `DECK_SERVICE_AUTH_FILE` only when the matching encrypted service transport is also configured. Never reuse either credential across the human and service boundaries.
+The base deliberately creates neither an ingress nor authentication Secrets. An environment overlay that exposes Deck must mount the selected operator-authentication policy as a read-only Secret, set `DECK_OPERATOR_AUTH_FILE` to that path, retain secure cookies, and terminate authenticated TLS before Deck. Deck calls Marina with its own Kubernetes service account token (`DECK_MARINA_TOKEN_FILE`, the projected token by default) over TLS (`DECK_MARINA_CA_FILE`); Marina authorizes it with RBAC and never calls Deck. Never reuse the operator credential for Marina.
 
 For trusted diagnostics before an authenticated ingress exists, use local port forwarding rather than publishing the local operator surface:
 

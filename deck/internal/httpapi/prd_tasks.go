@@ -8,7 +8,7 @@ import (
 
 func (s *Server) prdOperatorMutation(w http.ResponseWriter, r *http.Request) (store.Mutation, bool) {
 	if r.Header.Get("Authorization") != "" {
-		s.writeServiceAuthError(w, ErrServiceForbidden)
+		s.writeAPIError(w, http.StatusForbidden, errorCodeForbidden, "an operator session is required", false)
 		return store.Mutation{}, false
 	}
 	if len(r.Header.Values("Idempotency-Key")) != 1 {

@@ -1,51 +1,39 @@
 openapi: 3.1.0
 info:
-  title: Deck Agent API
+  title: Deck operator API
   version: 1.0.0
   description: |-
-    Work-control API for creating and inspecting work, claiming tasks, submitting
-    plans, requesting human decisions, reporting progress, and attaching evidence.
+    The browser and operator API of Deck: projects, chat threads, PRDs, backlog,
+    acceptance and the mirrored state of work that Marina executes. Deck is a
+    client of Marina's platform API (marina/api/openapi.yaml, decision 0033):
+    Deck submits Runs and Turns and mirrors their status, decisions, events and
+    evidence. Marina never calls Deck, so this API has no executor routes.
 
-    Protocol conventions for major version 1:
+    Conventions for major version 1:
 
-    - `/api/v1` is the transport major version. Additive fields and capability
-      identifiers do not change that version; incompatible semantics require `/api/v2`.
+    - `/api/v1` is the transport major version; incompatible semantics require `/api/v2`.
     - Fields named `*_at`, `now`, and `server_time` are UTC Unix timestamps in
-      milliseconds. Durations explicitly named `*_seconds` are integer seconds.
+      milliseconds.
     - Clients may send `X-Request-ID`. Deck echoes an accepted value or creates
       one, returns it in every response, and includes it in structured API errors.
-    - Claim and run-mutation operations accept `Idempotency-Key`. A supplied key
-      is required and scoped to project, caller identity, and operation; an exact replay returns
-      the original successful result, while reuse with different input is a conflict.
-      Deck generates a one-shot key when legacy clients omit the header, but only
-      a caller-supplied stable key makes a lost response safely replayable.
+    - Operations that declare `Idempotency-Key` require it; an exact replay returns
+      the original result, while reuse with different input is a conflict.
     - API errors have stable `code`, `message`, `retryable`, and `request_id` fields.
       The `error` string remains a compatibility alias for `message` in version 1.
-    - Operations that advertise pagination use a bounded `limit`, an opaque
-      `cursor`, and an object containing `items` and optional `next_cursor`.
-      Clients must not interpret cursor contents. Existing array responses are
-      unpaginated unless their operation advertises a paginated capability.
-    - Capability identifiers are additive. Clients must require only capabilities
-      needed for the behavior they are about to enable.
-    - Service operations with `x-capability` use an opaque Bearer credential when Deck
-      service authentication is configured. The credential resolves to one stable
-      service identity with explicit project and capability grants. Bearer tokens
-      must travel only over a protected transport and are never accepted in URLs.
-      Operator operations instead require an operator session, plus CSRF protection
-      for mutations; their security scheme is declared on each operation.
+    - Paginated operations use a bounded `limit`, an opaque `cursor`, and an
+      object containing `items` and optional `next_cursor`.
+    - Operations require an operator session when operator authentication is
+      configured, plus CSRF protection for mutations.
 servers:
   - url: http://localhost:8080/api/v1
     description: Local Deck
 tags:
-  - name: Provider
   - name: Workspace
   - name: Tasks
   - name: Agents
   - name: Runs
   - name: Decisions
-  - name: Events
   - name: Channels
-  - name: Operations
   - name: Context
   - name: Workloads
 
@@ -133,7 +121,7 @@ paths:
       summary: Set same-project prerequisites on a current Backlog draft
       description: >-
         Requires CSRF and current version. Rejects self references, cycles and
-        cross-project dependencies. Ready discovery and direct claim both wait for
+        cross-project dependencies. Deck submits a Ready task to Marina only after
         accepted prerequisites with current evidence. Code prerequisites additionally
         need source_available confirmation. Existing active run inputs are unchanged.
       parameters:
@@ -353,6 +341,22 @@ paths:
         "404": {description: Task does not exist or has no originating thread}
 
   /operator/tasks/{id}:
+    get:
+      tags: [Tasks]
+      operationId: getOperatorTask
+      summary: Inspect a task with its runs, plans, decisions, evidence and timeline
+      description: Runs, plans, decisions and evidence of Marina-executed work are mirrored from Marina's platform API.
+      security: [{operatorSession: []}]
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: Task detail
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/TaskDetail"}
+        "401": {description: Operator authentication required}
+        "404": {description: Task not found}
     delete:
       tags: [Tasks]
       operationId: deleteDraftTask
@@ -377,12 +381,75 @@ paths:
         "404": {description: Task not found, including a previously deleted draft}
         "409": {description: Stale version or task cannot be deleted}
         "422": {description: Invalid request}
+  /operator/decisions/{id}/answer:
+    post:
+      tags: [Decisions]
+      operationId: answerOperatorDecision
+      summary: Answer a plan approval or run question
+      description: For Marina-executed work Deck first sends the answer to Marina's Decision with a stable Idempotency-Key and records it only after Marina accepts it. Marina's refusal is returned as 409 or 422 with Marina's message.
+      security: [{operatorSession: []}]
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [answer]
+              properties:
+                answer: {type: string, minLength: 1}
+      responses:
+        "200":
+          description: Answered decision
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Decision"}
+        "401": {description: Operator authentication required}
+        "409": {description: Already answered, expired, or refused by Marina}
+        "422": {description: Not one of the options}
+        "502": {description: Marina unavailable}
+        "503": {description: Marina is not configured}
+  /operator/runs/{id}/commands:
+    post:
+      tags: [Runs]
+      operationId: createOperatorCommand
+      summary: Cancel a run
+      description: Marina supports only cancel. Deck sends the cancel to Marina, then records one pending command that completes when Marina reports the run Cancelled. Repeating a cancel returns the pending command. Other command types are rejected with 409.
+      security: [{operatorSession: []}]
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, reason]
+              properties:
+                type: {type: string, enum: [cancel]}
+                reason: {type: string, minLength: 1}
+      responses:
+        "200":
+          description: The cancel already requested
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Command"}
+        "201":
+          description: Cancel sent to Marina and recorded
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Command"}
+        "401": {description: Operator authentication required}
+        "409": {description: Unsupported command, run not executed by Marina, or refused by Marina}
+        "502": {description: Marina unavailable}
+        "503": {description: Marina is not configured}
   /operator/tasks/{id}/archive:
     put:
       tags: [Tasks]
       operationId: setTaskArchived
       summary: Archive or restore inactive work without changing its outcome
-      description: Requires the current task version and no active run. Ready work must first return to backlog. Archive retains task/run identities, PR evidence and history; archived tasks cannot be edited, moved or claimed until restored. Operator bootstrap and task inspection retain archived records. Restoring does not authorize execution.
+      description: Requires the current task version and no active run. Ready work must first return to backlog. Archive retains task/run identities, PR evidence and history; archived tasks cannot be edited, moved or submitted to Marina until restored. Operator bootstrap and task inspection retain archived records. Restoring does not authorize execution.
       security: [{operatorSession: []}]
       parameters:
         - {name: id, in: path, required: true, schema: {type: string}}
@@ -407,25 +474,10 @@ paths:
         "404": {description: Task not found}
         "409": {description: Stale version or work is ready or active}
         "422": {description: Invalid request}
-  /operator/provider:
-    get:
-      tags: [Provider]
-      operationId: getOperatorProviderInfo
-      summary: Discover protocol capabilities and readiness using an operator session
-      security: [{operatorSession: []}]
-      responses:
-        "200":
-          description: Same safe provider information as the service discovery endpoint
-          content:
-            application/json:
-              schema: {$ref: "#/components/schemas/ProviderInfo"}
-        "401": {$ref: "#/components/responses/AuthenticationRequired"}
-        "503": {$ref: "#/components/responses/ServiceUnavailable"}
   /operator/projects/{project}/workloads:
     get:
       tags: [Workloads]
       operationId: discoverWorkloads
-      x-capability: workload.discover
       description: "Discover safe installed profiles. Expired catalogs return an empty list; metadata grants no authority."
       security: [{operatorSession: []}]
       parameters:
@@ -448,7 +500,6 @@ paths:
     post:
       tags: [Workloads]
       operationId: invokeWorkload
-      x-capability: workload.invoke
       description: "Create one Ready task with explicit authority, budgets and a pinned profile. Idempotency-Key is required: exact retries replay the original task even after profile withdrawal, changed payloads conflict. Inspect task/runs, cancel and download results using existing operator APIs."
       security: [{operatorSession: []}]
       parameters:
@@ -465,31 +516,6 @@ paths:
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Task"}
-        "401":
-          description: Authentication required
-        "403":
-          description: Not authorized
-        "409":
-          description: Profile expired, unavailable, owned by another service or idempotency conflict
-        "422":
-          description: Invalid input or missing authority
-  /projects/{project}/workloads:
-    put:
-      tags: [Workloads]
-      operationId: publishWorkloads
-      x-capability: workload.publish
-      description: "Marina publishes its complete installed catalog with a validity of at most five minutes. Project-scoped service identity owns this projection; an empty list withdraws all profiles. Repeated publication replaces the same projection."
-      security: [{serviceBearer: []}]
-      parameters:
-        - {name: project, in: path, required: true, schema: {type: string}}
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: {$ref: "#/components/schemas/WorkloadCatalog"}
-      responses:
-        "200":
-          description: Successful workload operation
         "401":
           description: Authentication required
         "403":
@@ -520,88 +546,6 @@ paths:
           description: "Revision conflict"
         422:
           description: "Invalid association"
-    put:
-      tags: ["Context"]
-      operationId: "requestRepository"
-      description: "Request association within the installed GitHub origin. Retries of the same expected revision and payload are idempotent. Pending requests preserve the previous confirmed binding."
-      security: [{"operatorSession": []}]
-      parameters: [{"name": "project", "in": "path", "required": true, "schema": {"type": "string"}}]
-      responses:
-        200:
-          description: "Repository association"
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/RepositoryRequest"
-        401:
-          description: "Authentication required"
-        403:
-          description: "Project or capability not authorized"
-        409:
-          description: "Revision conflict"
-        422:
-          description: "Invalid association"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/RepositoryRequestInput"
-  /projects/{project}/repository:
-    get:
-      tags: ["Context"]
-      operationId: "getRepositoryRequest"
-      description: "Read the operator association request for reconciliation."
-      security: [{"serviceBearer": []}]
-      parameters: [{"name": "project", "in": "path", "required": true, "schema": {"type": "string"}}]
-      x-capability: repository.read
-      responses:
-        200:
-          description: "Repository association"
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/RepositoryRequest"
-        401:
-          description: "Authentication required"
-        403:
-          description: "Project or capability not authorized"
-        409:
-          description: "Revision conflict"
-        422:
-          description: "Invalid association"
-  /projects/{project}/repository/result:
-    put:
-      tags: ["Context"]
-      operationId: "recordRepositoryResult"
-      description: "Publish a safe confirmation or rejection from Marina. Exact retries are idempotent; stale request revisions conflict."
-      security: [{"serviceBearer": []}]
-      parameters: [{"name": "project", "in": "path", "required": true, "schema": {"type": "string"}}]
-      x-capability: repository.write
-      responses:
-        200:
-          description: "Repository association"
-          content:
-            application/json:
-              schema:
-                type: "object"
-                properties:
-                  recorded:
-                    type: "boolean"
-        401:
-          description: "Authentication required"
-        403:
-          description: "Project or capability not authorized"
-        409:
-          description: "Revision conflict"
-        422:
-          description: "Invalid association"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/RepositoryResult"
   /operator/projects/{project}/context/sources:
     get:
       tags: ["Context"]
@@ -729,58 +673,6 @@ paths:
           description: "Revision conflict"
         "422":
           description: "Invalid context selection"
-  /projects/{project}/context/sources:
-    get:
-      tags: ["Context"]
-      operationId: "listContextSources"
-      description: "Read project source revisions and revocation state."
-      security: [{"serviceBearer": []}]
-      parameters: [{"name": "project", "in": "path", "required": true, "schema": {"type": "string"}}]
-      responses:
-        "200":
-          description: "Context result"
-          content:
-            "application/json":
-              schema:
-                type: "array"
-                items:
-                  $ref: "#/components/schemas/ContextSource"
-        "401":
-          description: "Authentication required"
-        "403":
-          description: "Project or capability not authorized"
-        "404":
-          description: "Resource not found"
-        "409":
-          description: "Revision conflict"
-        "422":
-          description: "Invalid context selection"
-      x-capability: context.read
-  /runs/{id}/context:
-    get:
-      tags: ["Context"]
-      operationId: "getRunContext"
-      description: "Resolve only the exact revisions frozen at authorization. Messages are immutable data with digests; revocation is returned separately. Context cannot increase authority or budgets."
-      security: [{"serviceBearer": []}]
-      parameters: [{"name": "id", "in": "path", "required": true, "schema": {"type": "string"}}]
-      responses:
-        "200":
-          description: "Context result"
-          content:
-            "application/json":
-              schema:
-                $ref: "#/components/schemas/ResolvedContext"
-        "401":
-          description: "Authentication required"
-        "403":
-          description: "Project or capability not authorized"
-        "404":
-          description: "Resource not found"
-        "409":
-          description: "Revision conflict"
-        "422":
-          description: "Invalid context selection"
-      x-capability: context.read
   /operator/tasks/{id}/artifacts/{digest}:
     get:
       tags: [Tasks]
@@ -802,36 +694,6 @@ paths:
         "404": {description: No registered downloadable artifact}
         "502": {description: Artifact unavailable or failed integrity verification}
         "503": {description: Artifact credentials or trust configuration unavailable}
-  /provider:
-    get:
-      tags: [Provider]
-      operationId: getProviderInfo
-      x-capability: provider.info
-      security:
-        - serviceBearer: []
-      summary: Discover protocol compatibility and readiness
-      description: >-
-        This read-only operation remains available when the canonical store is
-        unavailable so clients can distinguish incompatibility from degraded readiness.
-      parameters:
-        - $ref: "#/components/parameters/RequestId"
-      responses:
-        "200":
-          description: Provider identity, protocol, capabilities, time, and readiness
-          headers:
-            X-Request-ID:
-              $ref: "#/components/headers/RequestId"
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ProviderInfo"
-        "401":
-          $ref: "#/components/responses/AuthenticationRequired"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "503":
-          $ref: "#/components/responses/ServiceUnavailable"
-
   /bootstrap:
     get:
       tags: [Workspace]
@@ -846,34 +708,6 @@ paths:
                 $ref: "#/components/schemas/Bootstrap"
 
   /tasks:
-    get:
-      tags: [Tasks]
-      operationId: listTasks
-      x-capability: work.ready.list
-      security:
-        - serviceBearer: []
-      summary: List all tasks in priority order
-      parameters:
-        - name: status
-          in: query
-          description: Optional exact task-status filter; Marina uses `ready` for work discovery.
-          schema:
-            $ref: "#/components/schemas/TaskStatus"
-      responses:
-        "200":
-          description: Task list
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Task"
-        "401":
-          $ref: "#/components/responses/AuthenticationRequired"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "503":
-          $ref: "#/components/responses/ServiceUnavailable"
     post:
       tags: [Tasks]
       operationId: createTask
@@ -897,28 +731,6 @@ paths:
   /tasks/{taskId}:
     parameters:
       - $ref: "#/components/parameters/TaskId"
-    get:
-      tags: [Tasks]
-      operationId: getTask
-      x-capability: work.inspect
-      security:
-        - serviceBearer: []
-      summary: Get a task with its runs, events, decisions, and artifacts
-      responses:
-        "200":
-          description: Complete task detail
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/TaskDetail"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "401":
-          $ref: "#/components/responses/AuthenticationRequired"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "503":
-          $ref: "#/components/responses/ServiceUnavailable"
     patch:
       tags: [Tasks]
       operationId: updateTask
@@ -971,113 +783,6 @@ paths:
         "422":
           $ref: "#/components/responses/InvalidInput"
 
-  /tasks/{taskId}/claim:
-    parameters:
-      - $ref: "#/components/parameters/TaskId"
-      - $ref: "#/components/parameters/IdempotencyKey"
-    post:
-      tags: [Runs]
-      operationId: claimTask
-      x-capability: work.claim.atomic
-      security:
-        - serviceBearer: []
-      summary: Atomically claim a ready task
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [agent_id, expected_task_version]
-              properties:
-                agent_id:
-                  type: string
-                expected_task_version:
-                  type: integer
-                  minimum: 1
-                lease_seconds:
-                  type: integer
-                  minimum: 1
-                  default: 30
-      responses:
-        "201":
-          description: New planning run with an exclusive lease
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Run"
-        "409":
-          $ref: "#/components/responses/Conflict"
-        "422":
-          $ref: "#/components/responses/InvalidInput"
-        "401":
-          $ref: "#/components/responses/AuthenticationRequired"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "503":
-          $ref: "#/components/responses/ServiceUnavailable"
-
-  /claims/{idempotencyKey}:
-    get:
-      tags: [Runs]
-      operationId: lookupClaim
-      x-capability: work.claim.lookup
-      security:
-        - serviceBearer: []
-      summary: Recover the exact committed claim result by its stable key
-      parameters:
-        - name: idempotencyKey
-          in: path
-          required: true
-          schema: { type: string }
-        - name: project_id
-          in: query
-          required: true
-          schema: { type: string }
-      responses:
-        "200":
-          description: Original claimed run
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Run" }
-        "404": { $ref: "#/components/responses/NotFound" }
-        "401": { $ref: "#/components/responses/AuthenticationRequired" }
-        "403": { $ref: "#/components/responses/Forbidden" }
-
-  /runs:
-    get:
-      tags: [Runs]
-      operationId: listAssignedRuns
-      x-capability: run.assigned.list
-      security:
-        - serviceBearer: []
-      summary: Discover active runs assigned to one stable logical agent
-      parameters:
-        - { name: project_id, in: query, required: true, schema: { type: string } }
-        - { name: agent_id, in: query, required: true, schema: { type: string } }
-        - { name: cursor, in: query, schema: { type: string } }
-        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 100 } }
-      responses:
-        "200":
-          description: Assigned active runs
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [items]
-                properties:
-                  items:
-                    type: array
-                    items:
-                      type: object
-                      required: [run, task]
-                      properties:
-                        run: { $ref: "#/components/schemas/Run" }
-                        task: { $ref: "#/components/schemas/Task" }
-                  next_cursor: { type: string }
-        "401": { $ref: "#/components/responses/AuthenticationRequired" }
-        "403": { $ref: "#/components/responses/Forbidden" }
-
   /agents:
     get:
       tags: [Agents]
@@ -1092,628 +797,6 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Agent"
-    post:
-      tags: [Agents]
-      operationId: registerAgent
-      x-capability: agent.register
-      security:
-        - serviceBearer: []
-      summary: Register or reconnect an agent
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/RegisterAgent"
-      responses:
-        "201":
-          description: Registered agent
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Agent"
-        "401":
-          $ref: "#/components/responses/AuthenticationRequired"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "503":
-          $ref: "#/components/responses/ServiceUnavailable"
-
-  /runs/{runId}/heartbeat:
-    parameters:
-      - $ref: "#/components/parameters/RunId"
-      - $ref: "#/components/parameters/IdempotencyKey"
-    post:
-      tags: [Runs]
-      operationId: heartbeatRun
-      x-capability: run.lease.renew
-      security:
-        - serviceBearer: []
-      summary: Renew an active run lease
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [agent_id, expected_version, fence_token]
-              properties:
-                agent_id:
-                  type: string
-                expected_version: { type: integer, format: int64, minimum: 1 }
-                fence_token: { type: integer, format: int64, minimum: 1 }
-                lease_seconds:
-                  type: integer
-                  minimum: 1
-                  default: 30
-      responses:
-        "204":
-          description: Lease renewed
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "409":
-          $ref: "#/components/responses/Conflict"
-        "422":
-          $ref: "#/components/responses/InvalidInput"
-        "401":
-          $ref: "#/components/responses/AuthenticationRequired"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "503":
-          $ref: "#/components/responses/ServiceUnavailable"
-
-  /runs/{runId}/plan:
-    parameters:
-      - $ref: "#/components/parameters/RunId"
-      - $ref: "#/components/parameters/IdempotencyKey"
-    post:
-      tags: [Runs]
-      operationId: submitPlan
-      x-capability: run.plan.submit
-      security:
-        - serviceBearer: []
-      summary: Submit the plan for an active planning run
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [agent_id, expected_version, fence_token, plan]
-              properties:
-                agent_id: { type: string }
-                expected_version: { type: integer, format: int64, minimum: 1 }
-                fence_token: { type: integer, format: int64, minimum: 1 }
-                plan:
-                  type: string
-                context_digest: { type: string }
-                risk_class: { type: string, enum: [low, medium, high, critical] }
-                verification_strategy: { type: string }
-                expected_side_effects:
-                  type: array
-                  items: { type: string }
-                rollback_approach: { type: string }
-                source_revision:
-                  type: string
-                  description: Optional fixed output revision for the evidence gate. For source-changing work whose output does not exist yet, omit it and bind the base revision in context; the execution provider must verify the current published head before completion.
-                policy_version: { type: string }
-                require_approval:
-                  type: boolean
-                  default: true
-                decision_expires_at: { type: integer, format: int64 }
-                decision_evidence: { type: string }
-                estimated_cost_minor: { type: integer, format: int64, minimum: 0 }
-                currency: { type: string, minLength: 3, maxLength: 3 }
-                waiting_consequence: { type: string }
-                rejecting_consequence: { type: string }
-      responses:
-        "200":
-          description: Optional decision created for human approval
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  plan_revision:
-                    $ref: "#/components/schemas/PlanRevision"
-                  decision:
-                    oneOf:
-                      - $ref: "#/components/schemas/Decision"
-                      - type: "null"
-        "409":
-          $ref: "#/components/responses/Conflict"
-        "422":
-          $ref: "#/components/responses/InvalidInput"
-        "401":
-          $ref: "#/components/responses/AuthenticationRequired"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "503":
-          $ref: "#/components/responses/ServiceUnavailable"
-
-  /runs/{runId}/questions:
-    parameters:
-      - $ref: "#/components/parameters/RunId"
-      - $ref: "#/components/parameters/IdempotencyKey"
-    post:
-      tags: [Decisions]
-      operationId: requestEngineQuestion
-      x-capability: decision.request
-      security:
-        - serviceBearer: []
-      summary: Project one exact pending engine question into the operator ledger
-      description: Requires the current running run guard. It does not grant new execution authority or change the run state.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [agent_id, expected_version, fence_token, operation_id, question, expires_at]
-              properties:
-                agent_id: { type: string }
-                expected_version: { type: integer, format: int64, minimum: 1 }
-                fence_token: { type: integer, format: int64, minimum: 1 }
-                operation_id: { type: string, maxLength: 256 }
-                question: { type: string, maxLength: 2000 }
-                options: { type: array, maxItems: 8, items: { type: string, maxLength: 200 } }
-                expires_at: { type: integer, format: int64 }
-      responses:
-        "200":
-          description: Pending decision bound to the engine operation
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Decision" }
-        "409": { $ref: "#/components/responses/Conflict" }
-        "422": { $ref: "#/components/responses/InvalidInput" }
-        "401": { $ref: "#/components/responses/AuthenticationRequired" }
-        "403": { $ref: "#/components/responses/Forbidden" }
-        "503": { $ref: "#/components/responses/ServiceUnavailable" }
-
-  /runs/{runId}/progress:
-    parameters:
-      - $ref: "#/components/parameters/RunId"
-      - $ref: "#/components/parameters/IdempotencyKey"
-    post:
-      tags: [Runs]
-      operationId: reportProgress
-      x-capability: run.progress.append
-      security:
-        - serviceBearer: []
-      summary: Append a durable progress event
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [agent_id, expected_version, fence_token, message]
-              properties:
-                agent_id: { type: string }
-                expected_version: { type: integer, format: int64, minimum: 1 }
-                fence_token: { type: integer, format: int64, minimum: 1 }
-                message:
-                  type: string
-                payload:
-                  type: object
-                  additionalProperties: true
-      responses:
-        "204":
-          description: Progress recorded
-        "409":
-          $ref: "#/components/responses/Conflict"
-        "422":
-          $ref: "#/components/responses/InvalidInput"
-        "401":
-          $ref: "#/components/responses/AuthenticationRequired"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "503":
-          $ref: "#/components/responses/ServiceUnavailable"
-
-  /runs/{runId}/start:
-    parameters:
-      - $ref: "#/components/parameters/RunId"
-      - $ref: "#/components/parameters/IdempotencyKey"
-    post:
-      tags: [Runs]
-      operationId: startRun
-      x-capability: run.start
-      security:
-        - serviceBearer: []
-      summary: Resume a run after its plan is approved
-      description: >-
-        The control plane verifies that the latest plan decision is answered and
-        matches the recommended approval option before starting execution.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/RunGuard" }
-      responses:
-        "204":
-          description: Approved run started
-        "409":
-          $ref: "#/components/responses/Conflict"
-        "422":
-          $ref: "#/components/responses/InvalidInput"
-        "401":
-          $ref: "#/components/responses/AuthenticationRequired"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "503":
-          $ref: "#/components/responses/ServiceUnavailable"
-
-  /runs/{runId}/verify:
-    parameters:
-      - $ref: "#/components/parameters/RunId"
-      - $ref: "#/components/parameters/IdempotencyKey"
-    post:
-      tags: [Runs]
-      operationId: beginVerification
-      x-capability: run.verify
-      security:
-        - serviceBearer: []
-      summary: Move a running attempt into verification
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/RunGuard" }
-      responses:
-        "204":
-          description: Run is verifying
-        "409":
-          $ref: "#/components/responses/Conflict"
-        "422":
-          $ref: "#/components/responses/InvalidInput"
-        "401":
-          $ref: "#/components/responses/AuthenticationRequired"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "503":
-          $ref: "#/components/responses/ServiceUnavailable"
-
-  /runs/{runId}/complete:
-    parameters:
-      - $ref: "#/components/parameters/RunId"
-      - $ref: "#/components/parameters/IdempotencyKey"
-    post:
-      tags: [Runs]
-      operationId: completeRun
-      x-capability: run.complete
-      x-landing-capability: run.complete.landed
-      security:
-        - serviceBearer: []
-      summary: Complete a verified run with evidence
-      description: >-
-        Without landing, version-1 execution completion retains human result acceptance.
-        Providers advertising run.complete.landed accept the optional exact landing
-        observation with current independent semantic_review, test and landing
-        evidence on that commit. Landing evidence records required CI and the
-        source-provider observation. Deck completes and records source availability
-        atomically without creating a human acceptance record.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [agent_id, expected_version, fence_token, summary, evidence_ids]
-              properties:
-                agent_id: { type: string }
-                expected_version: { type: integer, format: int64, minimum: 1 }
-                fence_token: { type: integer, format: int64, minimum: 1 }
-                summary:
-                  type: string
-                landing:
-                  $ref: "#/components/schemas/LandingObservation"
-                evidence_ids:
-                  type: array
-                  minItems: 1
-                  uniqueItems: true
-                  items: { type: string }
-                  description: IDs of current structured evidence records admitted for the active plan revision.
-      responses:
-        "204":
-          description: Run completed and evidence artifact created
-        "409":
-          $ref: "#/components/responses/Conflict"
-        "422":
-          $ref: "#/components/responses/InvalidInput"
-        "401":
-          $ref: "#/components/responses/AuthenticationRequired"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "503":
-          $ref: "#/components/responses/ServiceUnavailable"
-
-  /runs/{runId}/block:
-    parameters:
-      - $ref: "#/components/parameters/RunId"
-      - $ref: "#/components/parameters/IdempotencyKey"
-    post:
-      tags: [Runs]
-      operationId: blockRun
-      x-capability: run.block
-      security:
-        - serviceBearer: []
-      summary: Stop an active attempt and mark its task blocked
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [agent_id, expected_version, fence_token, reason]
-              properties:
-                agent_id: { type: string }
-                expected_version: { type: integer, format: int64, minimum: 1 }
-                fence_token: { type: integer, format: int64, minimum: 1 }
-                reason:
-                  type: string
-      responses:
-        "204":
-          description: Run and task marked blocked
-        "409":
-          $ref: "#/components/responses/Conflict"
-        "422":
-          $ref: "#/components/responses/InvalidInput"
-        "401":
-          $ref: "#/components/responses/AuthenticationRequired"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "503":
-          $ref: "#/components/responses/ServiceUnavailable"
-
-  /runs/{runId}/commands:
-    parameters:
-      - $ref: "#/components/parameters/RunId"
-    get:
-      tags: [Runs]
-      operationId: listRunCommands
-      x-capability: command.list
-      security:
-        - serviceBearer: []
-      summary: List durable commands after a per-run sequence cursor
-      parameters:
-        - { name: after_sequence, in: query, schema: { type: integer, format: int64, minimum: 0 } }
-        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 100 } }
-      responses:
-        "200":
-          description: Ordered command page
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [items]
-                properties:
-                  items: { type: array, items: { $ref: "#/components/schemas/Command" } }
-        "401": { $ref: "#/components/responses/AuthenticationRequired" }
-        "403": { $ref: "#/components/responses/Forbidden" }
-
-  /runs/{runId}/commands/{commandId}/ack:
-    parameters:
-      - $ref: "#/components/parameters/RunId"
-      - $ref: "#/components/parameters/IdempotencyKey"
-      - { name: commandId, in: path, required: true, schema: { type: string } }
-    post:
-      tags: [Runs]
-      operationId: acknowledgeRunCommand
-      x-capability: command.ack
-      security:
-        - serviceBearer: []
-      summary: Idempotently acknowledge, reject, or complete a durable command
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              allOf:
-                - $ref: "#/components/schemas/RunGuard"
-                - type: object
-                  required: [status, result]
-                  properties:
-                    status: { type: string, enum: [acknowledged, rejected, completed] }
-                    result: { type: string }
-      responses:
-        "204": { description: Command acknowledgement recorded }
-        "409": { $ref: "#/components/responses/Conflict" }
-        "401": { $ref: "#/components/responses/AuthenticationRequired" }
-        "403": { $ref: "#/components/responses/Forbidden" }
-
-  /runs/{runId}/events:
-    parameters:
-      - $ref: "#/components/parameters/RunId"
-      - $ref: "#/components/parameters/IdempotencyKey"
-    post:
-      tags: [Events]
-      operationId: appendRunEvent
-      x-capability: event.append
-      security:
-        - serviceBearer: []
-      summary: Append one ordered producer event with durable deduplication
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              allOf:
-                - $ref: "#/components/schemas/RunGuard"
-                - type: object
-                  required: [producer, producer_event_id, execution_id, sequence, type, message, occurred_at]
-                  properties:
-                    producer: { type: string }
-                    producer_event_id: { type: string }
-                    execution_id: { type: string }
-                    sequence: { type: integer, format: int64, minimum: 1 }
-                    type: { type: string }
-                    message: { type: string }
-                    payload: { type: object, additionalProperties: true }
-                    occurred_at: { type: integer, format: int64 }
-      responses:
-        "204": { description: Event appended or exact replay accepted }
-        "409": { $ref: "#/components/responses/Conflict" }
-        "401": { $ref: "#/components/responses/AuthenticationRequired" }
-        "403": { $ref: "#/components/responses/Forbidden" }
-
-  /runs/{runId}/evidence:
-    parameters:
-      - $ref: "#/components/parameters/RunId"
-      - $ref: "#/components/parameters/IdempotencyKey"
-    post:
-      tags: [Runs]
-      operationId: recordRunEvidence
-      x-capability: evidence.record
-      security:
-        - serviceBearer: []
-      summary: Record immutable source-bound evidence for an exact plan and authority epoch
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              allOf:
-                - $ref: "#/components/schemas/RunGuard"
-                - $ref: "#/components/schemas/EvidenceInput"
-      responses:
-        "201":
-          description: Evidence recorded or exact retry replayed
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Evidence" }
-        "409": { $ref: "#/components/responses/Conflict" }
-        "422": { $ref: "#/components/responses/InvalidInput" }
-        "401": { $ref: "#/components/responses/AuthenticationRequired" }
-        "403": { $ref: "#/components/responses/Forbidden" }
-
-  /runs/{runId}/operations:
-    parameters:
-      - $ref: "#/components/parameters/RunId"
-      - $ref: "#/components/parameters/IdempotencyKey"
-    post:
-      tags: [Operations]
-      operationId: reportOperationalState
-      x-capability: operation.report
-      security:
-        - serviceBearer: []
-      summary: Report provider-neutral rollout, observation, rollback, and policy state
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              allOf:
-                - $ref: "#/components/schemas/RunGuard"
-                - $ref: "#/components/schemas/OperationalStateInput"
-      responses:
-        "200":
-          description: Current operational state
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/OperationalState" }
-        "409": { $ref: "#/components/responses/Conflict" }
-        "422": { $ref: "#/components/responses/InvalidInput" }
-        "401": { $ref: "#/components/responses/AuthenticationRequired" }
-        "403": { $ref: "#/components/responses/Forbidden" }
-
-  /conversation/invocations:
-    get:
-      tags: [Channels]
-      operationId: listConversationInvocations
-      x-capability: conversation.invocation.list
-      security:
-        - serviceBearer: []
-      summary: List explicit agent invocations in durable event order
-      description: >-
-        after_id is an exclusive event cursor. The feed includes invocations of
-        older channel messages, which retain their original message IDs and
-        timestamps. A service identity must hold this capability and the exact
-        project grant. Every item contains the canonical invoked message.
-      parameters:
-        - { name: project_id, in: query, required: true, schema: { type: string } }
-        - { name: after_id, in: query, required: true, schema: { type: integer, format: int64, minimum: 0 } }
-      responses:
-        "200":
-          description: Invocations in ascending event order, at most 100 per page
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [items]
-                properties:
-                  items: { type: array, items: { $ref: "#/components/schemas/ConversationDispatch" } }
-        "401": { $ref: "#/components/responses/AuthenticationRequired" }
-        "403": { $ref: "#/components/responses/Forbidden" }
-        "422": { $ref: "#/components/responses/InvalidInput" }
-
-  /conversation/invocations/{id}/context:
-    get:
-      tags: [Context, Channels]
-      operationId: getConversationContext
-      x-capability: conversation.context.read
-      security: [{serviceBearer: []}]
-      summary: Resolve the project context frozen for an explicit agent invocation
-      description: >-
-        Captures active selected project source revisions and the safe repository
-        binding when the operator invokes the agent. Replays and restarts resolve
-        those exact revisions, with current revocation state. Later edits cannot
-        enter an existing invocation. Thread messages remain immutable data in
-        the channel ledger. Requires conversation.context.read and the invocation's exact
-        project grant. Ordinary messages and invocations predating this feature
-        have no snapshot and return 404. Context cannot expand authority or budgets.
-      parameters:
-        - { name: id, in: path, required: true, schema: { type: string } }
-      responses:
-        "200":
-          description: Frozen invocation context with current revocation state
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/ResolvedContext" }
-        "401": { $ref: "#/components/responses/AuthenticationRequired" }
-        "403": { $ref: "#/components/responses/Forbidden" }
-        "404": { $ref: "#/components/responses/NotFound" }
-        "409": { $ref: "#/components/responses/Conflict" }
-
-  /conversation/questions:
-    post:
-      tags: [Channels]
-      operationId: ensureConversationQuestion
-      x-capability: conversation.question.write
-      security: [{serviceBearer: []}]
-      summary: Record or recover one engine question in its invoked thread
-      description: >-
-        Requires the exact project grant for the invoked message. The pair of
-        invocation_message_id and question_id is replay safe. A changed question
-        conflicts. The response includes the canonical answer, if already given.
-        Optional expires_at binds the question to the turn deadline. New questions
-        are rejected after the invocation's terminal outcome.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [invocation_message_id, agent_id, question_id, text]
-              properties:
-                invocation_message_id: {type: string}
-                agent_id: {type: string}
-                question_id: {type: string}
-                text: {type: string}
-                choices: {type: array, items: {type: string}}
-                expires_at: {type: integer, format: int64, minimum: 1}
-      responses:
-        "200":
-          description: Canonical question and current answer state
-          content:
-            application/json:
-              schema: {$ref: "#/components/schemas/ConversationQuestion"}
-        "401": {$ref: "#/components/responses/AuthenticationRequired"}
-        "403": {$ref: "#/components/responses/Forbidden"}
-        "404": {$ref: "#/components/responses/NotFound"}
-        "409": {$ref: "#/components/responses/Conflict"}
-        "422": {$ref: "#/components/responses/InvalidInput"}
-
   /operator/messages/{message}/prd/tasks/approve:
     post:
       tags: [Channels]
@@ -1841,101 +924,6 @@ paths:
         "409": {$ref: "#/components/responses/Conflict"}
         "422": {$ref: "#/components/responses/InvalidInput"}
 
-  /conversation/outcomes:
-    post:
-      tags: [Channels]
-      operationId: publishConversationOutcome
-      x-capability: conversation.outcome.publish
-      x-prd-capability: conversation.prd.draft
-      x-prd-tasks-capability: conversation.prd.tasks
-      security: [{serviceBearer: []}]
-      summary: Publish one terminal conversation result to its originating thread
-      description: >-
-        Requires the exact project grant for the invoked human message and its
-        selected agent. A completed turn may create one linked Backlog draft;
-        this route does not create Ready work. Ready delegation uses the separate
-        conversation.task.delegate route.
-        A follow-up must name a completed task from the same originating thread;
-        it creates a new task without changing the original. Exact retries return
-        the original message and task; changed payloads conflict. The agent
-        cannot grant itself execution authority through its text output.
-        Providers advertising conversation.prd.draft also accept an immutable PRD draft.
-        A PRD is mutually exclusive with task delegation and grants no execution authority.
-        Providers advertising conversation.prd.tasks also accept prd_tasks proposals, mutually exclusive with PRD drafts and delegation. The exact source must already have landed in this thread.
-        Deck binds it to the invocation repository; an operator approves its exact digest separately.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [invocation_message_id, agent_id, status, body, result_digest]
-              properties:
-                invocation_message_id: {type: string}
-                agent_id: {type: string}
-                status: {type: string, enum: [completed, blocked]}
-                body: {type: string, minLength: 1, maxLength: 8192}
-                result_digest: {type: string}
-                task: {$ref: "#/components/schemas/CreateTask"}
-                prd: {$ref: "#/components/schemas/PRDDraft"}
-                prd_tasks: {$ref: "#/components/schemas/PRDTaskProposal"}
-                followup_task_id: {type: string}
-      responses:
-        "200":
-          description: Canonical published outcome
-          content:
-            application/json:
-              schema: {$ref: "#/components/schemas/ConversationOutcome"}
-        "401": {$ref: "#/components/responses/AuthenticationRequired"}
-        "403": {$ref: "#/components/responses/Forbidden"}
-        "404": {$ref: "#/components/responses/NotFound"}
-        "409": {$ref: "#/components/responses/Conflict"}
-        "422": {$ref: "#/components/responses/InvalidInput"}
-
-  /conversation/delegations:
-    post:
-      tags: [Channels]
-      operationId: publishReadyConversationDelegation
-      x-capability: conversation.task.delegate
-      security: [{serviceBearer: []}]
-      summary: Publish one explicit delegation as a Ready repository task
-      description: >-
-        Requires a project-scoped service grant, the exact invoked human message,
-        the current installed repository/v1 or repository/v2 profile digest, its
-        bounded budget, acceptance criteria and the matching PR or fast-forward
-        authority. Creates one task
-        and one linked thread reply atomically. Exact retries return the same
-        identities; changed requests conflict. A follow-up can target only a
-        completed task originating in the same thread.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [invocation_message_id, agent_id, status, body, result_digest, profile_id, profile_digest, task]
-              properties:
-                invocation_message_id: {type: string}
-                agent_id: {type: string}
-                status: {type: string, enum: [completed]}
-                body: {type: string, minLength: 1, maxLength: 8192}
-                result_digest: {type: string}
-                profile_id: {type: string, enum: [repository/v1, repository/v2]}
-                profile_digest: {type: string}
-                task: {$ref: "#/components/schemas/CreateTask"}
-                followup_task_id: {type: string}
-      responses:
-        "200":
-          description: Canonical published task and thread reply
-          content:
-            application/json:
-              schema: {$ref: "#/components/schemas/ConversationOutcome"}
-        "401": {$ref: "#/components/responses/AuthenticationRequired"}
-        "403": {$ref: "#/components/responses/Forbidden"}
-        "404": {$ref: "#/components/responses/NotFound"}
-        "409": {$ref: "#/components/responses/Conflict"}
-        "422": {$ref: "#/components/responses/InvalidInput"}
-
   /operator/threads/{id}/questions:
     get:
       tags: [Channels]
@@ -1993,276 +981,12 @@ paths:
         "409": {$ref: "#/components/responses/Conflict"}
         "422": {$ref: "#/components/responses/InvalidInput"}
 
-  /channels:
-    get:
-      tags: [Channels]
-      operationId: listProjectChannels
-      x-capability: channel.list
-      security:
-        - serviceBearer: []
-      summary: List agent-native conversation channels without treating chat as work authority
-      parameters:
-        - { name: project_id, in: query, required: true, schema: { type: string } }
-      responses:
-        "200":
-          description: Project channels
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [items]
-                properties:
-                  items:
-                    type: array
-                    items: { $ref: "#/components/schemas/Channel" }
-        "401": { $ref: "#/components/responses/AuthenticationRequired" }
-        "403": { $ref: "#/components/responses/Forbidden" }
-
-  /channels/{channelId}/messages:
-    parameters:
-      - name: channelId
-        in: path
-        required: true
-        schema: { type: string }
-    get:
-      tags: [Channels]
-      operationId: listChannelMessages
-      x-capability: channel.message.list
-      security:
-        - serviceBearer: []
-      summary: List channel messages in append order with canonical references
-      description: >-
-        Pages follow durable append order, including equal timestamps. Pass next_cursor
-        as cursor to continue. Cursors are opaque, exclusive, and channel-scoped.
-        The operator endpoint uses the same pagination. Appends emit a durable
-        channel.message.created event with project_id, channel_id, and message_id.
-      parameters:
-        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 100 } }
-        - { name: cursor, in: query, schema: { type: string } }
-      responses:
-        "200":
-          description: Channel messages
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [items]
-                properties:
-                  items:
-                    type: array
-                    items: { $ref: "#/components/schemas/ChannelMessage" }
-                  next_cursor: { type: string }
-        "422": { $ref: "#/components/responses/InvalidInput" }
-        "401": { $ref: "#/components/responses/AuthenticationRequired" }
-        "403": { $ref: "#/components/responses/Forbidden" }
-    post:
-      tags: [Channels]
-      operationId: appendChannelMessage
-      x-capability: channel.message.append
-      security:
-        - serviceBearer: []
-      summary: Append a message which carries references but no ambient execution authority
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [body]
-              properties:
-                body: { type: string }
-                thread_id: {type: string, description: Optional existing thread in this channel. Applies to the operator endpoint too.}
-                references: { $ref: "#/components/schemas/CanonicalReferences" }
-      responses:
-        "201":
-          description: Message appended
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/ChannelMessage" }
-        "422": { $ref: "#/components/responses/InvalidInput" }
-        "401": { $ref: "#/components/responses/AuthenticationRequired" }
-        "403": { $ref: "#/components/responses/Forbidden" }
-
-  /decisions:
-    get:
-      tags: [Decisions]
-      operationId: listDecisions
-      x-capability: decision.list
-      security:
-        - serviceBearer: []
-      summary: List human decision requests
-      parameters:
-        - name: status
-          in: query
-          schema:
-            type: string
-            enum: [pending, answered, cancelled]
-      responses:
-        "200":
-          description: Decision list
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Decision"
-        "401":
-          $ref: "#/components/responses/AuthenticationRequired"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "503":
-          $ref: "#/components/responses/ServiceUnavailable"
-
-  /decisions/{decisionId}/answer:
-    parameters:
-      - name: decisionId
-        in: path
-        required: true
-        schema:
-          type: string
-    post:
-      tags: [Decisions]
-      operationId: answerDecision
-      x-capability: decision.answer
-      security:
-        - serviceBearer: []
-      summary: Record the human answer to a pending decision
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [answer]
-              properties:
-                answer:
-                  type: string
-      responses:
-        "200":
-          description: Answered decision
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Decision"
-        "409":
-          $ref: "#/components/responses/Conflict"
-        "401":
-          $ref: "#/components/responses/AuthenticationRequired"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "503":
-          $ref: "#/components/responses/ServiceUnavailable"
-
-  /decisions/{decisionId}:
-    parameters:
-      - name: decisionId
-        in: path
-        required: true
-        schema:
-          type: string
-    get:
-      tags: [Decisions]
-      operationId: getDecision
-      x-capability: decision.inspect
-      security:
-        - serviceBearer: []
-      summary: Get one decision so an agent can wait for its answer
-      responses:
-        "200":
-          description: Decision state
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Decision"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "401":
-          $ref: "#/components/responses/AuthenticationRequired"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "503":
-          $ref: "#/components/responses/ServiceUnavailable"
-
-  /events:
-    get:
-      tags: [Events]
-      operationId: listEvents
-      x-capability: event.list
-      security:
-        - serviceBearer: []
-      summary: List durable workspace events
-      parameters:
-        - name: limit
-          in: query
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 500
-            default: 100
-        - name: after_id
-          in: query
-          description: Return events newer than this event ID in ascending order
-          schema:
-            type: integer
-            format: int64
-      responses:
-        "200":
-          description: Event list
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Event"
-        "401":
-          $ref: "#/components/responses/AuthenticationRequired"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "503":
-          $ref: "#/components/responses/ServiceUnavailable"
-
-  /events/stream:
-    get:
-      tags: [Events]
-      operationId: streamEvents
-      x-capability: event.stream
-      security:
-        - serviceBearer: []
-      summary: Subscribe to live durable events and agent heartbeats
-      parameters:
-        - name: Last-Event-ID
-          in: header
-          schema:
-            type: integer
-            format: int64
-      responses:
-        "200":
-          description: Server-Sent Event stream with JSON-encoded Event values
-          content:
-            text/event-stream:
-              schema:
-                type: string
-        "401":
-          $ref: "#/components/responses/AuthenticationRequired"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "503":
-          $ref: "#/components/responses/ServiceUnavailable"
-
 components:
   securitySchemes:
     operatorSession:
       type: apiKey
       in: cookie
       name: deck_operator_session
-    serviceBearer:
-      type: http
-      scheme: bearer
-      bearerFormat: opaque
-      description: >-
-        High-entropy service credential resolved to a stable identity with
-        explicit project and capability grants. Deck stores only SHA-256
-        fingerprints; Marina loads the token value from a file reference.
 
   headers:
     RequestId:
@@ -2276,20 +1000,12 @@ components:
         type: string
 
   parameters:
-    RequestId:
-      name: X-Request-ID
-      in: header
-      required: false
-      description: Optional caller correlation ID containing letters, digits, `-`, `_`, `.`, or `:`.
-      schema:
-        type: string
-        maxLength: 128
     IdempotencyKey:
       name: Idempotency-Key
       in: header
       required: true
       description: >-
-        Stable caller-generated key for replaying one claim or run mutation.
+        Stable caller-generated key for replaying one operator mutation.
         Keys are scoped to the canonical project, caller identity, and operation.
       schema:
         type: string
@@ -2302,13 +1018,6 @@ components:
       required: true
       schema:
         type: string
-    RunId:
-      name: runId
-      in: path
-      required: true
-      schema:
-        type: string
-
   responses:
     AuthenticationRequired:
       description: A valid Deck service credential is required
@@ -2323,15 +1032,6 @@ components:
             $ref: "#/components/schemas/Error"
     Forbidden:
       description: The service identity lacks the required project or capability grant
-      headers:
-        X-Request-ID:
-          $ref: "#/components/headers/RequestId"
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/Error"
-    ServiceUnavailable:
-      description: The service authorization policy cannot be loaded safely
       headers:
         X-Request-ID:
           $ref: "#/components/headers/RequestId"
@@ -2511,22 +1211,6 @@ components:
           format: "uri"
         base_branch:
           type: "string"
-    RepositoryRequestInput:
-      type: "object"
-      required: ["expected_revision", "expected_binding_version", "repository", "base_branch"]
-      properties:
-        expected_revision:
-          type: "integer"
-          minimum: 0
-        expected_binding_version:
-          type: "integer"
-          minimum: 0
-        repository:
-          type: "string"
-          pattern: "^[A-Za-z0-9_-][A-Za-z0-9_.-]{0,99}/[A-Za-z0-9_-][A-Za-z0-9_.-]{0,99}$"
-        base_branch:
-          type: "string"
-          maxLength: 200
     RepositoryRequest:
       example:
         $ref: ./fixtures/v1/repository.json
@@ -2552,21 +1236,6 @@ components:
           enum: ["", "pending", "connected", "rejected"]
         reason:
           type: "string"
-        binding:
-          $ref: "#/components/schemas/RepositoryBinding"
-    RepositoryResult:
-      type: "object"
-      required: ["request_revision", "status"]
-      properties:
-        request_revision:
-          type: "integer"
-          minimum: 1
-        status:
-          type: "string"
-          enum: ["connected", "rejected"]
-        reason:
-          type: "string"
-          maxLength: 500
         binding:
           $ref: "#/components/schemas/RepositoryBinding"
     ContextSourceInput:
@@ -2734,51 +1403,6 @@ components:
           type: "array"
           items:
             $ref: "#/components/schemas/ContextMessage"
-    RunGuard:
-      type: object
-      required: [agent_id, expected_version, fence_token]
-      properties:
-        agent_id: { type: string }
-        expected_version: { type: integer, format: int64, minimum: 1 }
-        fence_token: { type: integer, format: int64, minimum: 1 }
-
-    ProviderInfo:
-      type: object
-      x-fixture: ./fixtures/v1/provider-info.json
-      required: [provider, protocol_version, capabilities, server_time, ready, readiness]
-      properties:
-        provider:
-          type: string
-          const: deck
-        protocol_version:
-          type: string
-          const: "1.0"
-          description: Work-control semantic version implemented behind `/api/v1`.
-        capabilities:
-          type: array
-          uniqueItems: true
-          items:
-            type: string
-          example:
-            - provider.info
-            - work.ready.list
-            - work.inspect
-            - work.claim.atomic
-            - run.lease.renew
-        server_time:
-          type: integer
-          format: int64
-          description: Current UTC Unix time in milliseconds.
-        ready:
-          type: boolean
-          description: Whether the provider can currently serve canonical work-control state.
-        readiness:
-          type: object
-          additionalProperties:
-            type: string
-          example:
-            store: available
-
     TaskStatus:
       type: string
       enum:
@@ -3054,29 +1678,6 @@ components:
           type: integer
           format: int64
 
-    RegisterAgent:
-      type: object
-      required: [id, installation_id, name]
-      properties:
-        id:
-          type: string
-          description: Stable agent ID; generated when omitted
-        installation_id:
-          type: string
-          description: Stable Marina installation identity distinct from runtime attempts
-        name:
-          type: string
-        kind:
-          type: string
-          default: external
-        status:
-          type: string
-          default: idle
-        capabilities:
-          type: array
-          items:
-            type: string
-
     Run:
       type: object
       x-fixture: ./fixtures/v1/run.json
@@ -3215,30 +1816,6 @@ components:
           type: integer
           format: int64
 
-    Lease:
-      type: object
-      x-fixture: ./fixtures/v1/lease.json
-      description: Version-1 run lease authority record used by every guarded mutation.
-      required: [run_id, agent_id, version, fence_token, expires_at, renewed_at]
-      properties:
-        run_id:
-          type: string
-        agent_id:
-          type: string
-        version:
-          type: integer
-          minimum: 1
-        fence_token:
-          type: integer
-          format: int64
-          minimum: 1
-        expires_at:
-          type: integer
-          format: int64
-        renewed_at:
-          type: integer
-          format: int64
-
     PlanRevision:
       type: object
       x-implementation-status: implemented
@@ -3327,79 +1904,6 @@ components:
           type: integer
           format: int64
 
-    EventEnvelope:
-      type: object
-      x-implementation-status: planned
-      x-fixture: ./fixtures/v1/event.json
-      description: >-
-        Target normalized cross-product event. The current Event schema remains
-        the prototype workspace timeline representation.
-      required:
-        - id
-        - sequence
-        - type
-        - schema_version
-        - producer
-        - project_id
-        - task_id
-        - run_id
-        - execution_id
-        - correlation_id
-        - causation_id
-        - occurred_at
-        - ingested_at
-        - severity
-        - task_version
-        - source_revision
-        - policy_version
-        - payload
-      properties:
-        id:
-          type: string
-        sequence:
-          type: integer
-          format: int64
-          minimum: 1
-        type:
-          type: string
-        schema_version:
-          type: string
-        producer:
-          type: string
-        project_id:
-          type: string
-        task_id:
-          type: string
-        run_id:
-          type: string
-        execution_id:
-          type: string
-        attempt_id:
-          type: string
-        correlation_id:
-          type: string
-        causation_id:
-          type: string
-        occurred_at:
-          type: integer
-          format: int64
-        ingested_at:
-          type: integer
-          format: int64
-        severity:
-          type: string
-          enum: [debug, info, warning, error]
-        task_version:
-          type: integer
-          minimum: 1
-        source_revision:
-          type: string
-        policy_version:
-          type: string
-        payload:
-          type: object
-          additionalProperties: true
-
     Budget:
       type: object
       x-implementation-status: implemented
@@ -3442,8 +1946,7 @@ components:
             tasks with source.* or pull_request.* permissions into Ready requires
             acceptance criteria, max_attempts >= 2, and source.read, source.write,
             plus pull_request.create or source.fast_forward. Incomplete tasks can
-            remain in Backlog. Consumers
-            independently enforce their workflow prerequisites after claiming.
+            remain in Backlog. Marina enforces its own workflow prerequisites.
           type: array
           uniqueItems: true
           items:
@@ -3520,41 +2023,6 @@ components:
           type: integer
           format: int64
 
-    EvidenceInput:
-      type: object
-      required:
-        - id
-        - plan_revision_id
-        - type
-        - producer
-        - verifier
-        - subject_digest
-        - source_revision
-        - command
-        - outcome
-        - provenance_uri
-        - provenance_digest
-        - observed_at
-        - artifact_uri
-        - artifact_digest
-      properties:
-        id: { type: string }
-        plan_revision_id: { type: string }
-        type: { type: string }
-        producer: { type: string }
-        verifier: { type: string }
-        subject_digest: { type: string }
-        source_revision: { type: string }
-        command: { type: string }
-        outcome: { type: string, enum: [passed, failed] }
-        provenance_uri: { type: string }
-        provenance_digest: { type: string }
-        observed_at: { type: integer, format: int64 }
-        expires_at: { type: integer, format: int64 }
-        artifact_uri: { type: string }
-        artifact_digest: { type: string }
-        policy_version: { type: string }
-
     CanonicalReferences:
       type: object
       properties:
@@ -3587,15 +2055,6 @@ components:
         selected_agent_id: {type: string, description: Configured conversation agent selected by the first invocation}
         created_at: {type: integer, format: int64}
 
-    ConversationDispatch:
-      type: object
-      x-canonical-fixture: ./fixtures/v1/conversation-dispatch.json
-      required: [event_id, invoked_at, message]
-      properties:
-        event_id: {type: integer, format: int64, minimum: 1}
-        invoked_at: {type: integer, format: int64}
-        message: { $ref: "#/components/schemas/ChannelMessage" }
-
     ConversationQuestion:
       type: object
       x-canonical-fixture: ./fixtures/v1/conversation-question.json
@@ -3620,18 +2079,6 @@ components:
         answered_at: {type: integer, format: int64}
         expires_at: {type: integer, format: int64, description: Optional immutable turn deadline in Unix milliseconds.}
         closed_at: {type: integer, format: int64, description: Terminal outcome time; a pending question with this field cannot be answered.}
-
-    ConversationOutcome:
-      type: object
-      x-canonical-fixture: ./fixtures/v1/conversation-outcome.json
-      required: [invocation_message_id, message_id, status, result_digest]
-      properties:
-        invocation_message_id: {type: string}
-        message_id: {type: string}
-        task_id: {type: string}
-        followup_task_id: {type: string}
-        status: {type: string, enum: [completed, blocked]}
-        result_digest: {type: string}
 
     ChannelMessage:
       x-canonical-fixture: ./fixtures/v1/channel-message.json

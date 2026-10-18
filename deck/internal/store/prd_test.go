@@ -26,14 +26,7 @@ func TestPRDApprovalFreezesDraftAndCreatesOneLandingTaskAcrossRestartAndExport(t
 	if err != nil {
 		t.Fatal(err)
 	}
-	req, err := s.RequestRepository(ctx, "prj_default", domain.RepositoryRequestInput{Repository: "owner/repo", BaseBranch: "main"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = s.RecordRepositoryResult(ctx, "prj_default", domain.RepositoryResult{RequestRevision: req.Revision, Status: "connected", Binding: &domain.RepositoryBinding{Version: 1, Repository: "owner/repo", CloneURL: "https://github.com/owner/repo.git", BaseBranch: "main"}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	bindRepository(t, s, "prj_default", "owner/repo", 1)
 	inv, err := s.InvokeConversation(ctx, domain.ConversationInvocationInput{ChannelID: channel.ID, AgentID: "agt_chat", AuthorID: "operator", RequestID: "draft", Body: "Draft a PRD for saved filters"})
 	if err != nil {
 		t.Fatal(err)
@@ -50,7 +43,7 @@ func TestPRDApprovalFreezesDraftAndCreatesOneLandingTaskAcrossRestartAndExport(t
 	if err != nil || msg.PRD == nil || msg.PRD.Digest == "" {
 		t.Fatalf("draft missing: %+v %v", msg, err)
 	}
-	profile := domain.WorkloadProfile{ID: "repository/v2", Digest: strings.Repeat("a", 64), Harness: "codex/v1", Authority: []string{"source.read", "source.write", "source.fast_forward"}, MaxTokens: 30000, BudgetMinutes: 30, MinAttempts: 3}
+	profile := domain.WorkloadProfile{ID: "repository/v2", Digest: strings.Repeat("a", 64), Authority: []string{"source.read", "source.write", "source.fast_forward"}, MaxTokens: 30000, BudgetMinutes: 30, MinAttempts: 3}
 	if err = s.PublishWorkloads(ctx, "prj_default", "test", domain.WorkloadCatalog{Profiles: []domain.WorkloadProfile{profile}, ExpiresAt: time.Now().Add(time.Minute).UnixMilli()}); err != nil {
 		t.Fatal(err)
 	}

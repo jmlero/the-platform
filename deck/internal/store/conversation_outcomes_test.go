@@ -18,7 +18,7 @@ func TestConversationOutcomeCreatesOneReadyTaskAndReply(t *testing.T) {
 		t.Fatal(err)
 	}
 	profileDigest := strings.Repeat("a", 64)
-	if err := s.PublishWorkloads(ctx, "prj_default", "test", domain.WorkloadCatalog{ExpiresAt: time.Now().Add(time.Minute).UnixMilli(), Profiles: []domain.WorkloadProfile{{ID: "repository/v1", Digest: profileDigest, Harness: "codex/v1", Authority: []string{"source.read", "source.write", "pull_request.create"}, MaxTokens: 30000, BudgetMinutes: 40, MinAttempts: 2}}}); err != nil {
+	if err := s.PublishWorkloads(ctx, "prj_default", "test", domain.WorkloadCatalog{ExpiresAt: time.Now().Add(time.Minute).UnixMilli(), Profiles: []domain.WorkloadProfile{{ID: "repository/v1", Digest: profileDigest, Authority: []string{"source.read", "source.write", "pull_request.create"}, MaxTokens: 30000, BudgetMinutes: 40, MinAttempts: 2}}}); err != nil {
 		t.Fatal(err)
 	}
 	defer s.Close()
@@ -87,7 +87,7 @@ func TestConversationOutcomeAdmitsFastForwardProfile(t *testing.T) {
 	defer s.Close()
 	digest := strings.Repeat("b", 64)
 	authority := []string{"source.read", "source.write", "source.fast_forward"}
-	if err := s.PublishWorkloads(ctx, "prj_default", "test", domain.WorkloadCatalog{ExpiresAt: time.Now().Add(time.Minute).UnixMilli(), Profiles: []domain.WorkloadProfile{{ID: "repository/v2", Digest: digest, Harness: "codex/v1", Authority: authority, MaxTokens: 30000, BudgetMinutes: 40, MinAttempts: 2}}}); err != nil {
+	if err := s.PublishWorkloads(ctx, "prj_default", "test", domain.WorkloadCatalog{ExpiresAt: time.Now().Add(time.Minute).UnixMilli(), Profiles: []domain.WorkloadProfile{{ID: "repository/v2", Digest: digest, Authority: authority, MaxTokens: 30000, BudgetMinutes: 40, MinAttempts: 2}}}); err != nil {
 		t.Fatal(err)
 	}
 	channel, err := s.CreateChannel(ctx, "prj_default", "landing")
@@ -120,7 +120,7 @@ func TestConversationOutcomeAdmitsIndependentReviewBudget(t *testing.T) {
 	defer s.Close()
 	digest := strings.Repeat("b", 64)
 	authority := []string{"source.read", "source.write", "source.fast_forward"}
-	if err := s.PublishWorkloads(ctx, "prj_default", "test", domain.WorkloadCatalog{ExpiresAt: time.Now().Add(time.Minute).UnixMilli(), Profiles: []domain.WorkloadProfile{{ID: "repository/v2", Digest: digest, Harness: "codex/v1", Authority: authority, MaxTokens: 30000, BudgetMinutes: 40, MinAttempts: 3}}}); err != nil {
+	if err := s.PublishWorkloads(ctx, "prj_default", "test", domain.WorkloadCatalog{ExpiresAt: time.Now().Add(time.Minute).UnixMilli(), Profiles: []domain.WorkloadProfile{{ID: "repository/v2", Digest: digest, Authority: authority, MaxTokens: 30000, BudgetMinutes: 40, MinAttempts: 3}}}); err != nil {
 		t.Fatal(err)
 	}
 	channel, err := s.CreateChannel(ctx, "prj_default", "landing")

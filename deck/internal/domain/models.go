@@ -170,6 +170,8 @@ type PlanRevisionInput struct {
 }
 
 type DecisionRequest struct {
+	// ID names the decision when the executor already named it.
+	ID                   string `json:"-"`
 	Required             bool   `json:"required"`
 	ExpiresAt            *int64 `json:"expires_at,omitempty"`
 	Risk                 string `json:"risk"`

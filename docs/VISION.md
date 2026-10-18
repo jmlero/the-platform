@@ -26,6 +26,13 @@ cost, time and results. Marina's governance (budgets, limits, evidence) is the
 glue that stays the same whatever fills the slots
 ([decision 0032](decisions/0032-agent-and-application-platform.md)).
 
+Marina is a product on its own, like an extension of Kubernetes: factories,
+UIs and CLIs use it through one API, over HTTP/JSON or as Kubernetes resources.
+It enforces the platform's invariants (budgets, isolation, idempotency, audit,
+no completion without independent evidence) and leaves every other rule to the
+factory. Deck is one client of Marina
+([decision 0033](decisions/0033-marina-platform-api.md)).
+
 The software factory below is one workload on the platform.
 
 ### Two loops

@@ -1,0 +1,3 @@
+{"apiVersion":"marina.dev/v1","kind":"Run","metadata":{"name":"task-0042","namespace":"factory-default"},
+ "spec":{"project":"acceptance","workload":"land-on-main","title":"Reject an empty range","description":"clamp(min, max) must reject min > max.","acceptanceCriteria":"A unit test covers min > max and passes.","budget":{"timeMinutes":60,"maxTokens":200000,"maxAttempts":7,"maxCostMinor":500,"currency":"USD"},
+  "context":[{"name":"Project goals","kind":"document","trust":"guidance","digest":"sha256:9f2c4b1e0d8a7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d9c8b7a6f5e4d3c2b","content":"Keep the public interface stable","source":{"system":"deck","id":"src_1","revision":2}}]}}

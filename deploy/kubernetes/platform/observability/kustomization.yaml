@@ -1,0 +1,11 @@
+# OpenTelemetry Collector and Jaeger (PLAT-09, PLAT-11 traces).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  - collector.yaml
+  - jaeger.yaml
+  - network-policy.yaml
+labels:
+  - pairs: {app.kubernetes.io/part-of: the-platform}
+    includeSelectors: false

@@ -605,6 +605,10 @@ func (c *Controller) cleanup(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+		// Each project's attempts are cleaned up with its own profile.
+		if e.ProjectID != c.Config.ProjectID {
+			continue
+		}
 		if e.State.Terminal() && !attempt.State.Terminal() {
 			if err = c.stop(ctx, e); err != nil {
 				return err

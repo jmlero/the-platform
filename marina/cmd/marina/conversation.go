@@ -49,6 +49,7 @@ func configureConversation(config flow.Config, journal *sqlite.Store, source wor
 	gateway := conversation.NewGateway(journal, key, config.Model, config.Conversation.Digest(config.Model), config.PolicyVersion, modelClient())
 	gateway.Blobs, gateway.Source = blobs, source
 	gateway.ProjectID = config.ProjectID
+	gateway.MCP = config.Conversation.MCP
 	if config.RepositoryEnabled() {
 		gateway.Repository = func(ctx context.Context, binding workcontrol.RepositoryBinding) (sourcecontrol.RepositoryReader, error) {
 			selected, profile, err := journal.RepositorySnapshot(ctx, config.ProjectID, binding.Version)

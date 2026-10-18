@@ -25,7 +25,7 @@ func TestChannelHistoryAPIContinuesPastPageLimit(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	for _, prefix := range []string{"/api/v1/channels/", "/api/v1/operator/channels/"} {
+	for _, prefix := range []string{"/api/v1/operator/channels/"} {
 		count := 0
 		cursor := ""
 		for {
@@ -82,25 +82,5 @@ func TestRepositoryPromotionExplainsReadinessWithoutCreatingWork(t *testing.T) {
 	response = requestJSON(t, handler, http.MethodPost, "/api/v1/operator/messages/"+message.ID+"/promote", "", input)
 	if response.Code != http.StatusCreated {
 		t.Fatalf("draft not allowed: %s", response.Body.String())
-	}
-}
-
-func TestUnauthenticatedChannelMessageUsesSharedFallbackActor(t *testing.T) {
-	s, handler := newTestStoreAndHandler(t)
-	channel, err := s.CreateChannel(context.Background(), "prj_default", "fallback")
-	if err != nil {
-		t.Fatal(err)
-	}
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/channels/"+channel.ID+"/messages", strings.NewReader(`{"body":"hello"}`)))
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("post message = %d %s", rec.Code, rec.Body)
-	}
-	var message domain.ChannelMessage
-	if err := json.Unmarshal(rec.Body.Bytes(), &message); err != nil {
-		t.Fatal(err)
-	}
-	if message.AuthorType != "agent" || message.AuthorID != fallbackServiceActorID {
-		t.Fatalf("author = %s/%s, want agent/%s", message.AuthorType, message.AuthorID, fallbackServiceActorID)
 	}
 }

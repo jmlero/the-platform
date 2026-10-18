@@ -10,27 +10,25 @@ Last reviewed: 2026-10-17.
 ## Components
 
 ```text
- browser ──> Deck ──────────── HTTP/JSON API v1 ──────────── Marina ──> kagent (chat agent, native Codex)
- (channels,  (steering and          ▲                        (execution
-  chat,       the ledger)           │                         and       ──> Kubernetes (clean verification Jobs)
-  tasks)                        platformctl                   recovery)
-                                (CLI)                            │
-                                                                 ├──> model provider (via Marina's gateway)
-                                                                 └──> Git and CI
+ browser ──> Deck (steering) ──┐
+ platformctl (CLI) ────────────┤  marina.dev/v1          Marina ──> kagent (chat agent, native Codex)
+ kubectl, factories ───────────┴──────────────────────>  (API,   ──> Kubernetes (clean verification Jobs)
+                                  HTTP/JSON or           runs,   ──> model provider (via Marina's gateway)
+                                  Kubernetes resources   recovery) ──> Git and CI
 ```
 
 | Component | Role | Owns |
 | --- | --- | --- |
-| **Deck** (`deck/`) | Where I steer. Web UI with projects, what is happening, and the chat, plus the HTTP API. | Projects, conversations, tasks, budgets, plans, decisions, commands, and the operator-visible record of runs and evidence. Never schedules Pods, clones repositories or calls models. |
-| **Marina** (`marina/`) | Where work runs. Claims authorized tasks from Deck and runs them to a result or a blocker. | Repository binding, credentials, execution policy, immutable context packages, runtime attempts, usage, artifacts, verification, and recovery after restarts. |
-| **platformctl** (`cli/`) | Terminal client for Deck's public API. | Nothing; it is stateless and never calls Marina. |
+| **Deck** (`deck/`) | Where I steer. Web UI with projects, what is happening, and the chat. A client of Marina: creates Runs for Ready tasks and Turns for chat, and mirrors their state. | Projects, conversations, tasks, budgets, dependencies, PRDs and acceptance. Never schedules Pods, clones repositories or calls models. |
+| **Marina** (`marina/`) | The platform. Serves the `marina.dev/v1` API and runs each Run and Turn to a result or a blocker. | The API, run ledger (runs, plans, decisions, evidence, events), repository binding, credentials, execution policy, immutable context packages, runtime attempts, usage, artifacts, verification, and recovery after restarts. |
+| **platformctl** (`cli/`) | Terminal client for Deck's operator API and Marina's platform API. | Nothing; it is stateless. |
 | **kagent** (agent engine) | Runs the chat agent and native Codex for repository work, pinned `v1.0.0-alpha1` ([decision 0017](decisions/0017-kagent-core-engine.md)). Marina creates each attempt's own template and gateway Secret ([decision 0024](decisions/0024-per-attempt-engine-templates.md)). | Engine task history and runtime lifecycle. |
 | **Git, CI, Kubernetes** | External systems. | Their own facts: source revisions, check results, workload state. |
 
 Deck and Marina are separate products: separate Go modules, binaries, SQLite
 databases, identities, images, deployments and migrations. Neither imports the
-other's code or reads the other's database. They meet only through Deck's
-versioned HTTP/JSON API.
+other's code or reads the other's database. They meet only through Marina's
+versioned platform API; Marina calls no client.
 
 ## Target: the platform
 
@@ -59,6 +57,13 @@ this is built yet; the tasks are in the
   is still bound by the live lease, fence and budget.
 - One versioned manifest names the component in each slot; Marina freezes it per
   attempt like a profile. Custom resources are added only where they add value.
+- Marina owns the platform API and execution state; Deck, `platformctl` and
+  `kubectl` are clients ([decision 0033](decisions/0033-marina-platform-api.md),
+  [plan](plans/marina-platform-api.md)). The installed local release still runs
+  the earlier pair until the cutover; see [status](status.md).
+- First components on local Kind: Kyverno (policy), kgateway (ingress),
+  agentgateway (models and MCP), OpenTelemetry Collector and Jaeger (traces).
+  What is accepted is in [status](status.md).
 
 ## How the loops map to components
 
@@ -80,7 +85,7 @@ The LangChain diagnostic workflow is retired
 | Services | Go (Deck, Marina, platformctl as three independent modules joined by `go.work`) |
 | Web UI | SvelteKit 2, Svelte 5, TypeScript, Tailwind CSS 4, Vite; design system in [deck/web/DESIGN.md](../deck/web/DESIGN.md) |
 | Storage | One SQLite database per service (`modernc.org/sqlite`) and artifact files on persistent volumes |
-| API | HTTP/JSON with an OpenAPI v1 contract in [deck/api/openapi.yaml](../deck/api/openapi.yaml) |
+| API | Marina's `marina.dev/v1`: HTTP/JSON and Kubernetes custom resources, contract in [marina/api/](../marina/api/README.md); Deck's operator API in [deck/api/openapi.yaml](../deck/api/openapi.yaml) |
 | Runtime | Kubernetes: local Podman + Kind for acceptance, GKE Autopilot for tests; ephemeral Jobs with NetworkPolicy isolation |
 | Agent engine | kagent (A2A protocol, pinned `v1.0.0-alpha1`) with native Codex for repository work and a Marina BYO actor for the chat. Marina retains only the independent verifier Job. |
 | Models | OpenRouter, reached only through Marina's model gateway |
@@ -93,49 +98,50 @@ Choices and budgets for the installation are in
 
 | Fact | Owner | How the other side uses it |
 | --- | --- | --- |
-| Project name, description, conversations | Deck | Marina binds the Deck project ID. |
+| Project name, description, conversations | Deck | Deck maps each project to a Marina namespace and `Project`. |
 | Repository, default branch, credentials, execution policy | Marina | Deck shows a safe versioned summary. |
 | Project knowledge and selected conversation excerpts | Deck | Marina resolves exact approved revisions. |
 | Repository files, PRDs, instructions, and build and test definitions | Git | Deck registers references; Marina resolves pinned content. |
-| Task outcome, acceptance criteria, priority, budget | Deck | Marina stores the claimed, immutable snapshot. |
-| Run, lease, fence, plan, decision, command | Deck | Marina reconciles exact versions. |
-| Execution, attempt, usage and cleanup state | Marina | Deck receives summarized projections. |
+| Task outcome, acceptance criteria, priority, budget, dependencies, acceptance | Deck | Deck freezes a Ready task into a `Run` spec. |
+| Run, lease, fence, plan, decision, cancel, events | Marina | Clients read `Run` and `Decision` status and answer or cancel through the API; Deck mirrors them for its UI. |
+| Execution, attempt, usage and cleanup state | Marina | Clients see summaries in resource status. |
 | Assembled context package | Marina | Deck shows a read-only view. |
 | Commits, branches and pull requests | Git provider | Both reference immutable IDs. |
 | CI results | CI provider | Marina checks them on the exact commit it delivers. |
-| Evidence decisions and artifact bytes | Marina | Deck stores evidence records and proxies downloads. |
+| Evidence decisions and artifact bytes | Marina | Deck mirrors evidence records and proxies downloads. |
 
-Deck's event history explains work to me. Marina's journal recovers execution.
-Correlation IDs connect them; they are not competing records. Historical
+Marina's ledger is the record of runs and recovers execution. Deck's event
+history explains work to me and mirrors Marina's run state; it is not a
+competing record. Historical
 engine/worker specifications and artifacts remain readable after launch-path removal. Project context
 rules are in [decision 0014](decisions/0014-project-repository-and-knowledge.md).
 
 ## Contract
 
-Deck owns the OpenAPI document and the canonical JSON fixtures under
-[deck/api/](../deck/api/). Marina owns provider-neutral ports and a reusable
-consumer test suite under `marina/internal/workcontrol/`. Deck advertises only
-implemented capabilities through `GET /api/v1/provider`; planned fixture schemas
-do not make a behavior available.
+Marina owns the platform contract under [marina/api/](../marina/api/README.md):
+one OpenAPI document, the CRDs generated from it and canonical fixtures. The
+same objects are served as HTTP/JSON and as `marina.dev` resources.
+`Capabilities` lists only what the installation offers; no engine or sandbox
+names appear.
 
-- Additive changes keep version-1 semantics; breaking changes need a new major
-  version.
-- Claims and run changes carry an `Idempotency-Key`. Exact retries replay the
-  original result; a changed payload is a conflict.
-- Changes to an active run also carry the agent ID, the exact run version and
-  the current fence token.
-- Service credentials are scoped to a project and a capability
-  ([decision 0003](decisions/0003-service-authentication.md)).
+- Additive changes keep version-1 semantics; breaking changes need v2.
+- `metadata.name` is the idempotency key of a create: an exact replay returns
+  the object, a changed spec is a conflict. Cancel and answer carry an
+  `Idempotency-Key`.
+- Clients authenticate with Kubernetes tokens and are authorized by the same
+  RBAC as the resources; a project is a namespace.
+- Deck's operator API for the browser and `platformctl` stays in
+  [deck/api/](../deck/api/openapi.yaml).
 
-`make conformance` builds a real Deck, starts it with an isolated database and a
-temporary credential, and runs Marina's consumer suite and the CLI against it.
+`make conformance` runs Deck and the CLI against a real Marina API sandbox
+process, the CLI against a real Deck, and Marina's own API contract tests.
 
 ## Rules that keep work safe
 
 1. One component owns each fact.
 2. Every external change is idempotent and safe to retry after a lost response.
 3. Active-run changes need the exact version and the current lease fence.
-4. A claimed task's intent, profile, repository binding and context never change
+4. An admitted Run's intent, profile, repository binding and context never change
    during the run.
 5. Authority and budgets can only shrink as work proceeds.
 6. Workers are disposable; they never hold durable progress or long-lived
@@ -164,10 +170,10 @@ Marina never assumes an operation failed and starts replacement work.
 
 | Failure | Result |
 | --- | --- |
-| Deck unavailable before claim | Claim nothing; readiness names the dependency. |
-| Claim or completion response lost | Replay the recorded key or look up the original result. |
+| Marina unavailable to a client | The client keeps its recorded Run or Turn spec and replays the create; no work starts twice. |
+| Create, claim or completion response lost | Replay the same name or recorded key, or look up the original result. |
 | Marina restarts | Inspect the recorded run and runtime handle before continuing. |
-| Lease or fence expires or is rejected | Stop new side effects and terminate the recorded runtime; local lease expiry is enforced while Deck is offline. |
+| Lease or fence expires or is rejected | Stop new side effects and terminate the recorded runtime; local lease expiry is enforced while every client is offline. |
 | Model response uncertain | Keep the full reservation; never invent usage. |
 | Engine stream disconnects or repeats older events | Observe committed task state with the original IDs; do not create replacement work. Repeated lost-runtime observations block early. |
 | Pending question expires or its turn ends | Reject a new answer; exact replay of an already accepted answer preserves the original human message. |
@@ -191,7 +197,7 @@ project toolchain; dependency and browser downloads belong to image preparation.
 
 ## Security boundaries
 
-- My browser session (Deck) and Marina's service identity are separate. The
+- My browser session (Deck) and each client's Kubernetes identity are separate. Marina authorizes API calls with TokenReview and SubjectAccessReview against the same RBAC as its resources. The
   local installation opens without sign-in
   ([decision 0005](decisions/0005-operator-authentication.md)).
 - Each worker attempt gets a short-lived gateway credential only. It has no
@@ -209,7 +215,8 @@ Two single-replica services, the kagent engine, and short-lived verification Job
 flowchart LR
     H[Operator] --> D[Deck]
     C[platformctl] --> D
-    M[Marina] --> D
+    C --> M[Marina]
+    D --> M
     D --> DD[(Deck SQLite PVC)]
     M --> MD[(Marina SQLite and artifacts PVC)]
     M --> K[Kubernetes API]
@@ -249,7 +256,7 @@ thread shows landed results and records the operator's acceptance of the current
 result set. Follow-ups create new approved work and retain earlier history. See
 [decision 0030](decisions/0030-ordered-prd-tasks-and-acceptance.md).
 
-Marina can select an explicit private execution profile for each configured Deck
+Marina can select an explicit private execution profile for each configured
 project. One journal and controller keep a single active repository task across
 projects; gateway requests resolve the recorded attempt's project before applying
 its credentials, scope and budget. See

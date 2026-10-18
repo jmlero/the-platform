@@ -1,4 +1,5 @@
 IMAGE ?= deck:dev
+MARINA_REPO ?= ../marina
 
 .PHONY: setup web build run dev-api dev-web check test browser-test conformance image manifests clean
 
@@ -30,11 +31,10 @@ test:
 	npm --prefix web test
 
 browser-test:
-	npm --prefix web run test:e2e
+	MARINA_REPO="$(abspath $(MARINA_REPO))" npm --prefix web run test:e2e
 
 conformance:
-	python3 scripts/test-threads.py
-	python3 scripts/test-project-work.py
+	MARINA_REPO="$(MARINA_REPO)" ./scripts/test-marina.sh
 
 image:
 	docker build --tag $(IMAGE) .

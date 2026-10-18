@@ -22,12 +22,13 @@ import (
 
 	"github.com/jmlero/the-platform/marina/internal/artifacts"
 	"github.com/jmlero/the-platform/marina/internal/conversation"
-	"github.com/jmlero/the-platform/marina/internal/deck"
 	"github.com/jmlero/the-platform/marina/internal/execution"
 	"github.com/jmlero/the-platform/marina/internal/flow"
 	"github.com/jmlero/the-platform/marina/internal/httpserver"
 	"github.com/jmlero/the-platform/marina/internal/journal/sqlite"
+	"github.com/jmlero/the-platform/marina/internal/platformapi"
 	"github.com/jmlero/the-platform/marina/internal/reconcile"
+	"github.com/jmlero/the-platform/marina/internal/telemetry"
 	"github.com/jmlero/the-platform/marina/internal/workcontrol"
 	"github.com/jmlero/the-platform/marina/internal/worker"
 )
@@ -46,8 +47,8 @@ func run(arguments []string, stdout io.Writer, stderr io.Writer) int {
 	if arguments[0] == "serve" || arguments[0] == "doctor" {
 		for _, entry := range os.Environ() {
 			name, _, _ := strings.Cut(entry, "=")
-			if strings.HasPrefix(name, "MARINA_APPDECK_") {
-				_, _ = fmt.Fprintf(stderr, "rename environment variable %s to %s\n", name, strings.Replace(name, "MARINA_APPDECK_", "MARINA_DECK_", 1))
+			if strings.HasPrefix(name, "MARINA_APPDECK_") || strings.HasPrefix(name, "MARINA_DECK_") {
+				_, _ = fmt.Fprintf(stderr, "remove environment variable %s: Marina serves its own platform API and no longer calls Deck\n", name)
 				return 2
 			}
 		}
@@ -79,11 +80,17 @@ func run(arguments []string, stdout io.Writer, stderr io.Writer) int {
 		writeUsage(stdout)
 		return 0
 	default:
+		if command, ok := testCommands[arguments[0]]; ok {
+			return command(arguments[1:], stdout, stderr)
+		}
 		_, _ = fmt.Fprintf(stderr, "unknown command %q\n\n", arguments[0])
 		writeUsage(stderr)
 		return 2
 	}
 }
+
+// testCommands are registered only by test builds, such as the API sandbox.
+var testCommands = map[string]func([]string, io.Writer, io.Writer) int{}
 
 // Validate offline without reading credentials, opening stores or contacting a
 // provider. Error details stay private because decoder errors can quote input.
@@ -150,29 +157,23 @@ func runDiagnostics(arguments []string, stdout io.Writer, stderr io.Writer) int 
 func runDoctor(arguments []string, stdout io.Writer, stderr io.Writer) int {
 	flags := flag.NewFlagSet("doctor", flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	serverURL := flags.String("deck-url", envOrDefault("MARINA_DECK_URL", "http://localhost:8080"), "Deck server URL")
-	tokenFile := flags.String(
-		"deck-token-file",
-		envOrDefault("MARINA_DECK_TOKEN_FILE", ""),
-		"file containing the Deck service Bearer token",
-	)
+	journalPath := flags.String("journal-path", envOrDefault("MARINA_JOURNAL_PATH", filepath.Join("data", "marina.db")), "SQLite execution journal path")
 	if err := flags.Parse(arguments); err != nil {
 		return 2
 	}
-
-	client, err := newDeckClient(*serverURL, *tokenFile, &http.Client{Timeout: 5 * time.Second})
-	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "configure Deck: %v\n", err)
-		return 1
-	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := client.Health(ctx); err != nil {
-		_, _ = fmt.Fprintf(stderr, "Deck unavailable: %v\n", err)
+	journal, err := sqlite.Open(ctx, *journalPath)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "platform ledger unavailable: %v\n", err)
 		return 1
 	}
-
-	_, _ = fmt.Fprintln(stdout, "Deck: available")
+	defer journal.Close()
+	if err := journal.Platform().Health(ctx); err != nil {
+		_, _ = fmt.Fprintf(stderr, "platform ledger unavailable: %v\n", err)
+		return 1
+	}
+	_, _ = fmt.Fprintln(stdout, "Platform ledger: available")
 	return 0
 }
 
@@ -200,12 +201,6 @@ func runServe(arguments []string, stderr io.Writer) int {
 	intakeTaskID := flags.String("intake-task-id", "", "limit new discovery to one task; existing work still reconciles")
 	tlsCertFile := flags.String("tls-cert-file", envOrDefault("MARINA_TLS_CERT_FILE", ""), "server TLS certificate; also available without a workflow")
 	tlsKeyFile := flags.String("tls-key-file", envOrDefault("MARINA_TLS_KEY_FILE", ""), "server TLS private key")
-	serverURL := flags.String("deck-url", envOrDefault("MARINA_DECK_URL", "http://localhost:8080"), "Deck server URL")
-	tokenFile := flags.String(
-		"deck-token-file",
-		envOrDefault("MARINA_DECK_TOKEN_FILE", ""),
-		"file containing the Deck service Bearer token",
-	)
 	journalPath := flags.String(
 		"journal-path",
 		envOrDefault("MARINA_JOURNAL_PATH", filepath.Join("data", "marina.db")),
@@ -219,7 +214,7 @@ func runServe(arguments []string, stderr io.Writer) int {
 	runLease := flags.Duration(
 		"run-lease",
 		runLeaseDefault,
-		"Deck lease duration requested by heartbeats",
+		"lease duration on a claimed run, renewed by heartbeats",
 	)
 	reconcileInterval := flags.Duration(
 		"reconcile-interval",
@@ -231,6 +226,16 @@ func runServe(arguments []string, stderr io.Writer) int {
 	}
 
 	logger := slog.New(slog.NewJSONHandler(stderr, nil))
+	stopTelemetry, err := telemetry.Start(context.Background())
+	if err != nil {
+		logger.Error("configure trace export", "error", err)
+		return 1
+	}
+	defer func() {
+		flush, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = stopTelemetry(flush)
+	}()
 	var workflowConfig flow.Config
 	var projectConfigs []flow.Config
 	requiredCapabilities := workcontrol.MilestoneOneCapabilities()
@@ -268,30 +273,8 @@ func runServe(arguments []string, stderr io.Writer) int {
 			return 2
 		}
 	}
-	client, err := newDeckClient(*serverURL, *tokenFile, &http.Client{Timeout: 5 * time.Second, Transport: deckTransport}, deck.WithRequiredCapabilities(requiredCapabilities))
-	if err != nil {
-		logger.Error("configure Deck", "error", err)
-		return 1
-	}
 	startupCtx, cancelStartup := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancelStartup()
-	providerInfo, compatibilityErr := client.CheckCompatibility(
-		startupCtx,
-		requiredCapabilities,
-	)
-	if compatibilityErr != nil {
-		logger.Warn(
-			"work-control compatibility check failed; service will report not ready",
-			"error", compatibilityErr,
-		)
-	} else {
-		logger.Info(
-			"work-control compatibility verified",
-			"provider", providerInfo.Provider,
-			"protocol_version", providerInfo.ProtocolVersion,
-			"capability_count", len(providerInfo.Capabilities),
-		)
-	}
 	if *configPath != "" {
 		lock, err := artifacts.Lock(workflowConfig.ArtifactDirectory)
 		if err != nil {
@@ -315,8 +298,16 @@ func runServe(arguments []string, stderr io.Writer) int {
 		logger.Error("persist stable Marina identity", "error", err)
 		return 1
 	}
+	// Marina owns its work-control ledger; clients use marina.dev/v1 (decision 0033).
+	client := journal.Platform()
+	providerInfo, compatibilityErr := client.CheckCompatibility(startupCtx, requiredCapabilities)
+	if compatibilityErr != nil {
+		logger.Warn("work-control ledger lacks a required capability; service will report not ready", "error", compatibilityErr)
+	} else {
+		logger.Info("work-control ledger ready", "provider", providerInfo.Provider, "protocol_version", providerInfo.ProtocolVersion)
+	}
 	bindingInput := execution.ProjectBinding{
-		ProjectID: envOrDefault("MARINA_DECK_PROJECT_ID", "prj_default"), Provider: "deck",
+		ProjectID: envOrDefault("MARINA_PROJECT_ID", "default.default"), Provider: "marina",
 		Repository: envOrDefault("MARINA_REPOSITORY", "disabled://milestone-one"), Runtime: "disabled:milestone-one",
 		PolicyVersion: envOrDefault("MARINA_POLICY_VERSION", "milestone-one"), ContextConfig: "disabled:milestone-one",
 		ArtifactConfig: "disabled:milestone-one", DeliveryConfig: "disabled:milestone-one",
@@ -482,6 +473,15 @@ func runServe(arguments []string, stderr io.Writer) int {
 			return "", "", errProjectNotConfigured
 		})
 	}
+	var platformController *platformapi.Controller
+	var platformHandler http.Handler
+	if *configPath != "" {
+		platformController, platformHandler, err = configurePlatformAPI(workflowConfig, projectConfigs, journal, identity.LogicalAgentID)
+		if err != nil {
+			logger.Error("configure the platform API", "error", err)
+			return 1
+		}
+	}
 	if len(projectConfigs) > 1 {
 		gateway := projectGateway(journal, workerHandlers, conversationHandlers, workerHandler)
 		workerHandler = gateway
@@ -494,6 +494,11 @@ func runServe(arguments []string, stderr io.Writer) int {
 			}
 			if err := workflow.ReconcileRepository(startupCtx); err != nil {
 				logger.Warn("repository association deferred", "error", err)
+			}
+		}
+		if platformController != nil {
+			for _, problem := range platformController.Cycle(startupCtx) {
+				logger.Warn("platform resource reconciliation deferred", "error", problem)
 			}
 		}
 		startupControl := controlController.Cycle(startupCtx)
@@ -515,6 +520,9 @@ func runServe(arguments []string, stderr io.Writer) int {
 	}
 	if conversationHandler != nil {
 		mux.Handle("/conversation/", conversationHandler)
+	}
+	if platformHandler != nil {
+		mux.Handle("/apis/", platformHandler)
 	}
 	server := &http.Server{
 		Addr:              *address,
@@ -565,11 +573,16 @@ func runServe(arguments []string, stderr io.Writer) int {
 						logger.Warn("repository association deferred", "error", err)
 					}
 				}
+				if platformController != nil {
+					for _, problem := range platformController.Cycle(ctx) {
+						logger.Warn("platform resource reconciliation deferred", "error", problem)
+					}
+				}
 				logControlCycle(logger, controlController.Cycle(ctx), "scheduled")
 				logLeaseCycle(logger, leaseManager.Cycle(ctx), "scheduled")
-				if workflow != nil {
+				for _, workflow := range workflows {
 					for _, err := range workflow.Cycle(ctx) {
-						logger.Warn("repository workflow deferred", "error", err)
+						logger.Warn("repository workflow deferred", "project", workflow.Config.ProjectID, "error", err)
 					}
 				}
 				for _, conversationController := range conversations {
@@ -595,7 +608,6 @@ func runServe(arguments []string, stderr io.Writer) int {
 		logger.Info(
 			"Marina HTTP service starting",
 			"address", *address,
-			"deck_url", *serverURL,
 			"journal_path", *journalPath,
 			"reconcile_interval", reconcileInterval.String(),
 		)
@@ -719,14 +731,6 @@ func envOrDefault(name string, fallback string) string {
 	return fallback
 }
 
-func newDeckClient(serverURL string, tokenFile string, httpClient *http.Client, additional ...deck.Option) (*deck.Client, error) {
-	options := append([]deck.Option(nil), additional...)
-	if strings.TrimSpace(tokenFile) != "" {
-		options = append(options, deck.WithBearerTokenFile(tokenFile))
-	}
-	return deck.New(serverURL, httpClient, options...)
-}
-
 func envDurationOrDefault(name string, fallback time.Duration) (time.Duration, error) {
 	value := os.Getenv(name)
 	if value == "" {
@@ -747,7 +751,7 @@ func writeUsage(writer io.Writer) {
 	_, _ = fmt.Fprintln(writer, "  verify   Run one independent clean verification attempt")
 	_, _ = fmt.Fprintln(writer, "  diagnostics  Export a deterministic, redacted view of the local journal")
 	_, _ = fmt.Fprintln(writer, "  artifact-retention  Plan or apply offline cleanup of expired unreferenced artifacts")
-	_, _ = fmt.Fprintln(writer, "  doctor   Check the configured work-control dependency")
+	_, _ = fmt.Fprintln(writer, "  doctor   Check that the platform ledger opens")
 	_, _ = fmt.Fprintln(writer, "  serve    Run Marina's HTTP liveness and readiness service")
 	_, _ = fmt.Fprintln(writer, "  version  Print the Marina version")
 }

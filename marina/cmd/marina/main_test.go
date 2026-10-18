@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -51,54 +50,26 @@ func TestVersionCommand(t *testing.T) {
 }
 
 func TestPreviousProviderEnvironmentFailsBeforeStarting(t *testing.T) {
-	t.Setenv("MARINA_APPDECK_TOKEN_FILE", "private-value")
-	var stdout, stderr bytes.Buffer
-	code := run([]string{"serve", "--help"}, &stdout, &stderr)
-	if code != 2 || !strings.Contains(stderr.String(), "MARINA_DECK_TOKEN_FILE") || strings.Contains(stderr.String(), "private-value") {
-		t.Fatalf("exit = %d, stderr = %q", code, stderr.String())
+	for _, name := range []string{"MARINA_APPDECK_TOKEN_FILE", "MARINA_DECK_URL"} {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv(name, "private-value")
+			var stdout, stderr bytes.Buffer
+			code := run([]string{"serve", "--help"}, &stdout, &stderr)
+			if code != 2 || !strings.Contains(stderr.String(), "remove environment variable "+name) || strings.Contains(stderr.String(), "private-value") {
+				t.Fatalf("exit = %d, stderr = %q", code, stderr.String())
+			}
+		})
 	}
 }
 
-func TestDoctorCommand(t *testing.T) {
-	tokenPath := filepath.Join(t.TempDir(), "deck-token")
-	const token = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-	if err := os.WriteFile(tokenPath, []byte(token+"\n"), 0o600); err != nil {
-		t.Fatalf("write Deck token: %v", err)
+func TestDoctorCommandChecksThePlatformLedger(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "marina.db")
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"doctor", "--journal-path", path}, &stdout, &stderr); code != 0 || stdout.String() != "Platform ledger: available\n" {
+		t.Fatalf("doctor = %d %q %q", code, stdout.String(), stderr.String())
 	}
-	previousTransport := http.DefaultTransport
-	http.DefaultTransport = roundTripFunc(func(request *http.Request) (*http.Response, error) {
-		if request.Method != http.MethodGet || request.URL.Path != "/api/v1/provider" {
-			return textResponse(http.StatusNotFound, `{"error":"unexpected route"}`), nil
-		}
-		if request.Header.Get("X-Request-ID") == "" {
-			t.Error("doctor request correlation ID is empty")
-		}
-		if request.Header.Get("Authorization") != "Bearer "+token {
-			t.Errorf("doctor Authorization = %q", request.Header.Get("Authorization"))
-		}
-		return textResponse(http.StatusOK, `{
-			"provider":"deck",
-			"protocol_version":"1.0",
-			"capabilities":["provider.info","agent.register","work.ready.list","work.inspect","work.claim.atomic","work.claim.lookup","run.assigned.list","run.lease.renew","run.block","command.list","command.ack","event.append"],
-			"server_time":1784368800000,
-			"ready":true,
-			"readiness":{"store":"available"}
-		}`), nil
-	})
-	t.Cleanup(func() { http.DefaultTransport = previousTransport })
-
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	code := run([]string{
-		"doctor",
-		"--deck-url", "https://deck.test",
-		"--deck-token-file", tokenPath,
-	}, &stdout, &stderr)
-	if code != 0 {
-		t.Fatalf("exit code = %d, stderr = %q", code, stderr.String())
-	}
-	if stdout.String() != "Deck: available\n" {
-		t.Fatalf("stdout = %q", stdout.String())
+	if code := run([]string{"doctor", "--journal-path", t.TempDir()}, &stdout, &stderr); code == 0 {
+		t.Fatal("doctor passed without a usable ledger")
 	}
 }
 

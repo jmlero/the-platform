@@ -14,3 +14,6 @@ spec:
             - {name: MARINA_CONFIG_FILE, value: ""}
             - {name: MARINA_TLS_CERT_FILE, value: /run/marina-tls/tls.crt}
             - {name: MARINA_TLS_KEY_FILE, value: /run/marina-tls/tls.key}
+            # Traces go to the platform collector (PLAT-09); unset exports nothing.
+            - {name: OTEL_EXPORTER_OTLP_ENDPOINT, value: "http://otel-collector.platform-observability.svc:4318"}
+            - {name: OTEL_SERVICE_NAME, value: marina}

@@ -1,0 +1,83 @@
+# Jaeger v2 with in-memory storage: traces are lost on restart.
+apiVersion: v1
+kind: ConfigMap
+metadata: {name: jaeger, namespace: platform-observability}
+data:
+  config.yaml: |
+    service:
+      extensions: [jaeger_storage, jaeger_query, healthcheckv2]
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [batch]
+          exporters: [jaeger_storage_exporter]
+      telemetry:
+        metrics: {level: none}
+    extensions:
+      healthcheckv2:
+        use_v2: true
+        http: {endpoint: 0.0.0.0:13133}
+      jaeger_query:
+        storage: {traces: memory}
+        http: {endpoint: 0.0.0.0:16686}
+        # Read-only trace tools over MCP at /api/ai/mcp/ (PLAT-08).
+        ai:
+          mcp: {}
+      jaeger_storage:
+        backends:
+          memory:
+            memory: {max_traces: 5000}
+    receivers:
+      otlp:
+        protocols:
+          grpc: {endpoint: 0.0.0.0:4317}
+    processors:
+      batch: {}
+    exporters:
+      jaeger_storage_exporter: {trace_storage: memory}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: jaeger, namespace: platform-observability}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app.kubernetes.io/name: jaeger}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: jaeger}
+    spec:
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: jaeger
+          image: docker.io/jaegertracing/jaeger:2.21.0@sha256:3d0ac795ff98aa04d1be04311d2dac6c25b4bfc8322dc02e53bc5b170c5018c3
+          args: [--config=/conf/config.yaml]
+          ports:
+            - {name: otlp-grpc, containerPort: 4317}
+            - {name: query, containerPort: 16686}
+            - {name: health, containerPort: 13133}
+          readinessProbe:
+            httpGet: {path: /status, port: health}
+          resources:
+            requests: {cpu: 50m, memory: 96Mi}
+            limits: {cpu: 500m, memory: 320Mi}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          volumeMounts:
+            - {name: config, mountPath: /conf, readOnly: true}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: config
+          configMap: {name: jaeger}
+        - name: tmp
+          emptyDir: {sizeLimit: 64Mi}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: jaeger, namespace: platform-observability}
+spec:
+  selector: {app.kubernetes.io/name: jaeger}
+  ports:
+    - {name: otlp-grpc, port: 4317, targetPort: otlp-grpc}
+    - {name: query, port: 16686, targetPort: query}

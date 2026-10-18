@@ -67,10 +67,8 @@ works as a lab: swap a component, run the same work, compare the results.
 
 **agentgateway and kgateway: both.** They fill different slots. agentgateway is
 the AI data plane: model routing, MCP federation and A2A traffic. kgateway is a
-Kubernetes Gateway API controller for ingress to Deck and apps, and since v2.1 it
-can also manage agentgateway through Gateway API resources. Start with standalone
-agentgateway; add kgateway for ingress; let kgateway manage agentgateway only if
-it keeps the configuration simpler. kagent's Substrate egress already runs an
+Kubernetes Gateway API controller for ingress to Deck and apps. kgateway 2.2+
+no longer manages agentgateway, so agentgateway runs standalone. kagent's Substrate egress already runs an
 agentgateway configuration, so the binary is already in the local footprint.
 
 **OpenFGA is authorization, not identity.** SPIFFE/SPIRE answers "which workload
@@ -109,7 +107,7 @@ Order follows dependencies. Each task stores redacted evidence under
 | ID | Outcome | Acceptance |
 | --- | --- | --- |
 | PLAT-06 | agentgateway as the model routing layer behind Marina's gateway: actor -> Marina (lease, fence, budget, usage) -> agentgateway (provider routing, retries, telemetry) -> OpenRouter. The provider key moves to agentgateway only. Selected by the model endpoint in the existing workflow configuration. | Repository and chat work pass with and without agentgateway; budget, cancellation and lost-response cases from [0023](../decisions/0023-focus-kagent-cutover.md) still pass; no direct provider route from actors. |
-| PLAT-07 | kgateway as the Gateway API controller for ingress to Deck (`https://localhost:8443`) and apps. Then decide, with evidence, whether kgateway also manages agentgateway. | Deck reachable through kgateway; written decision on the second point. |
+| PLAT-07 | kgateway as the Gateway API controller for ingress to Deck (`https://localhost:8443`) and apps. Decided: kgateway 2.2+ no longer manages agentgateway, so both stay separate. | Deck reachable through kgateway; written decision on the second point. |
 | PLAT-08 | MCP servers as tools: in-cluster MCP servers federated by agentgateway. Each profile lists allowed tools; Marina freezes the list in the attempt and counts tool calls against the budget. Start with read-only tools, including the existing repository read tools exposed over MCP. | An agent uses an allowed MCP tool; a disallowed tool is rejected at the gateway; tool output stays untrusted data; cancellation during a tool call still works. |
 
 ### Phase 4: observability
@@ -152,6 +150,11 @@ graduated) can run evaluation pipelines but is heavy for a laptop.
   (Agent Sandbox, Kata). Add them as a follow-up once PLAT-03 and PLAT-12 exist,
   because then they can be compared.
 - Local model serving (vLLM, llm-d, KServe): needs GPUs outside the budget.
+- Less dependence on GitHub at runtime (in-cluster Git, CI and registry, for
+  example Forgejo, Argo Workflows and Zot). The operator wants the platform
+  itself deployed from GitHub and minimal GitHub dependence after that; the
+  design is postponed by operator decision (2026-10-17) to keep this plan small.
+  Backups are not a requirement.
 - High availability, multiple users and backups (OPS-01–02 keep their triggers).
 
 ## Risks

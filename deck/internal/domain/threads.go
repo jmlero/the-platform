@@ -26,11 +26,3 @@ type ConversationInvocation struct {
 	Thread  ConversationThread `json:"thread"`
 	Message ChannelMessage     `json:"message"`
 }
-
-// ConversationDispatch is an ordered notification of an already persisted
-// invocation, including invocations of older channel messages.
-type ConversationDispatch struct {
-	EventID   int64          `json:"event_id"`
-	InvokedAt int64          `json:"invoked_at"`
-	Message   ChannelMessage `json:"message"`
-}

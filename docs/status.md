@@ -1,6 +1,6 @@
 # Current state
 
-Last updated: 2026-10-05.
+Last updated: 2026-10-18.
 
 This is the only description of what is supported, what is implemented but not
 yet accepted, and what is not supported. Other documents link here instead of
@@ -144,6 +144,20 @@ executions that have already started.
   restored history. Original volumes and digest-checked artifacts remained
   intact ([evidence](validation/kint-12-17-2026-10-01.md#fresh-installation-upgrade-and-rollback)).
 
+**Platform components** ([installation](../deploy/kubernetes/platform/README.md),
+[evidence](validation/plat-05-09-2026-10-17.md))
+
+- Kyverno enforces digest-pinned images, no privileged containers, memory limits,
+  app labels and a NetworkPolicy before Pods start in the platform's own
+  namespaces; it reports the same rules for third-party components (PLAT-05).
+- kgateway serves `https://localhost:8443`: one Gateway API TLS listener passes
+  Deck's own TLS through by host name (PLAT-07).
+- agentgateway holds the model provider key and serves the Responses API to
+  Marina only, with a client key and installation-CA TLS. It also serves Jaeger's
+  read-only trace tools over MCP behind an allow-list (PLAT-06, PLAT-08).
+- An OpenTelemetry Collector strips credential-like data and sends traces to an
+  in-memory Jaeger; agentgateway's model traces arrive there (PLAT-09).
+
 ## Built, awaiting acceptance
 
 The source changes below pass product and real-process checks, but are not yet
@@ -185,6 +199,22 @@ accepted on the installed local release. See the
 
 These additions and the corrected strict chat PRD response schema are recorded in
 [the follow-up evidence](validation/pending-prd-projects-2026-10-05.md).
+
+- **PLAT-06, PLAT-08, PLAT-09 through Marina:** Marina's model calls are
+  configured to go through agentgateway, and its chat gateway can offer
+  allow-listed MCP tools. Marina records one trace per task with step and model
+  spans. Product checks pass; the installed Marina image predates the MCP and
+  trace code, and no chat turn or task has yet run through the new path
+  ([evidence](validation/plat-05-09-2026-10-17.md)).
+
+- **MAR-01 to MAR-09, Marina's platform API:** Marina serves `marina.dev/v1`
+  over HTTP/JSON and as Kubernetes resources from its own run ledger, with
+  Kubernetes identity and RBAC. Deck creates Runs and Turns and mirrors them;
+  `platformctl` and `kubectl` work with the same resources. Product and
+  real-process checks pass against Marina's API sandbox, and kubectl worked
+  against the Kind API server. The installed release still runs the earlier
+  Deck-provider pair until the cutover (MAR-10)
+  ([evidence](validation/mar-01-09-2026-10-18.md)).
 
 ## Not supported
 

@@ -159,8 +159,8 @@ func (c *Controller) repairBudget(ctx context.Context, e execution.Execution, s 
 	if err != nil {
 		return "", err
 	}
-	if len(s.Failures) >= repositoryFailureLimit {
-		return "The three-failure limit was reached", nil
+	if limit := c.Config.failureLimit(); len(s.Failures) >= limit {
+		return fmt.Sprintf("The %d-failure limit was reached", limit), nil
 	}
 	if e.BudgetExpired(time.Now()) || !time.Now().Add(time.Second).Before(e.DeadlineAt) {
 		return "The original time, token or cost budget is exhausted", nil

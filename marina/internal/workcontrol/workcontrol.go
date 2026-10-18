@@ -86,6 +86,7 @@ type WorkItem struct {
 	Landing            *TaskLanding     `json:",omitempty"`
 	DependsOn          []string         `json:",omitempty"`
 	Workload           *WorkloadProfile `json:",omitempty"`
+	Choices            *FactoryChoices  `json:",omitempty"`
 	Context            *TaskContext     `json:",omitempty"`
 	ID                 string
 	ProjectID          string

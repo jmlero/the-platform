@@ -127,6 +127,18 @@ incomplete trees, binary files, unsafe paths and unknown tools are rejected.
 The actor receives no Git or upstream model credential and has no source-write,
 shell, browser or arbitrary tool authority.
 
+An optional `conversation.mcp` adds read-only MCP tools to a turn with a bound
+repository: an HTTPS streamable-HTTP `endpoint`, an optional `token_file` and an
+allow-list of one to eight `tools` that must not reuse the repository tool
+names. The gateway opens one MCP session per model exchange, offers only allowed
+tools the server lists, and calls them itself under the same authority checks,
+call and round limits and 64 KiB result budget as repository reads. Arguments
+are limited to 4 KiB and each result to 16 KiB of text; a larger result returns
+an error to the model. Without a reachable endpoint the turn keeps its
+repository tools only. Tool schemas come from the server at each exchange and
+are not frozen with the turn. Results are data and grant nothing. See the
+[platform guide](../../../deploy/kubernetes/platform/README.md#mcp-tools-plat-08).
+
 An initial model exchange permits up to four upstream requests, including read
 tool continuations. Every intermediate response and final answer counts against
 the original turn's token limit and deadline. Missing or uncertain usage retains

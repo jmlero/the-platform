@@ -20,13 +20,7 @@ func newLandedCompletionFixture(t *testing.T) (*Store, domain.Task, domain.Run, 
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { s.Close() })
-	request, err := s.RequestRepository(ctx, "prj_default", domain.RepositoryRequestInput{Repository: "example/repo", BaseBranch: "main"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err = s.RecordRepositoryResult(ctx, "prj_default", domain.RepositoryResult{RequestRevision: request.Revision, Status: "connected", Binding: &domain.RepositoryBinding{Repository: "example/repo", BaseBranch: "main", CloneURL: "https://github.com/example/repo.git", Version: 1}}); err != nil {
-		t.Fatal(err)
-	}
+	bindRepository(t, s, "prj_default", "example/repo", 1)
 	budget := domain.Budget{TimeMinutes: 30, MaxAttempts: 3, Authority: []string{"source.read", "source.write", "source.fast_forward"}}
 	task, err := s.CreateTask(ctx, domain.CreateTaskInput{Title: "Land the authorized scope", AcceptanceCriteria: "The original criteria pass", Status: domain.TaskReady, Budget: &budget})
 	if err != nil {
@@ -183,13 +177,7 @@ func TestLandedDependencyRequiresUnexpiredSelectedEvidence(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	request, err := s.RequestRepository(ctx, "prj_default", domain.RepositoryRequestInput{Repository: "example/repo", BaseBranch: "main"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err = s.RecordRepositoryResult(ctx, "prj_default", domain.RepositoryResult{RequestRevision: request.Revision, Status: "connected", Binding: &domain.RepositoryBinding{Repository: "example/repo", BaseBranch: "main", CloneURL: "https://github.com/example/repo.git", Version: 1}}); err != nil {
-		t.Fatal(err)
-	}
+	bindRepository(t, s, "prj_default", "example/repo", 1)
 	budget := domain.Budget{TimeMinutes: 30, MaxAttempts: 3, Authority: []string{"source.read", "source.write", "source.fast_forward"}}
 	first, err := s.CreateTask(ctx, domain.CreateTaskInput{Title: "Land prerequisite", AcceptanceCriteria: "Verified", Status: domain.TaskReady, Budget: &budget})
 	if err != nil {
@@ -250,5 +238,40 @@ func TestLandedDependencyRequiresUnexpiredSelectedEvidence(t *testing.T) {
 	}
 	if _, err = s.ClaimTask(ctx, testMutation("expired-claim"), second.ID, "landing", time.Minute); !errors.Is(err, domain.ErrConflict) {
 		t.Fatalf("claimed dependent with expired evidence: %v", err)
+	}
+}
+
+func TestLandingRequiresTheAuthorizedRepositoryAndIndependentEvidenceOnTheCommit(t *testing.T) {
+	s, task, run, ids, landing := newLandedCompletionFixture(t)
+	ctx := context.Background()
+	guard := func(key string) Mutation {
+		current, err := s.GetRun(ctx, run.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		m := testMutation(key)
+		m.Guard = &RunGuard{AgentID: current.AgentID, ExpectedVersion: current.Version, FenceToken: current.FenceToken}
+		return m
+	}
+	wrongCommit, wrongRepository := landing, landing
+	wrongCommit.Commit = strings.Repeat("b", 40)
+	wrongRepository.Repository = "other/repo"
+	for name, attempt := range map[string]func() error{
+		"wrong commit": func() error { return s.CompleteLandedRun(ctx, guard("commit"), run.ID, "landed", ids, wrongCommit) },
+		"wrong repository": func() error {
+			return s.CompleteLandedRun(ctx, guard("repository"), run.ID, "landed", ids, wrongRepository)
+		},
+		"missing landing": func() error { return s.CompleteLandedRun(ctx, guard("missing"), run.ID, "landed", ids[:2], landing) },
+	} {
+		if err := attempt(); err == nil {
+			t.Fatalf("%s completed the task", name)
+		}
+	}
+	if err := s.CompleteLandedRun(ctx, guard("landed"), run.ID, "landed", ids, landing); err != nil {
+		t.Fatal(err)
+	}
+	done, err := s.GetTask(ctx, task.ID)
+	if err != nil || done.Status != domain.TaskDone || done.Landing == nil || done.Review != nil {
+		t.Fatalf("landed task = %+v, %v", done, err)
 	}
 }

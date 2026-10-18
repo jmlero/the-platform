@@ -1,4 +1,5 @@
 DECK_REPO ?= $(CURDIR)/deck
+MARINA_REPO ?= $(CURDIR)/marina
 
 .PHONY: build check check-installation conformance fmt test vet
 
@@ -18,7 +19,8 @@ check-installation:
 conformance:
 	$(MAKE) -C deck conformance
 	$(MAKE) -C cli conformance-deck DECK_REPO="$(DECK_REPO)"
-	$(MAKE) -C marina conformance-deck DECK_REPO="$(DECK_REPO)"
+	$(MAKE) -C cli conformance-marina MARINA_REPO="$(MARINA_REPO)"
+	cd marina && go test -count=1 ./internal/platformapi/...
 
 fmt:
 	$(MAKE) -C cli fmt

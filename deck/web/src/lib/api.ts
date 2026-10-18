@@ -1,5 +1,5 @@
 import type {
-  WorkloadProfile, PRDApproval, PRDProgress, ProjectChannel, ConversationThread, ConversationInvocation, ConversationQuestion, ContextSource, ContextSourceInput, ResolvedContext, RepositoryRequest, RepositoryRequestInput,
+  WorkloadProfile, PRDApproval, PRDProgress, ProjectChannel, ConversationThread, ConversationInvocation, ConversationQuestion, ContextSource, ContextSourceInput, ResolvedContext, RepositoryRequest,
   AppEvent,
   Bootstrap,
   Channel,
@@ -79,7 +79,6 @@ export const api = {
  answerConversationQuestion: (id:string,answer:string,request_id:string) => request<ConversationQuestion>(`/api/v1/operator/conversation/questions/${encodeURIComponent(id)}/answer`,{method:'POST',body:JSON.stringify({answer,request_id})}),
 
  repository: (projectID = 'prj_default') => request<RepositoryRequest>(`/api/v1/operator/projects/${encodeURIComponent(projectID)}/repository`),
- requestRepository: (input: RepositoryRequestInput, projectID = 'prj_default') => request<RepositoryRequest>(`/api/v1/operator/projects/${encodeURIComponent(projectID)}/repository`, {method: 'PUT', body: JSON.stringify(input)}),
   contextSources: (project = 'prj_default') => request<ContextSource[]>(`/api/v1/operator/projects/${encodeURIComponent(project)}/context/sources`),
   putContextSource: (input: ContextSourceInput, project = 'prj_default') => request<ContextSource>(`/api/v1/operator/projects/${encodeURIComponent(project)}/context/sources`, {method: 'PUT', body: JSON.stringify(input)}),
   revokeContextSource: (id: string, revision: number, project = 'prj_default') => request<unknown>(`/api/v1/operator/projects/${encodeURIComponent(project)}/context/sources/${encodeURIComponent(id)}/${revision}/revoke`, {method: 'POST'}),

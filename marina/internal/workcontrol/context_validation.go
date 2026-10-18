@@ -68,3 +68,22 @@ func CheckContextValidity(now time.Time, resolved ResolvedContext) error {
 	}
 	return nil
 }
+
+// ContextSourceDigest is the digest ValidateResolvedContext expects in a
+// selection reference for this source.
+func ContextSourceDigest(source ContextSource) string {
+	canonical := source
+	canonical.Digest, canonical.RevokedAt, canonical.Superseded = "", 0, false
+	if canonical.Kind == "decision" {
+		canonical.Content = ""
+	}
+	return contextDigest(canonical)
+}
+
+// ContextMessageDigest is the digest ValidateResolvedContext expects for a
+// selected message.
+func ContextMessageDigest(message ContextMessage) string {
+	canonical := message
+	canonical.Digest = ""
+	return contextDigest(canonical)
+}

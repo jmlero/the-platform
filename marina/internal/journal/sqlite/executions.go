@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jmlero/the-platform/marina/internal/execution"
+	"github.com/jmlero/the-platform/marina/internal/telemetry"
 )
 
 const executionColumns = `
@@ -412,6 +413,10 @@ func (store *Store) Transition(
 	}
 	if err := transaction.Commit(); err != nil {
 		return execution.Execution{}, fmt.Errorf("commit execution transition: %w", err)
+	}
+	if updated.State.Terminal() {
+		telemetry.RecordExecution(ctx, telemetry.Execution{ID: updated.ID, ProjectID: updated.ProjectID, TaskID: updated.ExternalWorkID, RunID: updated.ExternalRunID},
+			string(updated.State), updated.CreatedAt, now)
 	}
 	return updated, nil
 }

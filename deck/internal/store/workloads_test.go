@@ -68,7 +68,7 @@ func TestWorkloadCatalogRejectsStaleSelectionAndPublisherTakeover(t *testing.T) 
 		t.Fatal(err)
 	}
 	defer s.Close()
-	p := domain.WorkloadProfile{ID: "repository/v1", Digest: strings.Repeat("b", 64), Harness: "codex/v1", Authority: []string{"source.read", "source.write", "pull_request.create"}, MaxTokens: 20000, BudgetMinutes: 5, MinAttempts: 2}
+	p := domain.WorkloadProfile{ID: "repository/v1", Digest: strings.Repeat("b", 64), Authority: []string{"source.read", "source.write", "pull_request.create"}, MaxTokens: 20000, BudgetMinutes: 5, MinAttempts: 2}
 	catalog := domain.WorkloadCatalog{Profiles: []domain.WorkloadProfile{p}, ExpiresAt: time.Now().Add(time.Minute).UnixMilli()}
 	if err = s.PublishWorkloads(ctx, "prj_default", "marina", catalog); err != nil {
 		t.Fatal(err)
@@ -110,7 +110,7 @@ func TestLandingProfileAdmitsOnlyItsFastForwardGrant(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	p := domain.WorkloadProfile{ID: "repository/v2", Digest: strings.Repeat("d", 64), Harness: "codex/v1", Authority: []string{"source.read", "source.write", "source.fast_forward"}, MaxTokens: 20000, BudgetMinutes: 5, MinAttempts: 2}
+	p := domain.WorkloadProfile{ID: "repository/v2", Digest: strings.Repeat("d", 64), Authority: []string{"source.read", "source.write", "source.fast_forward"}, MaxTokens: 20000, BudgetMinutes: 5, MinAttempts: 2}
 	catalog := domain.WorkloadCatalog{Profiles: []domain.WorkloadProfile{p}, ExpiresAt: time.Now().Add(time.Minute).UnixMilli()}
 	if err := s.PublishWorkloads(ctx, "prj_default", "marina", catalog); err != nil {
 		t.Fatal(err)
@@ -143,7 +143,7 @@ func TestRepositoryReviewMinimumIsDiscoveredAndNeverExpandsAnInvocationBudget(t 
 				t.Fatal(err)
 			}
 			defer s.Close()
-			p := domain.WorkloadProfile{ID: delivery.profile, Digest: strings.Repeat("e", 64), Harness: "codex/v1", Authority: []string{"source.read", "source.write", delivery.grant}, MaxTokens: 20000, BudgetMinutes: 5, MinAttempts: 3}
+			p := domain.WorkloadProfile{ID: delivery.profile, Digest: strings.Repeat("e", 64), Authority: []string{"source.read", "source.write", delivery.grant}, MaxTokens: 20000, BudgetMinutes: 5, MinAttempts: 3}
 			catalog := domain.WorkloadCatalog{Profiles: []domain.WorkloadProfile{p}, ExpiresAt: time.Now().Add(time.Minute).UnixMilli()}
 			if err := s.PublishWorkloads(ctx, "prj_default", "marina", catalog); err != nil {
 				t.Fatal(err)

@@ -12,11 +12,14 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/jmlero/the-platform/deck/internal/demo"
 	"github.com/jmlero/the-platform/deck/internal/httpapi"
+	"github.com/jmlero/the-platform/deck/internal/marina"
 	"github.com/jmlero/the-platform/deck/internal/store"
 	"github.com/jmlero/the-platform/deck/internal/webui"
 )
+
+// defaultMarinaTokenFile is the projected service account token in a Pod.
+const defaultMarinaTokenFile = "/var/run/secrets/kubernetes.io/serviceaccount/token"
 
 func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
@@ -40,28 +43,26 @@ func main() {
 	}
 	defer appStore.Close()
 
-	demoEnabled := envBool("DECK_DEMO_AGENT", true)
-	if demoEnabled {
-		if err := appStore.SeedDemo(ctx); err != nil {
-			logger.Error("seed demo workspace", "error", err)
-			os.Exit(1)
+	for _, obsolete := range []string{"DECK_DEMO_AGENT", "DECK_SERVICE_AUTH_FILE", "DECK_ARTIFACT_URL", "DECK_ARTIFACT_TOKEN_FILE", "DECK_ARTIFACT_CA_FILE"} {
+		if os.Getenv(obsolete) != "" {
+			logger.Warn("ignoring obsolete setting; Deck now calls Marina's platform API", "variable", obsolete)
 		}
-		go demo.NewAgent(appStore, logger).Run(ctx)
 	}
-	go reapExpiredLeases(ctx, appStore, logger)
-
 	httpOptions := make([]httpapi.Option, 0, 3)
-	if base := strings.TrimSpace(os.Getenv("DECK_ARTIFACT_URL")); base != "" {
-		httpOptions = append(httpOptions, httpapi.WithArtifactStore(base, os.Getenv("DECK_ARTIFACT_TOKEN_FILE"), os.Getenv("DECK_ARTIFACT_CA_FILE")))
-	}
-	serviceAuthFile := strings.TrimSpace(os.Getenv("DECK_SERVICE_AUTH_FILE"))
-	if serviceAuthFile != "" {
-		authorizer, err := httpapi.NewFileServiceAuthorizer(serviceAuthFile)
+	marinaURL := strings.TrimSpace(os.Getenv("DECK_MARINA_URL"))
+	if marinaURL != "" {
+		client, err := marina.New(marina.Config{URL: marinaURL, TokenFile: env("DECK_MARINA_TOKEN_FILE", defaultMarinaTokenFile), CAFile: strings.TrimSpace(os.Getenv("DECK_MARINA_CA_FILE"))})
 		if err != nil {
-			logger.Error("load service authorization policy", "error", err)
+			logger.Error("configure Marina", "error", err)
 			os.Exit(1)
 		}
-		httpOptions = append(httpOptions, httpapi.WithServiceAuthorizer(authorizer))
+		projectsFile := strings.TrimSpace(os.Getenv("DECK_MARINA_PROJECTS_FILE"))
+		if _, err := marina.LoadProjects(projectsFile); err != nil {
+			logger.Error("load Marina project mapping", "error", err)
+			os.Exit(1)
+		}
+		httpOptions = append(httpOptions, httpapi.WithMarina(client))
+		go (&marina.Engine{Store: appStore, Client: client, ProjectsFile: projectsFile, Log: logger}).Run(ctx)
 	}
 	operatorAuthFile := strings.TrimSpace(os.Getenv("DECK_OPERATOR_AUTH_FILE"))
 	if operatorAuthFile != "" {
@@ -98,8 +99,7 @@ func main() {
 			"Deck is ready",
 			"address", server.Addr,
 			"database", databasePath,
-			"demo_agent", demoEnabled,
-			"service_auth", serviceAuthFile != "",
+			"marina", marinaURL != "",
 			"operator_auth", operatorAuthFile != "",
 		)
 		var serveErr error
@@ -119,24 +119,6 @@ func main() {
 	defer cancel()
 	if err := server.Shutdown(shutdownContext); err != nil {
 		logger.Error("shutdown Deck", "error", err)
-	}
-}
-
-func reapExpiredLeases(ctx context.Context, appStore *store.Store, logger *slog.Logger) {
-	ticker := time.NewTicker(5 * time.Second)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			count, err := appStore.ExpireLeases(ctx)
-			if err != nil && !errors.Is(err, context.Canceled) {
-				logger.Warn("expire agent leases", "error", err)
-			} else if count > 0 {
-				logger.Info("expired agent leases", "count", count)
-			}
-		}
 	}
 }
 

@@ -1,44 +1,17 @@
 package httpapi
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
 	"github.com/jmlero/the-platform/deck/internal/domain"
 )
 
-func (s *Server) ensureConversationQuestion(w http.ResponseWriter, r *http.Request) {
-	var input domain.ConversationQuestionInput
-	if err := readJSON(r, &input); err != nil {
-		s.writeError(w, err)
-		return
-	}
-	// The invocation supplies the exact project scope; do not accept a project
-	// claimed by the caller's request body.
-	message, err := s.store.GetChannelMessage(r.Context(), input.InvocationMessageID)
-	if err != nil {
-		s.writeError(w, err)
-		return
-	}
-	if !s.requireProject(w, r, message.ProjectID) {
-		return
-	}
-	q, err := s.store.EnsureConversationQuestion(r.Context(), input)
-	if err != nil {
-		s.writeError(w, err)
-		return
-	}
-	w.Header().Set("Cache-Control", "no-store")
-	writeJSON(w, http.StatusOK, q)
-}
-
 func (s *Server) listConversationQuestions(w http.ResponseWriter, r *http.Request) {
 	thread, err := s.store.GetThread(r.Context(), r.PathValue("id"))
 	if err != nil {
 		s.writeError(w, err)
-		return
-	}
-	if !s.requireProject(w, r, thread.ProjectID) {
 		return
 	}
 	items, err := s.store.ListConversationQuestions(r.Context(), thread.ID)
@@ -49,13 +22,12 @@ func (s *Server) listConversationQuestions(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, map[string]any{"items": items})
 }
 
+// answerConversationQuestion forwards the answer to Marina's Decision before
+// recording the canonical human reply in the thread.
 func (s *Server) answerConversationQuestion(w http.ResponseWriter, r *http.Request) {
 	q, err := s.store.GetConversationQuestion(r.Context(), r.PathValue("id"))
 	if err != nil {
 		s.writeError(w, err)
-		return
-	}
-	if !s.requireProject(w, r, q.ProjectID) {
 		return
 	}
 	var input struct {
@@ -65,6 +37,22 @@ func (s *Server) answerConversationQuestion(w http.ResponseWriter, r *http.Reque
 	if err := readJSON(r, &input); err != nil {
 		s.writeError(w, err)
 		return
+	}
+	answer := strings.TrimSpace(input.Answer)
+	if q.Status == "pending" && answer != "" && strings.TrimSpace(input.RequestID) != "" {
+		turn, err := s.store.GetMarinaTurn(r.Context(), q.InvocationMessageID)
+		if err == nil {
+			if !s.requireMarina(w) {
+				return
+			}
+			if _, err := s.marina.AnswerDecision(r.Context(), turn.Namespace, q.QuestionID, answer, "deck-"+q.ID); err != nil {
+				s.writeMarinaError(w, err)
+				return
+			}
+		} else if !errors.Is(err, domain.ErrNotFound) {
+			s.writeError(w, err)
+			return
+		}
 	}
 	operator, _ := operatorSessionFromRequest(r)
 	q, err = s.store.AnswerConversationQuestion(r.Context(), q.ID, input.Answer, "operator:"+strings.TrimSpace(operator.OperatorID), input.RequestID)

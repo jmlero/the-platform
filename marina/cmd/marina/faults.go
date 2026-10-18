@@ -13,7 +13,6 @@ import (
 var (
 	engineDialOptions []grpc.DialOption
 	sourceTransport   http.RoundTripper
-	deckTransport     http.RoundTripper
 	modelTransport    http.RoundTripper
 )
 

@@ -1,0 +1,70 @@
+# Default deny. Platform namespaces may send OTLP to the collector; only the
+# collector reaches Jaeger. Open the Jaeger UI with kubectl port-forward.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: default-deny, namespace: platform-observability}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: collector, namespace: platform-observability}
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: otel-collector}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchExpressions:
+              - {key: kubernetes.io/metadata.name, operator: In, values: [marina-system, kint-engine, ate-system, platform-gateway]}
+      ports:
+        - {protocol: TCP, port: 4317}
+        - {protocol: TCP, port: 4318}
+  egress:
+    - to:
+        - podSelector:
+            matchLabels: {app.kubernetes.io/name: jaeger}
+      ports: [{protocol: TCP, port: 4317}]
+    - to:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: kube-system}
+          podSelector:
+            matchLabels: {k8s-app: kube-dns}
+      ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: jaeger, namespace: platform-observability}
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: jaeger}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {app.kubernetes.io/name: otel-collector}
+      ports: [{protocol: TCP, port: 4317}]
+    - from:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: platform-gateway}
+          podSelector:
+            matchLabels: {app.kubernetes.io/name: agentgateway}
+      ports: [{protocol: TCP, port: 16686}]
+---
+# Marina sends its traces to the collector.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: marina-to-telemetry, namespace: marina-system}
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: marina}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: platform-observability}
+          podSelector:
+            matchLabels: {app.kubernetes.io/name: otel-collector}
+      ports: [{protocol: TCP, port: 4318}]

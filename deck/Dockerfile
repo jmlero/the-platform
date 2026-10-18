@@ -32,7 +32,6 @@ VOLUME ["/data"]
 
 ENV DECK_ADDR=:8080 \
     DECK_DATA_DIR=/data \
-    DECK_DEMO_AGENT=true \
     DECK_LOG_LEVEL=info
 
 ENTRYPOINT ["/usr/local/bin/deck"]

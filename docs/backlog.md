@@ -12,7 +12,8 @@ means a decision made the item obsolete.
 
 ## Priority now
 
-The platform work comes first (operator decision, 2026-10-17), then the
+Marina's own platform API comes first, then the remaining platform work
+(operator decisions, 2026-10-17), then the
 [first milestone](VISION.md#direction): one real repository, one PRD born in the
 chat, and agents landing its tasks on main without me touching the code.
 
@@ -20,10 +21,11 @@ The engine, the chat agent, native Codex and landing on main are accepted on
 local Kind (KINT-09–11, KINT-16, CHAT-04–11, AUTO-02–06, AUTO-08, LAND-01, UI-01).
 Next, in order:
 
-1. **The platform** (PLAT). Its phases can run in any order.
-2. **Landing and tests** (LAND-02–03, VER-01, TEST-01).
-3. **PRDs from the chat** (PRD).
-4. **The milestone proof** (FLOW-01).
+1. **Marina's platform API** (MAR): Marina owns the API; Deck becomes a client.
+2. **The platform** (PLAT). Its phases can run in any order.
+3. **Landing and tests** (LAND-02–03, VER-01, TEST-01).
+4. **PRDs from the chat** (PRD).
+5. **The milestone proof** (FLOW-01).
 
 ## Now
 
@@ -44,6 +46,22 @@ Next, in order:
 
 ## Next
 
+### Marina's platform API
+
+Direction in [decision 0033](decisions/0033-marina-platform-api.md); outcomes
+and acceptance in the [Marina platform API plan](plans/marina-platform-api.md).
+
+| ID | State | Owner | Outcome |
+| --- | --- | --- | --- |
+| MAR-00 | Done | Operator | Marina owns the API and execution state; Deck becomes a client; direct switch. [Decision 0033](decisions/0033-marina-platform-api.md). |
+| MAR-01 | Verify | Joint | API design: OpenAPI, CRDs and fixtures in `marina/api/`, validated against both schemas with no engine or sandbox names. Waits for operator review. [Evidence](validation/mar-01-09-2026-10-18.md). |
+| MAR-02–07 | Done | Marina | Kubernetes identity and Roles, Marina-owned runs on its own ledger, resource controller, factory choices in Workloads, Turns and Decisions, and the API sandbox every client tests against. [Evidence](validation/mar-01-09-2026-10-18.md). |
+| MAR-08 | Done | Joint | Deck is a client: Runs for Ready tasks, Turns for chat, mirrored status and evidence; its provider routes and Marina's Deck client are removed. Browser tests pass against a real Marina. [Evidence](validation/mar-01-09-2026-10-18.md). |
+| MAR-09 | Done | CLI | `platformctl` uses Marina's API; on Kind, `kubectl` creates, approves and reads a Run's evidence. [Evidence](validation/mar-01-09-2026-10-18.md). |
+| MAR-10 | Open | Joint | Cutover on local Kind: Deck and Marina switch together to the platform API; old history stays readable. Steps, proof and rollback in the [plan](plans/marina-platform-api.md#mar-10-cutover-steps). Model spend and acceptance-repository commits need the operator's OK. |
+| MAR-11 | Open | Marina | A Helm chart installs Marina without Deck, with platform components as options; a kubectl-created Run lands on main with evidence. After MAR-10. [Plan](plans/marina-platform-api.md). |
+| MAR-12 | Later | Marina | A second runtime adapter behind the same port. Trigger: the operator wants to replace the sandbox. |
+
 ### The platform
 
 Direction in [decision 0032](decisions/0032-agent-and-application-platform.md);
@@ -53,7 +71,12 @@ each task's outcome and acceptance is in the
 | ID | State | Owner | Outcome |
 | --- | --- | --- | --- |
 | PLAT-00 | Done | Operator | Direction recorded in [decision 0032](decisions/0032-agent-and-application-platform.md). |
-| PLAT-01–02, PLAT-04–09, PLAT-11, PLAT-17 | Open | Ops/Marina/Joint | One working stack first: footprint baseline, Argo CD config, External Secrets and Kyverno, agentgateway, kgateway and MCP tools, OpenTelemetry with Jaeger, Prometheus and Perses, and Knative apps deployed by Argo CD. |
+| PLAT-05 | Done | Ops | Kyverno audits third-party namespaces and enforces digest pins, no privilege, memory limits, labels and NetworkPolicy presence in platform namespaces. [Evidence](validation/plat-05-09-2026-10-17.md#plat-05-kyverno). |
+| PLAT-07 | Done | Ops | kgateway serves Deck at `https://localhost:8443` by TLS passthrough; kgateway and agentgateway stay separate. [Evidence](validation/plat-05-09-2026-10-17.md#plat-07-kgateway). |
+| PLAT-06 | Verify | Ops/Marina | agentgateway serves the Responses API to Marina only and holds the provider key; Marina is configured to use it. A real chat turn and repository attempt through it are pending. [Evidence](validation/plat-05-09-2026-10-17.md#plat-06-agentgateway-for-models). |
+| PLAT-08 | Verify | Marina/Ops | Allow-listed read-only MCP tools (Jaeger traces) through agentgateway and Marina's chat gateway. Pending: Marina image with this code and one live chat turn using a tool. [Evidence](validation/plat-05-09-2026-10-17.md#plat-08-mcp). |
+| PLAT-09 | Verify | Marina/Ops | Collector and Jaeger run; Marina records one trace per task. Pending: Marina image with this code and one task traced from claim to landing. [Evidence](validation/plat-05-09-2026-10-17.md#plat-09-traces). |
+| PLAT-01–02, PLAT-04, PLAT-11, PLAT-17 | Open | Ops/Marina/Joint | Footprint baseline, Argo CD config, External Secrets, Prometheus and Perses (Jaeger is in place), and Knative apps deployed by Argo CD. |
 | PLAT-03, PLAT-10, PLAT-12–16 | Later | Ops/Joint | The slot manifest, Langfuse (too heavy for the laptop now), experiments that compare components, SPIFFE/SPIRE workload identity, OpenFGA tool access and Keycloak sign-in. Standard benchmarks are not planned. Triggers are in the plan. |
 
 ### Feedback loop and review
@@ -96,7 +119,7 @@ review is feedback for the next attempt.
 | ID | State | Owner | Outcome |
 | --- | --- | --- | --- |
 | FLOW-01 | Open | Joint | After AUTO-08, VER-01 and PRD-03: on local Kind with the acceptance repository, a chat becomes a PRD in the repository and its tasks land on main with unit and end-to-end tests. One failing check is repaired, and a restart during a task loses nothing. Store redacted evidence. Running this on a real project is the operator's own use, not agent work. |
-| PROJ-01 | Verify | Joint | Explicit per-project Marina profiles bind each configured Deck project to its repository, checks and credential references. Gateways route by durable attempt identity; global admission keeps one active task. Source checks pass; installed two-project proof follows FLOW-01. [Evidence](validation/pending-prd-projects-2026-10-05.md), [decision](decisions/0031-explicit-per-project-profiles.md). |
+| PROJ-01 | Verify | Joint | Explicit per-project Marina profiles bind each configured Deck project to its repository, checks and credential references. Gateways route by durable attempt identity; global admission keeps one active task. Source checks pass; installed two-project proof follows FLOW-01. On 2026-10-18 Marina's tick loop was fixed to advance every configured project's workflow, and runtime cleanup to use only the attempt's own project profile; before, a second project's tasks never progressed. [Evidence](validation/pending-prd-projects-2026-10-05.md), [decision](decisions/0031-explicit-per-project-profiles.md). |
 
 ## Later
 

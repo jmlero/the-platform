@@ -1,0 +1,333 @@
+# Generated from openapi.yaml by: go test ./api -update. Do not edit.
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+    labels:
+        app.kubernetes.io/part-of: the-platform
+    name: turns.marina.dev
+spec:
+    group: marina.dev
+    names:
+        categories:
+            - marina
+        kind: Turn
+        listKind: TurnList
+        plural: turns
+        singular: turn
+    scope: Namespaced
+    versions:
+        - additionalPrinterColumns:
+            - jsonPath: .status.phase
+              name: Phase
+              type: string
+            - jsonPath: .metadata.creationTimestamp
+              name: Age
+              type: date
+          name: v1
+          schema:
+            openAPIV3Schema:
+                properties:
+                    apiVersion:
+                        type: string
+                    kind:
+                        type: string
+                    metadata:
+                        type: object
+                    spec:
+                        description: Immutable after creation, except cancel. Marina never fetches the thread from the client.
+                        properties:
+                            budget:
+                                properties:
+                                    maxTokens:
+                                        minimum: 1
+                                        type: integer
+                                    timeMinutes:
+                                        maximum: 60
+                                        minimum: 1
+                                        type: integer
+                                required:
+                                    - timeMinutes
+                                    - maxTokens
+                                type: object
+                            cancel:
+                                default: false
+                                type: boolean
+                            context:
+                                items:
+                                    description: One selected input. Guidance may steer the agent; data never grants authority.
+                                    properties:
+                                        content:
+                                            maxLength: 262144
+                                            type: string
+                                        digest:
+                                            pattern: ^sha256:[0-9a-f]{64}$
+                                            type: string
+                                        kind:
+                                            enum:
+                                                - document
+                                                - message
+                                                - repository-file
+                                            type: string
+                                        name:
+                                            maxLength: 200
+                                            minLength: 1
+                                            type: string
+                                        path:
+                                            maxLength: 1024
+                                            type: string
+                                        revision:
+                                            pattern: ^[0-9a-f]{40}$
+                                            type: string
+                                        source:
+                                            properties:
+                                                id:
+                                                    maxLength: 200
+                                                    type: string
+                                                revision:
+                                                    minimum: 0
+                                                    type: integer
+                                                system:
+                                                    maxLength: 64
+                                                    type: string
+                                            type: object
+                                        trust:
+                                            enum:
+                                                - guidance
+                                                - data
+                                            type: string
+                                    required:
+                                        - name
+                                        - kind
+                                        - trust
+                                        - digest
+                                    type: object
+                                maxItems: 32
+                                type: array
+                            project:
+                                maxLength: 63
+                                minLength: 1
+                                pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                                type: string
+                            thread:
+                                properties:
+                                    id:
+                                        maxLength: 200
+                                        minLength: 1
+                                        type: string
+                                    messages:
+                                        items:
+                                            properties:
+                                                body:
+                                                    maxLength: 16384
+                                                    type: string
+                                                id:
+                                                    maxLength: 200
+                                                    minLength: 1
+                                                    type: string
+                                                role:
+                                                    enum:
+                                                        - human
+                                                        - agent
+                                                    type: string
+                                            required:
+                                                - id
+                                                - role
+                                                - body
+                                            type: object
+                                        maxItems: 64
+                                        minItems: 1
+                                        type: array
+                                required:
+                                    - id
+                                    - messages
+                                type: object
+                            workload:
+                                maxLength: 63
+                                minLength: 1
+                                pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                                type: string
+                        required:
+                            - project
+                            - thread
+                            - budget
+                        type: object
+                        x-kubernetes-validations:
+                            - message: cancel cannot be withdrawn
+                              rule: '!has(oldSelf.cancel) || !oldSelf.cancel || (has(self.cancel) && self.cancel)'
+                            - message: fields cannot be added or removed
+                              rule: has(self.context) == has(oldSelf.context) && has(self.workload) == has(oldSelf.workload)
+                    status:
+                        properties:
+                            conditions:
+                                items:
+                                    properties:
+                                        lastTransitionTime:
+                                            format: date-time
+                                            type: string
+                                        message:
+                                            maxLength: 1024
+                                            type: string
+                                        observedGeneration:
+                                            type: integer
+                                        reason:
+                                            maxLength: 64
+                                            type: string
+                                        status:
+                                            enum:
+                                                - "True"
+                                                - "False"
+                                                - Unknown
+                                            type: string
+                                        type:
+                                            maxLength: 64
+                                            type: string
+                                    required:
+                                        - type
+                                        - status
+                                    type: object
+                                maxItems: 16
+                                type: array
+                            decisions:
+                                items:
+                                    maxLength: 63
+                                    minLength: 1
+                                    pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                                    type: string
+                                maxItems: 8
+                                type: array
+                            finishedAt:
+                                format: date-time
+                                type: string
+                            lastEventSequence:
+                                minimum: 0
+                                type: integer
+                            observedGeneration:
+                                type: integer
+                            phase:
+                                enum:
+                                    - Pending
+                                    - Running
+                                    - WaitingDecision
+                                    - Succeeded
+                                    - Failed
+                                    - Cancelled
+                                type: string
+                            proposals:
+                                properties:
+                                    prd:
+                                        properties:
+                                            content:
+                                                maxLength: 262144
+                                                type: string
+                                            digest:
+                                                pattern: ^sha256:[0-9a-f]{64}$
+                                                type: string
+                                            path:
+                                                maxLength: 512
+                                                type: string
+                                            title:
+                                                maxLength: 200
+                                                type: string
+                                        required:
+                                            - path
+                                            - title
+                                            - content
+                                            - digest
+                                        type: object
+                                    prdTasks:
+                                        properties:
+                                            source:
+                                                maxLength: 512
+                                                type: string
+                                            tasks:
+                                                items:
+                                                    properties:
+                                                        acceptanceCriteria:
+                                                            maxLength: 16384
+                                                            minLength: 1
+                                                            type: string
+                                                        description:
+                                                            maxLength: 16384
+                                                            type: string
+                                                        title:
+                                                            maxLength: 200
+                                                            minLength: 1
+                                                            type: string
+                                                    required:
+                                                        - title
+                                                        - acceptanceCriteria
+                                                    type: object
+                                                maxItems: 16
+                                                minItems: 1
+                                                type: array
+                                        required:
+                                            - source
+                                            - tasks
+                                        type: object
+                                    task:
+                                        properties:
+                                            acceptanceCriteria:
+                                                maxLength: 16384
+                                                minLength: 1
+                                                type: string
+                                            description:
+                                                maxLength: 16384
+                                                type: string
+                                            title:
+                                                maxLength: 200
+                                                minLength: 1
+                                                type: string
+                                        required:
+                                            - title
+                                            - acceptanceCriteria
+                                        type: object
+                                type: object
+                            reason:
+                                maxLength: 2048
+                                type: string
+                            reply:
+                                properties:
+                                    answer:
+                                        maxLength: 16384
+                                        type: string
+                                required:
+                                    - answer
+                                type: object
+                            repositoryRevision:
+                                pattern: ^[0-9a-f]{40}$
+                                type: string
+                            startedAt:
+                                format: date-time
+                                type: string
+                            usage:
+                                properties:
+                                    attempts:
+                                        minimum: 0
+                                        type: integer
+                                    costMinor:
+                                        minimum: 0
+                                        type: integer
+                                    currency:
+                                        pattern: ^[A-Z]{3}$
+                                        type: string
+                                    maxAttempts:
+                                        minimum: 0
+                                        type: integer
+                                    reservedCostMinor:
+                                        minimum: 0
+                                        type: integer
+                                    reservedTokens:
+                                        minimum: 0
+                                        type: integer
+                                    tokens:
+                                        minimum: 0
+                                        type: integer
+                                type: object
+                        type: object
+                required:
+                    - spec
+                type: object
+          served: true
+          storage: true
+          subresources:
+            status: {}

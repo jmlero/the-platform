@@ -1,0 +1,11 @@
+# kgateway v2.4.5 controller, chart oci://cr.kgateway.dev/kgateway-dev/charts/kgateway (PLAT-07).
+controller:
+  image:
+    registry: cr.kgateway.dev/kgateway-dev
+    repository: kgateway
+    tag: v2.4.5@sha256:b95911fb6e8960f4a04b96ad277f6c0f945862013efcfdc2fe04b8b0c4e3d97d
+  resources:
+    requests: {cpu: 50m, memory: 96Mi}
+    limits: {cpu: 500m, memory: 256Mi}
+  podSecurityContext: {runAsNonRoot: true, seccompProfile: {type: RuntimeDefault}}
+  securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}

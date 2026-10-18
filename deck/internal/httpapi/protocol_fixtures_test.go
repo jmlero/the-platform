@@ -33,9 +33,6 @@ type fixtureShape struct {
 }
 
 var fixtureShapes = map[string]fixtureShape{
-	"lease": {
-		required: []string{"run_id", "agent_id", "version", "fence_token", "expires_at", "renewed_at"},
-	},
 	"plan": {
 		required: []string{
 			"id", "run_id", "revision", "plan", "context_digest", "risk_class",
@@ -45,14 +42,6 @@ var fixtureShapes = map[string]fixtureShape{
 	},
 	"command": {
 		required: []string{"id", "run_id", "sequence", "type", "status", "reason", "requested_by", "result", "run_version", "fence_token", "created_at", "updated_at"},
-	},
-	"event": {
-		required: []string{
-			"id", "sequence", "type", "schema_version", "producer", "project_id", "task_id", "run_id",
-			"execution_id", "correlation_id", "causation_id", "occurred_at", "ingested_at", "severity",
-			"task_version", "source_revision", "policy_version", "payload",
-		},
-		optional: []string{"attempt_id"},
 	},
 	"budget": {
 		required: []string{
@@ -147,23 +136,11 @@ func TestProtocolFixturesCoverCanonicalContract(t *testing.T) {
 			if fixture.ID != "msg_example" || fixture.ThreadID != "thr_example" || fixture.PromotedTaskID == nil {
 				t.Fatalf("invalid message fixture: %#v", fixture)
 			}
-		case "conversation_dispatch":
-			var fixture domain.ConversationDispatch
-			decodeFixture(t, path, &fixture)
-			if fixture.EventID < 1 || fixture.InvokedAt < fixture.Message.CreatedAt || fixture.Message.InvokedAgentID == "" || fixture.Message.InvocationRequestID == "" {
-				t.Fatalf("invalid conversation dispatch fixture: %#v", fixture)
-			}
 		case "conversation_question":
 			var fixture domain.ConversationQuestion
 			decodeFixture(t, path, &fixture)
 			if fixture.ID == "" || fixture.ThreadID == "" || fixture.InvocationMessageID == "" || fixture.QuestionID == "" || fixture.Status != "answered" || fixture.AnswerMessageID == "" || fixture.AnswerRequestID == "" {
 				t.Fatalf("invalid conversation question fixture: %#v", fixture)
-			}
-		case "conversation_outcome":
-			var fixture domain.ConversationOutcome
-			decodeFixture(t, path, &fixture)
-			if fixture.InvocationMessageID == "" || fixture.MessageID == "" || fixture.TaskID == "" || fixture.FollowupTaskID == "" || fixture.Status != "completed" {
-				t.Fatalf("invalid conversation outcome fixture: %#v", fixture)
 			}
 		case "workloads":
 			var fixture domain.WorkloadCatalog
@@ -171,7 +148,7 @@ func TestProtocolFixturesCoverCanonicalContract(t *testing.T) {
 			if len(fixture.Profiles) != 1 || fixture.Profiles[0].ID != "repository/v2" || fixture.Profiles[0].MinAttempts != 3 {
 				t.Fatal("invalid workloads fixture")
 			}
-		case "context", "conversation_context":
+		case "context":
 			var fixture domain.ResolvedContext
 			decodeFixture(t, path, &fixture)
 			if fixture.Selection == nil || len(fixture.Sources) != 1 || len(fixture.Selection.Sources) != 1 || fixture.Selection.Sources[0].Digest != fixture.Sources[0].Digest || fixture.Sources[0].Trust != "guidance" {
@@ -182,15 +159,6 @@ func TestProtocolFixturesCoverCanonicalContract(t *testing.T) {
 			decodeFixture(t, path, &fixture)
 			if fixture.Status != "connected" || fixture.Binding == nil || fixture.Binding.Version < 1 || fixture.Binding.Repository != fixture.Repository {
 				t.Fatalf("repository fixture = %#v", fixture)
-			}
-		case "provider_info":
-			var fixture providerInfoResponse
-			decodeFixture(t, path, &fixture)
-			if fixture.Provider != providerName || fixture.ProtocolVersion != protocolVersion || !fixture.Ready {
-				t.Fatalf("provider fixture = %#v", fixture)
-			}
-			if !reflect.DeepEqual(fixture.Capabilities, protocolCapabilities) {
-				t.Fatalf("provider fixture capabilities = %#v, want %#v", fixture.Capabilities, protocolCapabilities)
 			}
 		case "agent":
 			var fixture domain.Agent
@@ -235,7 +203,7 @@ func TestProtocolFixturesCoverCanonicalContract(t *testing.T) {
 		}
 	}
 
-	for _, required := range []string{"task", "run", "lease", "plan", "command", "event", "budget", "evidence", "context", "repository"} {
+	for _, required := range []string{"task", "run", "plan", "command", "budget", "evidence", "context", "repository"} {
 		if _, ok := seenKinds[required]; !ok {
 			t.Errorf("fixture manifest is missing %q", required)
 		}

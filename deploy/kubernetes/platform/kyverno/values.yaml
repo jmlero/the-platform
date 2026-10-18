@@ -1,0 +1,42 @@
+# Kyverno 1.19.1, chart kyverno/kyverno 3.9.1 (PLAT-05).
+# Every image is pinned by digest; the chart appends the tag string as given.
+# Only the admission and reports controllers run: the policies validate and
+# report, and nothing generates, mutates existing resources or cleans up.
+admissionController:
+  replicas: 1
+  initContainer:
+    image:
+      registry: ghcr.io
+      repository: kyverno/kyvernopre
+      tag: v1.19.1@sha256:c25c47461f06f2845a48c319ae86fbbc1730a7b9ed5b701889c9dc1f9ee94b09
+  container:
+    image:
+      registry: ghcr.io
+      repository: kyverno/kyverno
+      tag: v1.19.1@sha256:b31d8511ae5fd6010e2a01ea72ebae08eb82fa51d91af14a1d9fe989949b4edb
+reportsController:
+  replicas: 1
+  image:
+    registry: ghcr.io
+    repository: kyverno/reports-controller
+    tag: v1.19.1@sha256:c0eee97b9b44a0dd35805d56b358fa52548480f79d4944602b9609538eccd64c
+backgroundController:
+  enabled: false
+cleanupController:
+  enabled: false
+crds:
+  migration:
+    image:
+      registry: ghcr.io
+      repository: kyverno/kyverno-cli
+      tag: v1.19.1@sha256:ced7b2be0b04250cabfe695f15307f69eb715fe23234816388af4f3812915b2a
+webhooksCleanup:
+  image:
+    registry: ghcr.io
+    repository: kyverno/readiness-checker
+    tag: v1.19.1@sha256:31bb42ce7f5b2e27c1cf633aeff4f0cad1f5bb63761e2cb09f0e25cdd26572bf
+test:
+  image:
+    registry: ghcr.io
+    repository: kyverno/readiness-checker
+    tag: v1.19.1@sha256:31bb42ce7f5b2e27c1cf633aeff4f0cad1f5bb63761e2cb09f0e25cdd26572bf

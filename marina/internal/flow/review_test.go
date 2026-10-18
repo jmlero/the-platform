@@ -243,3 +243,27 @@ func TestUnreviewedPatchCannotPublish(t *testing.T) {
 		t.Fatalf("publication bypassed review: commits=%d blocker=%q", len(source.writes), p.blocked)
 	}
 }
+
+// A workload may turn review off; the clean verification Job remains the
+// independent evidence, so the run still lands only after checks and CI.
+func TestWorkloadWithoutReviewCommitsTheCheckedImplementationAndLands(t *testing.T) {
+	f, p, runtime := newRepairFlow(t, 11)
+	f.c.Config.SkipReview = true
+	runtime.exitCode = 0
+	source := &repairSource{head: f.s.Head, main: f.s.Base, writes: map[string]sourcecontrol.Revision{}}
+	f.c.Source = func(execution.Execution) (sourcecontrol.Port, error) { return source, nil }
+	f.s.ConfigDigest = f.c.Config.Digest()
+	if err := f.c.save(f.ctx, f.e, f.s); err != nil {
+		t.Fatal(err)
+	}
+	advanceReviewFlow(t, &f, 50, nil)
+	e, _ := f.journal.GetExecution(f.ctx, f.e.ID)
+	if e.State != execution.StateCompleted || len(runtime.starts) != 2 || len(source.writes) != 1 || source.lands != 1 || p.blocked != "" {
+		t.Fatalf("reviewless run: %s starts=%d commits=%d lands=%d blocker=%q", e.State, len(runtime.starts), len(source.writes), source.lands, p.blocked)
+	}
+	for _, item := range p.evidence {
+		if item.Type == "semantic_review" {
+			t.Fatalf("review evidence recorded without a review: %+v", item)
+		}
+	}
+}

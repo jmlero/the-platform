@@ -22,3 +22,23 @@ type WorkloadCatalog struct {
 type WorkloadPublication interface {
 	PublishWorkloads(context.Context, string, WorkloadCatalog) error
 }
+
+// FactoryChoices are the factory's choices from a Run's Workload, frozen into
+// its work item (decision 0033). Platform invariants apply whatever they say.
+type FactoryChoices struct {
+	Checks          []FactoryCheck `json:"checks"`
+	AllowedPaths    []string       `json:"allowed_paths"`
+	RequireApproval bool           `json:"require_approval"`
+	Review          bool           `json:"review"`
+	Delivery        string         `json:"delivery"`
+	RequiredCI      []string       `json:"required_ci,omitempty"`
+	RepairFailures  int            `json:"repair_failures"`
+	MaxTokens       int64          `json:"max_tokens,omitempty"`
+	BudgetMinutes   int            `json:"budget_minutes,omitempty"`
+}
+
+type FactoryCheck struct {
+	ID        string   `json:"id"`
+	Directory string   `json:"directory"`
+	Command   []string `json:"command"`
+}

@@ -115,6 +115,15 @@ func (c *Controller) checkedReview(ctx context.Context, e execution.Execution, s
 }
 
 func (c *Controller) publicationCandidate(ctx context.Context, e execution.Execution, s state) (workresult.Candidate, error) {
+	if c.Config.SkipReview {
+		// The Run's workload turned review off; only the exact checked
+		// implementation of this base may commit.
+		candidate, err := c.candidate(s)
+		if err != nil || candidate.BaseRevision != s.Head {
+			return candidate, errors.New("commit requires the exact checked implementation of this base")
+		}
+		return candidate, nil
+	}
 	candidate, result, err := c.checkedReview(ctx, e, s)
 	if err != nil || candidate.BaseRevision != s.Head || result.Review == nil || !result.Review.Passed() {
 		return candidate, errors.New("commit requires a passing independent review of this exact patch and base")
@@ -133,7 +142,7 @@ func (c *Controller) advanceReview(ctx context.Context, e execution.Execution, r
 	if s.Step == "review_evidence" || s.Step == "review_rejected" {
 		return c.reviewEvidence(ctx, e, r, s)
 	}
-	if err := c.Config.ValidateReviewer(); err != nil {
+	if err := c.Config.ValidateReviewer(); err != nil && !c.Config.SkipReview {
 		return c.block(ctx, e, r, err.Error())
 	}
 	if s.CandidateDigest == "" {
@@ -148,6 +157,13 @@ func (c *Controller) advanceReview(ctx context.Context, e execution.Execution, r
 		s.CandidateDigest, err = c.Artifacts.Put(data)
 		if err != nil {
 			return err
+		}
+		return c.save(ctx, e, s)
+	}
+	if c.Config.SkipReview {
+		s.Step = "publish"
+		if s.Head == s.baseRevision() {
+			s.Step = "branch"
 		}
 		return c.save(ctx, e, s)
 	}

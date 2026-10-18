@@ -52,7 +52,7 @@
     {#each manifest.inputs as input}<article><strong>{input.title ?? input.kind}</strong><p class="meta">{input.owner ?? input.kind} · {input.trust === 'trusted' ? 'Guidance within task permissions' : 'Untrusted task data'}</p><p class="reference">{input.uri}</p>{#if input.content}<details><summary>Content received by the worker</summary><p class="content">{input.content}</p></details>{/if}<details><summary>Revision and content digest</summary><code>{input.revision}<br />{input.digest}</code></details></article>{/each}
     {#if manifest.omissions?.length}<h3>Omitted inputs</h3>{#each manifest.omissions as omitted}<article><strong>{omitted.title}</strong><p>{omitted.reason}</p><p class="reference">{omitted.uri}</p></article>{/each}{/if}
     <details><summary>Snapshot identity</summary><code>{manifest.digest}</code><p class="reference">Repository revision: {manifest.source_revision}<br />Policy: {manifest.policy_version}</p></details>
-  {:else}<p class="meta">A worker snapshot will appear after Marina assembles the authorized inputs.</p>{/if}
+  {:else}<p class="meta">Marina receives exactly this selection, with content digests, when the task runs.</p>{/if}
 </section>
 
 <style>

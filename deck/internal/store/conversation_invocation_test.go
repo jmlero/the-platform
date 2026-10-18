@@ -87,9 +87,11 @@ func TestConversationInvocationSelectsAgentAndReplaysWithoutDuplicateMessage(t *
 	if err := restored.ImportProject(ctx, exported); err != nil {
 		t.Fatal(err)
 	}
-	invocations, err := restored.ListConversationInvocations(ctx, "prj_default", 0, 100)
-	if err != nil || len(invocations) != 2 || invocations[0].Message.ID != first.Message.ID || invocations[1].Message.ID != second.Message.ID {
-		t.Fatalf("restored invocation feed: %+v %v", invocations, err)
+	for _, id := range []string{first.Message.ID, second.Message.ID} {
+		restoredMessage, err := restored.GetChannelMessage(ctx, id)
+		if err != nil || restoredMessage.InvokedAgentID != "agt_chat" || restoredMessage.InvocationRequestID == "" {
+			t.Fatalf("restored invocation %s: %+v %v", id, restoredMessage, err)
+		}
 	}
 	replayedAfterImport, err := restored.InvokeConversation(ctx, domain.ConversationInvocationInput{ChannelID: channel.ID, AgentID: "agt_chat", Body: "Investigate login", RequestID: "request-1", AuthorID: "operator:one"})
 	if err != nil || replayedAfterImport.Message.ID != first.Message.ID {

@@ -14,6 +14,7 @@ import (
 	"github.com/jmlero/the-platform/marina/internal/journal/sqlite"
 	runtimeapi "github.com/jmlero/the-platform/marina/internal/runtime"
 	"github.com/jmlero/the-platform/marina/internal/sourcecontrol"
+	"github.com/jmlero/the-platform/marina/internal/telemetry"
 	"github.com/jmlero/the-platform/marina/internal/workcontrol"
 	"github.com/jmlero/the-platform/marina/internal/workresult"
 )
@@ -72,6 +73,7 @@ type state struct {
 	Landing              *workcontrol.LandingObservation `json:",omitempty"`
 	LandingDigest        string                          `json:",omitempty"`
 	LandingEvidenceID    string                          `json:",omitempty"`
+	StepStartedAt        time.Time                       `json:",omitempty"`
 }
 
 func (c *Controller) load(ctx context.Context, e execution.Execution) (state, error) {
@@ -92,6 +94,19 @@ func (c *Controller) save(ctx context.Context, e execution.Execution, s state) e
 	e, err := c.Journal.GetExecution(ctx, e.ID)
 	if err != nil {
 		return err
+	}
+	previous, err := c.load(ctx, e)
+	if err != nil {
+		return err
+	}
+	if previous.StepStartedAt.IsZero() {
+		previous.StepStartedAt = e.CreatedAt
+	}
+	s.StepStartedAt = previous.StepStartedAt
+	if previous.Step != s.Step {
+		now := time.Now().UTC()
+		telemetry.RecordStep(ctx, telemetry.Execution{ID: e.ID, ProjectID: e.ProjectID, TaskID: e.ExternalWorkID, RunID: e.ExternalRunID}, previous.Step, previous.StepStartedAt, now)
+		s.StepStartedAt = now
 	}
 	b, err := json.Marshal(s)
 	if err != nil {
@@ -128,7 +143,7 @@ func (c *Controller) save(ctx context.Context, e execution.Execution, s state) e
 		"pending_model_calls": totals.PendingCalls, "reserved_tokens": totals.ReservedTokens, "reserved_cost_micros": totals.ReservedCostMicros,
 		"currency": c.Config.Model.Currency, "occurred_at": checkpoint.CreatedAt.UnixMilli(), "deadline_at": e.DeadlineAt,
 		"runtime_attempts": len(attempts), "max_runtime_attempts": e.MaxAttempts, "remaining_runtime_attempts": max(0, e.MaxAttempts-len(attempts)),
-		"failure_count": len(s.Failures), "failure_limit": repositoryFailureLimit}
+		"failure_count": len(s.Failures), "failure_limit": c.Config.failureLimit()}
 	if e.MaxTokens > 0 {
 		payload["remaining_tokens"] = max(0, e.MaxTokens-e.UsedTokens-totals.ReservedTokens)
 	}
@@ -367,7 +382,7 @@ func (c *Controller) advance(ctx context.Context, e execution.Execution) error {
 		if task.Budget.MaxCostMinor > 0 && (task.Budget.Currency != c.Config.Model.Currency || c.Config.Model.InputMicrosPerMillion == 0 || c.Config.Model.OutputMicrosPerMillion == 0) {
 			return c.block(ctx, e, r, "Task cost currency must match configured nonzero model price rates")
 		}
-		if task.Budget.MaxCostMinor > 0 && (c.Config.ReviewerModel.InputMicrosPerMillion == 0 || c.Config.ReviewerModel.OutputMicrosPerMillion == 0) {
+		if task.Budget.MaxCostMinor > 0 && !c.Config.SkipReview && (c.Config.ReviewerModel == nil || c.Config.ReviewerModel.InputMicrosPerMillion == 0 || c.Config.ReviewerModel.OutputMicrosPerMillion == 0) {
 			return c.block(ctx, e, r, "Cost-bounded tasks require explicit reviewer price rates")
 		}
 		source, err := c.Source(e)
@@ -436,8 +451,10 @@ func (c *Controller) advance(ctx context.Context, e execution.Execution) error {
 			submission.RollbackApproach = "Revert the landed commit through a separately authorized task; never force-push"
 			submission.Plan += "\n\nIf main advances before landing, native Git rebases the task history onto that exact revision within the original budget. Conflicts block. A fresh branch, independent review, clean tests and required CI are mandatory; no ref is force-pushed."
 		}
-		submission.Plan += fmt.Sprintf("\n\nFailed clean checks or required CI permit a repair only after recording the failure evidence, diagnosis and a different approach. All work shares the frozen task, context and original budget of at most %d runtime starts. Three failures block the task; each repaired commit requires fresh clean verification and required CI on that exact head.", e.MaxAttempts)
-		submission.Plan += "\n\nBefore every commit, a fresh read-only reviewer using " + c.Config.ReviewerModel.Name + " must pass the exact candidate patch and base. It checks acceptance, scope, test preservation, the repair approach and defects. A rejected review counts once and feeds diagnosis; a missing verdict blocks. Review shares the original budget."
+		submission.Plan += fmt.Sprintf("\n\nFailed clean checks or required CI permit a repair only after recording the failure evidence, diagnosis and a different approach. All work shares the frozen task, context and original budget of at most %d runtime starts. %d failures block the task; each repaired commit requires fresh clean verification and required CI on that exact head.", e.MaxAttempts, c.Config.failureLimit())
+		if !c.Config.SkipReview {
+			submission.Plan += "\n\nBefore every commit, a fresh read-only reviewer using " + c.Config.ReviewerModel.Name + " must pass the exact candidate patch and base. It checks acceptance, scope, test preservation, the repair approach and defects. A rejected review counts once and feeds diagnosis; a missing verdict blocks. Review shares the original budget."
+		}
 		p, err := c.Provider.SubmitPlanRevision(ctx, r.ID, submission)
 		if err != nil {
 			return err
@@ -584,6 +601,9 @@ func (c *Controller) advance(ctx context.Context, e execution.Execution) error {
 		}
 		s.Head = revision.Commit
 		s.Step = "review_evidence"
+		if c.Config.SkipReview {
+			s.Step = "verify"
+		}
 		return c.save(ctx, e, s)
 	}
 	if c.Config.Delivery == "fast_forward" && (s.Step == "ci" || s.Step == "land" || s.Step == "evidence" || s.Step == "complete") {

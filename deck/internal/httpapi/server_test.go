@@ -1,23 +1,19 @@
 package httpapi
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"path/filepath"
-	"reflect"
-	"sort"
 	"strings"
 	"testing"
 
 	"github.com/jmlero/the-platform/deck/internal/domain"
+	"github.com/jmlero/the-platform/deck/internal/marina"
 	"github.com/jmlero/the-platform/deck/internal/store"
 )
 
@@ -48,390 +44,81 @@ func TestRequestBodyValidation(t *testing.T) {
 	}
 }
 
-func TestProviderInfoAdvertisesDeterministicContract(t *testing.T) {
-	handler := newTestHandler(t)
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/provider", nil)
-	request.Header.Set("X-Request-ID", "contract-test-1")
-	response := httptest.NewRecorder()
-
-	handler.ServeHTTP(response, request)
-
-	if response.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
-	}
-	if value := response.Header().Get("X-Request-ID"); value != "contract-test-1" {
-		t.Fatalf("X-Request-ID = %q", value)
-	}
-	if value := response.Header().Get("Cache-Control"); value != "no-store" {
-		t.Fatalf("Cache-Control = %q", value)
-	}
-	var info providerInfoResponse
-	if err := json.NewDecoder(response.Body).Decode(&info); err != nil {
-		t.Fatalf("decode provider info: %v", err)
-	}
-	if info.Provider != "deck" || info.ProtocolVersion != protocolVersion || !info.Ready {
-		t.Fatalf("provider info = %#v", info)
-	}
-	if info.ServerTime <= 0 || info.Readiness["store"] != "available" {
-		t.Fatalf("provider readiness = %#v", info)
-	}
-	if !reflect.DeepEqual(info.Capabilities, protocolCapabilities) {
-		t.Fatalf("capabilities = %#v, want %#v", info.Capabilities, protocolCapabilities)
-	}
-}
-
-func TestAdvertisedCapabilitiesMatchOpenAPIOperations(t *testing.T) {
-	contract, err := os.Open(filepath.Join("..", "..", "api", "openapi.yaml"))
-	if err != nil {
-		t.Fatalf("open OpenAPI contract: %v", err)
-	}
-	defer contract.Close()
-
-	capabilities := make([]string, 0, len(protocolCapabilities))
-	seen := make(map[string]struct{}, len(protocolCapabilities))
-	scanner := bufio.NewScanner(contract)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		// Landed completion is an additive behavior of the existing complete route.
-		line = strings.Replace(line, "x-landing-capability:", "x-capability:", 1)
-		line = strings.Replace(line, "x-prd-capability:", "x-capability:", 1)
-		line = strings.Replace(line, "x-prd-tasks-capability:", "x-capability:", 1)
-		if !strings.HasPrefix(line, "x-capability:") {
-			continue
-		}
-		capability := strings.TrimSpace(strings.TrimPrefix(line, "x-capability:"))
-		if _, exists := seen[capability]; exists {
-			// One capability can cover multiple project-scoped read routes.
-			continue
-		}
-		seen[capability] = struct{}{}
-		capabilities = append(capabilities, capability)
-	}
-	if err := scanner.Err(); err != nil {
-		t.Fatalf("scan OpenAPI contract: %v", err)
-	}
-	sort.Strings(capabilities)
-	if !reflect.DeepEqual(capabilities, protocolCapabilities) {
-		t.Fatalf("OpenAPI capabilities = %#v, provider advertises %#v", capabilities, protocolCapabilities)
-	}
-}
-
-func TestOpenAPIDeclaresIdempotencyForEveryClaimAndRunMutation(t *testing.T) {
-	contract, err := os.ReadFile(filepath.Join("..", "..", "api", "openapi.yaml"))
-	if err != nil {
-		t.Fatalf("read OpenAPI contract: %v", err)
-	}
-	const reference = `$ref: "#/components/parameters/IdempotencyKey"`
-	if count := strings.Count(string(contract), reference); count != 16 {
-		t.Fatalf("Idempotency-Key operation references = %d, want 16", count)
-	}
-}
-
-func TestProviderInfoRemainsReadableWhenStoreIsUnavailable(t *testing.T) {
-	appStore, err := store.Open(context.Background(), filepath.Join(t.TempDir(), "closed-deck.db"))
-	if err != nil {
-		t.Fatalf("open Deck store: %v", err)
-	}
-	handler := New(appStore, slog.New(slog.NewTextHandler(io.Discard, nil))).Handler()
-	if err := appStore.Close(); err != nil {
-		t.Fatalf("close Deck store: %v", err)
-	}
-
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/provider", nil)
-	response := httptest.NewRecorder()
-	handler.ServeHTTP(response, request)
-
-	if response.Code != http.StatusOK {
-		t.Fatalf("status = %d, want provider information despite degraded readiness", response.Code)
-	}
-	var info providerInfoResponse
-	if err := json.NewDecoder(response.Body).Decode(&info); err != nil {
-		t.Fatalf("decode provider info: %v", err)
-	}
-	if info.Ready || info.Readiness["store"] != "unavailable" {
-		t.Fatalf("provider readiness = %#v", info)
-	}
-}
-
-func TestReadinessReflectsStoreAndServiceAuthorizationHealth(t *testing.T) {
+func TestReadinessReportsStoreHealthAndWhetherMarinaIsConfigured(t *testing.T) {
 	appStore, err := store.Open(context.Background(), filepath.Join(t.TempDir(), "deck-readiness.db"))
 	if err != nil {
 		t.Fatalf("open Deck store: %v", err)
 	}
-	policyPath := filepath.Join(t.TempDir(), "service-auth.json")
-	writeServiceAuthPolicy(
-		t,
-		policyPath,
-		serviceAuthTokenOne,
-		[]string{capabilityProviderInfo},
-		[]string{"prj_default"},
-	)
-	authorizer, err := NewFileServiceAuthorizer(policyPath)
-	if err != nil {
-		t.Fatalf("create service authorizer: %v", err)
-	}
-	handler := New(
-		appStore,
-		slog.New(slog.NewTextHandler(io.Discard, nil)),
-		WithServiceAuthorizer(authorizer),
-	).Handler()
-
-	readiness := func() (int, map[string]string) {
+	readiness := func(handler http.Handler) (int, map[string]string) {
 		t.Helper()
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/readyz", nil))
 		var payload struct {
-			Status    string            `json:"status"`
 			Readiness map[string]string `json:"readiness"`
 		}
 		if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
 			t.Fatalf("decode readiness: %v", err)
 		}
-		if response.Code == http.StatusOK && payload.Status != "ready" {
-			t.Fatalf("healthy readiness status = %q", payload.Status)
-		}
-		if response.Code == http.StatusServiceUnavailable && payload.Status != "degraded" {
-			t.Fatalf("degraded readiness status = %q", payload.Status)
-		}
 		return response.Code, payload.Readiness
 	}
-
-	status, checks := readiness()
-	if status != http.StatusOK || checks["store"] != "available" || checks["service_auth"] != "available" {
-		t.Fatalf("healthy readiness = status %d, checks %#v", status, checks)
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	client, err := marina.New(marina.Config{URL: "http://127.0.0.1:1", TokenFile: "/dev/null"})
+	if err != nil {
+		t.Fatal(err)
 	}
-	if err := os.WriteFile(policyPath, []byte(`{"version":1,"identities":[]}`), 0o600); err != nil {
-		t.Fatalf("replace service authorization policy: %v", err)
+	if status, checks := readiness(New(appStore, logger).Handler()); status != http.StatusOK || checks["store"] != "available" || checks["marina"] != "disabled" {
+		t.Fatalf("without Marina = %d %#v", status, checks)
 	}
-	status, checks = readiness()
-	if status != http.StatusServiceUnavailable || checks["service_auth"] != "unavailable" {
-		t.Fatalf("authorization readiness = status %d, checks %#v", status, checks)
+	configured := New(appStore, logger, WithMarina(client)).Handler()
+	if status, checks := readiness(configured); status != http.StatusOK || checks["marina"] != "configured" {
+		t.Fatalf("with Marina = %d %#v", status, checks)
 	}
-	writeServiceAuthPolicy(
-		t,
-		policyPath,
-		serviceAuthTokenOne,
-		[]string{capabilityProviderInfo},
-		[]string{"prj_default"},
-	)
 	if err := appStore.Close(); err != nil {
-		t.Fatalf("close Deck store: %v", err)
+		t.Fatal(err)
 	}
-	status, checks = readiness()
-	if status != http.StatusServiceUnavailable || checks["store"] != "unavailable" {
-		t.Fatalf("store readiness = status %d, checks %#v", status, checks)
+	if status, checks := readiness(configured); status != http.StatusServiceUnavailable || checks["store"] != "unavailable" {
+		t.Fatalf("closed store = %d %#v", status, checks)
 	}
 }
 
-func TestTaskStatusFilterAndStableErrorEnvelope(t *testing.T) {
+func TestStableErrorEnvelopeEchoesTheRequestID(t *testing.T) {
 	appStore, handler := newTestStoreAndHandler(t)
-	ctx := context.Background()
-	if _, err := appStore.CreateTask(ctx, domain.CreateTaskInput{
-		Title: "Ready work", Status: domain.TaskReady, Priority: "high", BudgetMinutes: 10,
-	}); err != nil {
-		t.Fatalf("create ready task: %v", err)
+	task, err := appStore.CreateTask(context.Background(), domain.CreateTaskInput{Title: "Backlog work", Priority: "low", BudgetMinutes: 10})
+	if err != nil {
+		t.Fatal(err)
 	}
-	if _, err := appStore.CreateTask(ctx, domain.CreateTaskInput{
-		Title: "Backlog work", Status: domain.TaskBacklog, Priority: "low", BudgetMinutes: 10,
-	}); err != nil {
-		t.Fatalf("create backlog task: %v", err)
-	}
-
-	filteredRequest := httptest.NewRequest(http.MethodGet, "/api/v1/tasks?status=ready", nil)
-	filteredResponse := httptest.NewRecorder()
-	handler.ServeHTTP(filteredResponse, filteredRequest)
-	if filteredResponse.Code != http.StatusOK {
-		t.Fatalf("filtered status = %d", filteredResponse.Code)
-	}
-	var tasks []domain.Task
-	if err := json.NewDecoder(filteredResponse.Body).Decode(&tasks); err != nil {
-		t.Fatalf("decode filtered tasks: %v", err)
-	}
-	if len(tasks) != 1 || tasks[0].Status != domain.TaskReady {
-		t.Fatalf("filtered tasks = %#v", tasks)
-	}
-	if filteredResponse.Header().Get("X-Request-ID") == "" {
-		t.Fatal("generated X-Request-ID is empty")
-	}
-
-	invalidRequest := httptest.NewRequest(http.MethodGet, "/api/v1/tasks?status=unknown", nil)
-	invalidRequest.Header.Set("X-Request-ID", "contract-error-1")
-	invalidResponse := httptest.NewRecorder()
-	handler.ServeHTTP(invalidResponse, invalidRequest)
-	if invalidResponse.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("invalid status = %d, want %d", invalidResponse.Code, http.StatusUnprocessableEntity)
-	}
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/"+task.ID+"/move", strings.NewReader(`{"status":"unknown"}`))
+	request.Header.Set("X-Request-ID", "contract-error-1")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
 	var apiError apiErrorResponse
-	if err := json.NewDecoder(invalidResponse.Body).Decode(&apiError); err != nil {
-		t.Fatalf("decode API error: %v", err)
+	if err := json.NewDecoder(response.Body).Decode(&apiError); err != nil || response.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, %v", response.Code, err)
 	}
-	if apiError.Code != "invalid_input" || apiError.Retryable || apiError.RequestID != "contract-error-1" {
+	if apiError.Code != "invalid_input" || apiError.Retryable || apiError.RequestID != "contract-error-1" || apiError.Error != apiError.Message {
 		t.Fatalf("API error = %#v", apiError)
 	}
-	if apiError.Error == "" || apiError.Error != apiError.Message {
-		t.Fatalf("compatibility error alias = %#v", apiError)
-	}
 }
 
-func TestClaimAPIReplaysOriginalResultAndRejectsChangedPayload(t *testing.T) {
-	appStore, handler := newTestStoreAndHandler(t)
-	ctx := context.Background()
-	if _, err := appStore.RegisterAgent(ctx, domain.Agent{ID: "agt_http_idempotent", Name: "HTTP agent"}); err != nil {
-		t.Fatalf("register agent: %v", err)
-	}
-	task, err := appStore.CreateTask(ctx, domain.CreateTaskInput{
-		Title: "Replay HTTP claim", Status: domain.TaskReady, Priority: "high", BudgetMinutes: 10,
-	})
-	if err != nil {
-		t.Fatalf("create task: %v", err)
-	}
-
-	claim := func(key string, leaseSeconds int) *httptest.ResponseRecorder {
-		t.Helper()
-		request := httptest.NewRequest(
-			http.MethodPost,
-			"/api/v1/tasks/"+task.ID+"/claim",
-			strings.NewReader(fmt.Sprintf(`{"agent_id":"agt_http_idempotent","expected_task_version":%d,"lease_seconds":%d}`, task.Version, leaseSeconds)),
-		)
-		request.Header.Set("Idempotency-Key", key)
+// Marina owns execution; Deck serves no route an executor could call.
+func TestDeckServesNoExecutorRoutes(t *testing.T) {
+	handler := newTestHandler(t)
+	for _, route := range []string{
+		"GET /api/v1/provider", "GET /api/v1/tasks", "POST /api/v1/tasks/tsk_1/claim", "POST /api/v1/agents",
+		"POST /api/v1/runs/run_1/heartbeat", "POST /api/v1/runs/run_1/plan", "POST /api/v1/runs/run_1/complete",
+		"GET /api/v1/runs/run_1/commands", "GET /api/v1/decisions", "POST /api/v1/decisions/d/answer", "GET /api/v1/events",
+		"GET /api/v1/conversation/invocations", "POST /api/v1/conversation/outcomes", "POST /api/v1/conversation/questions",
+		"PUT /api/v1/projects/prj_default/workloads", "PUT /api/v1/projects/prj_default/repository/result",
+		"GET /api/v1/runs/run_1/context", "GET /api/v1/channels", "GET /api/v1/operator/provider",
+		"PUT /api/v1/operator/projects/prj_default/repository",
+	} {
+		method, path, _ := strings.Cut(route, " ")
 		response := httptest.NewRecorder()
-		handler.ServeHTTP(response, request)
-		return response
-	}
-
-	first := claim("claim-http-replay", 60)
-	if first.Code != http.StatusCreated {
-		t.Fatalf("initial claim status = %d, body = %s", first.Code, first.Body.String())
-	}
-	var original domain.Run
-	if err := json.NewDecoder(first.Body).Decode(&original); err != nil {
-		t.Fatalf("decode initial claim: %v", err)
-	}
-	replay := claim("claim-http-replay", 60)
-	if replay.Code != http.StatusCreated {
-		t.Fatalf("replayed claim status = %d, body = %s", replay.Code, replay.Body.String())
-	}
-	var replayed domain.Run
-	if err := json.NewDecoder(replay.Body).Decode(&replayed); err != nil {
-		t.Fatalf("decode replayed claim: %v", err)
-	}
-	if !reflect.DeepEqual(replayed, original) {
-		t.Fatalf("replayed claim = %#v, want %#v", replayed, original)
-	}
-
-	changed := claim("claim-http-replay", 90)
-	assertAPIError(t, changed, http.StatusConflict, errorCodeConflict)
-	invalid := claim("invalid key", 60)
-	assertAPIError(t, invalid, http.StatusUnprocessableEntity, errorCodeInvalidInput)
-	detail, err := appStore.GetTaskDetail(ctx, task.ID)
-	if err != nil {
-		t.Fatalf("get task detail: %v", err)
-	}
-	if len(detail.Runs) != 1 {
-		t.Fatalf("claim API created %d runs, want 1", len(detail.Runs))
-	}
-	claimedEvents, err := appStore.CountRunEvents(ctx, original.ID, "run.claimed")
-	if err != nil {
-		t.Fatalf("count claim events: %v", err)
-	}
-	if claimedEvents != 1 {
-		t.Fatalf("claim API created %d claim events, want 1", claimedEvents)
-	}
-}
-
-func TestServiceAPIAuthenticatesCapabilityAndProjectScopes(t *testing.T) {
-	appStore, err := store.Open(context.Background(), filepath.Join(t.TempDir(), "deck-auth-http-test.db"))
-	if err != nil {
-		t.Fatalf("open Deck store: %v", err)
-	}
-	t.Cleanup(func() {
-		if err := appStore.Close(); err != nil {
-			t.Errorf("close Deck store: %v", err)
+		handler.ServeHTTP(response, httptest.NewRequest(method, path, strings.NewReader("{}")))
+		if response.Code != http.StatusNotFound && response.Code != http.StatusMethodNotAllowed {
+			t.Errorf("%s = %d", route, response.Code)
 		}
-	})
-	task, err := appStore.CreateTask(context.Background(), domain.CreateTaskInput{
-		Title: "Scoped work", Status: domain.TaskReady, Priority: "high", BudgetMinutes: 10,
-	})
-	if err != nil {
-		t.Fatalf("create scoped task: %v", err)
 	}
-	policyPath := filepath.Join(t.TempDir(), "service-auth.json")
-	writeServiceAuthPolicy(t, policyPath, serviceAuthTokenOne, []string{capabilityProviderInfo}, []string{"prj_default"})
-	authorizer, err := NewFileServiceAuthorizer(policyPath)
-	if err != nil {
-		t.Fatalf("create service authorizer: %v", err)
-	}
-	handler := New(
-		appStore,
-		slog.New(slog.NewTextHandler(io.Discard, nil)),
-		WithServiceAuthorizer(authorizer),
-	).Handler()
-
-	unauthenticated := httptest.NewRecorder()
-	handler.ServeHTTP(unauthenticated, httptest.NewRequest(http.MethodGet, "/api/v1/provider", nil))
-	assertAPIError(t, unauthenticated, http.StatusUnauthorized, errorCodeUnauthenticated)
-	if unauthenticated.Header().Get("WWW-Authenticate") == "" {
-		t.Fatal("unauthenticated response omitted WWW-Authenticate")
-	}
-
-	authorizedRequest := httptest.NewRequest(http.MethodGet, "/api/v1/provider", nil)
-	authorizedRequest.Header.Set("Authorization", "Bearer "+serviceAuthTokenOne)
-	authorized := httptest.NewRecorder()
-	handler.ServeHTTP(authorized, authorizedRequest)
-	if authorized.Code != http.StatusOK {
-		t.Fatalf("authorized provider status = %d", authorized.Code)
-	}
-
-	forbiddenRequest := httptest.NewRequest(http.MethodGet, "/api/v1/tasks?status=ready", nil)
-	forbiddenRequest.Header.Set("Authorization", "Bearer "+serviceAuthTokenOne)
-	forbidden := httptest.NewRecorder()
-	handler.ServeHTTP(forbidden, forbiddenRequest)
-	assertAPIError(t, forbidden, http.StatusForbidden, errorCodeForbidden)
-
-	writeServiceAuthPolicy(t, policyPath, serviceAuthTokenOne, []string{capabilityWorkReadyList}, []string{"prj_other"})
-	projectRequest := httptest.NewRequest(http.MethodGet, "/api/v1/tasks?status=ready", nil)
-	projectRequest.Header.Set("Authorization", "Bearer "+serviceAuthTokenOne)
-	projectResponse := httptest.NewRecorder()
-	handler.ServeHTTP(projectResponse, projectRequest)
-	if projectResponse.Code != http.StatusOK {
-		t.Fatalf("project-filtered status = %d", projectResponse.Code)
-	}
-	var tasks []domain.Task
-	if err := json.NewDecoder(projectResponse.Body).Decode(&tasks); err != nil {
-		t.Fatalf("decode project-filtered tasks: %v", err)
-	}
-	if len(tasks) != 0 {
-		t.Fatalf("project scope leaked tasks: %#v", tasks)
-	}
-
-	writeServiceAuthPolicy(t, policyPath, serviceAuthTokenOne, []string{capabilityWorkClaim}, []string{"prj_other"})
-	claimRequest := httptest.NewRequest(
-		http.MethodPost,
-		"/api/v1/tasks/"+task.ID+"/claim",
-		strings.NewReader(`{"agent_id":"agt_other","lease_seconds":30}`),
-	)
-	claimRequest.Header.Set("Authorization", "Bearer "+serviceAuthTokenOne)
-	claimResponse := httptest.NewRecorder()
-	handler.ServeHTTP(claimResponse, claimRequest)
-	assertAPIError(t, claimResponse, http.StatusForbidden, errorCodeForbidden)
-
-	operatorResponse := httptest.NewRecorder()
-	handler.ServeHTTP(
-		operatorResponse,
-		httptest.NewRequest(http.MethodGet, "/api/v1/operator/tasks/"+task.ID, nil),
-	)
-	if operatorResponse.Code != http.StatusOK {
-		t.Fatalf("local operator task status = %d", operatorResponse.Code)
-	}
-
-	if err := os.WriteFile(policyPath, []byte(`{"version":1,"identities":[]}`), 0o600); err != nil {
-		t.Fatalf("replace service authorization policy: %v", err)
-	}
-	unavailableRequest := httptest.NewRequest(http.MethodGet, "/api/v1/provider", nil)
-	unavailableRequest.Header.Set("Authorization", "Bearer "+serviceAuthTokenOne)
-	unavailableResponse := httptest.NewRecorder()
-	handler.ServeHTTP(unavailableResponse, unavailableRequest)
-	assertAPIError(t, unavailableResponse, http.StatusServiceUnavailable, errorCodeServiceUnavailable)
 }
 
 func assertAPIError(t *testing.T, response *httptest.ResponseRecorder, status int, code string) {
@@ -466,49 +153,4 @@ func newTestStoreAndHandler(t *testing.T) (*store.Store, http.Handler) {
 	})
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	return appStore, New(appStore, logger).Handler()
-}
-
-func TestProjectScopedEventListPagesPastEventsOutsideScope(t *testing.T) {
-	appStore, _ := newTestStoreAndHandler(t)
-	ctx := context.Background()
-	channel, err := appStore.CreateChannel(ctx, "prj_default", "outside-scope")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for i := 0; i < 3; i++ {
-		if _, err := appStore.PostChannelMessage(ctx, domain.ChannelMessageInput{ChannelID: channel.ID, AuthorType: "human", AuthorID: "operator:test", Body: fmt.Sprint(i)}); err != nil {
-			t.Fatal(err)
-		}
-	}
-	latest, err := appStore.ListEvents(ctx, 3, 0, nil)
-	if err != nil || len(latest) != 3 {
-		t.Fatalf("seed events = %#v, err %v", latest, err)
-	}
-	after := latest[2].ID - 1
-	task, err := appStore.CreateTask(ctx, domain.CreateTaskInput{Title: "Scoped", Status: domain.TaskReady, Priority: "high", BudgetMinutes: 10})
-	if err != nil {
-		t.Fatal(err)
-	}
-	policyPath := filepath.Join(t.TempDir(), "service-auth.json")
-	writeServiceAuthPolicy(t, policyPath, serviceAuthTokenOne, []string{capabilityEventList}, []string{"prj_default"})
-	authorizer, err := NewFileServiceAuthorizer(policyPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	handler := New(appStore, slog.New(slog.NewTextHandler(io.Discard, nil)), WithServiceAuthorizer(authorizer)).Handler()
-
-	request := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/events?after_id=%d&limit=2", after), nil)
-	request.Header.Set("Authorization", "Bearer "+serviceAuthTokenOne)
-	response := httptest.NewRecorder()
-	handler.ServeHTTP(response, request)
-	if response.Code != http.StatusOK {
-		t.Fatalf("list events = %d %s", response.Code, response.Body)
-	}
-	var events []domain.Event
-	if err := json.NewDecoder(response.Body).Decode(&events); err != nil {
-		t.Fatal(err)
-	}
-	if len(events) != 1 || events[0].TaskID == nil || *events[0].TaskID != task.ID {
-		t.Fatalf("scoped page = %#v, want the task event beyond out-of-scope events", events)
-	}
 }

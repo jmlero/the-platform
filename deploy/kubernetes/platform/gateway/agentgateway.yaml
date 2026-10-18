@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: agentgateway, namespace: platform-gateway}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: agentgateway}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: agentgateway}
+    spec:
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: agentgateway
+          image: cr.agentgateway.dev/agentgateway:v1.6.0@sha256:9d3e6044ddcdc0878b1787f77bd401252b95e22684203fb5e874c4c42d2ed90c
+          args: [-f, /config/config.yaml]
+          env:
+            - name: MARINA_CLIENT_KEY
+              valueFrom: {secretKeyRef: {name: agentgateway-clients, key: marina}}
+          ports:
+            - {name: https, containerPort: 8443}
+            - {name: metrics, containerPort: 15020}
+            - {name: ready, containerPort: 15021}
+          readinessProbe:
+            httpGet: {path: /healthz/ready, port: ready}
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 500m, memory: 256Mi}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          volumeMounts:
+            - {name: config, mountPath: /config, readOnly: true}
+            - {name: tls, mountPath: /tls, readOnly: true}
+            - {name: provider, mountPath: /secrets/provider, readOnly: true}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: config
+          configMap: {name: agentgateway}
+        - name: tls
+          secret: {secretName: agentgateway-tls}
+        - name: provider
+          secret: {secretName: agentgateway-provider}
+        - name: tmp
+          emptyDir: {sizeLimit: 16Mi}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: agentgateway, namespace: platform-gateway}
+spec:
+  selector: {app.kubernetes.io/name: agentgateway}
+  ports:
+    - {name: https, port: 443, targetPort: https}

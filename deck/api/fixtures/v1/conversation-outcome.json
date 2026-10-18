@@ -1,8 +1,0 @@
-{
-  "invocation_message_id": "msg_invoked",
-  "message_id": "msg_outcome",
-  "task_id": "tsk_followup",
-  "followup_task_id": "tsk_original",
-  "status": "completed",
-  "result_digest": "sha256:8cfde368a67da3df5a8c8de5b08a80af493846d84295013818aca80d92d02b87"
-}

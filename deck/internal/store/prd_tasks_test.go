@@ -27,14 +27,7 @@ func prdTasksFixture(t *testing.T) (*Store, domain.Task, domain.ConversationInvo
 	if err != nil {
 		t.Fatal(err)
 	}
-	req, err := s.RequestRepository(ctx, "prj_default", domain.RepositoryRequestInput{Repository: "example/repo", BaseBranch: "main"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = s.RecordRepositoryResult(ctx, "prj_default", domain.RepositoryResult{RequestRevision: req.Revision, Status: "connected", Binding: &domain.RepositoryBinding{Version: 1, Repository: "example/repo", CloneURL: "https://github.com/example/repo.git", BaseBranch: "main"}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	bindRepository(t, s, "prj_default", "example/repo", 1)
 	inv, err := s.InvokeConversation(ctx, domain.ConversationInvocationInput{ChannelID: channel.ID, AgentID: "chat", AuthorID: "operator", RequestID: "draft", Body: "Draft a saved filters PRD"})
 	if err != nil {
 		t.Fatal(err)
@@ -47,7 +40,7 @@ func prdTasksFixture(t *testing.T) (*Store, domain.Task, domain.ConversationInvo
 	if err != nil {
 		t.Fatal(err)
 	}
-	profile := domain.WorkloadProfile{ID: "repository/v2", Digest: strings.Repeat("a", 64), Harness: "codex/v1", Authority: []string{"source.read", "source.write", "source.fast_forward"}, MaxTokens: 30000, BudgetMinutes: 30, MinAttempts: 3}
+	profile := domain.WorkloadProfile{ID: "repository/v2", Digest: strings.Repeat("a", 64), Authority: []string{"source.read", "source.write", "source.fast_forward"}, MaxTokens: 30000, BudgetMinutes: 30, MinAttempts: 3}
 	err = s.PublishWorkloads(ctx, "prj_default", "test", domain.WorkloadCatalog{Profiles: []domain.WorkloadProfile{profile}, ExpiresAt: time.Now().Add(time.Minute).UnixMilli()})
 	if err != nil {
 		t.Fatal(err)

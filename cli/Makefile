@@ -4,7 +4,7 @@ GOARCH ?= $(shell go env GOARCH)
 DIST_DIR ?= $(CURDIR)/dist
 PACKAGE_VERSION := $(patsubst v%,%,$(VERSION))
 
-.PHONY: conformance-deck build check clean fmt package package-test test vet
+.PHONY: conformance-deck conformance-marina build check clean fmt package package-test test vet
 
 build:
 	mkdir -p bin
@@ -46,3 +46,6 @@ vet:
 
 conformance-deck:
 	DECK_REPO="$(DECK_REPO)" sh scripts/test-deck.sh
+
+conformance-marina:
+	MARINA_REPO="$(MARINA_REPO)" sh scripts/test-marina.sh

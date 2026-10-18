@@ -15,6 +15,7 @@ import (
 	"github.com/jmlero/the-platform/marina/internal/artifacts"
 	"github.com/jmlero/the-platform/marina/internal/execution"
 	rt "github.com/jmlero/the-platform/marina/internal/runtime"
+	"github.com/jmlero/the-platform/marina/internal/telemetry"
 )
 
 func forbiddenModelInput(value any) bool {
@@ -164,7 +165,11 @@ func (server *Server) model(w http.ResponseWriter, r *http.Request) {
 		Output int64 `json:"output_tokens"`
 	}
 	known := false
+	started, failure := time.Now(), ""
 	defer func() {
+		cost := price(usage.Input, model.InputMicrosPerMillion) + price(usage.Output, model.OutputMicrosPerMillion)
+		telemetry.RecordModelCall(context.WithoutCancel(r.Context()), telemetry.Execution{ID: record.ID, ProjectID: record.ProjectID, TaskID: record.ExternalWorkID, RunID: record.ExternalRunID},
+			telemetry.ModelCall{AttemptID: attempt.ID, Model: model.Name, Endpoint: model.Endpoint, InputTokens: usage.Input, OutputTokens: usage.Output, CostMicros: cost, Known: known, Error: failure, Start: started, End: time.Now()})
 		if known {
 			accountCtx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 5*time.Second)
 			defer cancel()
@@ -180,6 +185,7 @@ func (server *Server) model(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(model.Endpoint, "/")+"/responses", bytes.NewReader(encoded))
 	if err != nil {
+		failure = "invalid model endpoint"
 		http.Error(w, "invalid model endpoint", 503)
 		return
 	}
@@ -190,11 +196,13 @@ func (server *Server) model(w http.ResponseWriter, r *http.Request) {
 	}
 	response, err := server.client.Do(request)
 	if err != nil {
+		failure = "model endpoint unavailable"
 		http.Error(w, "model endpoint unavailable", 502)
 		return
 	}
 	defer response.Body.Close()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		failure = "model endpoint rejected the request"
 		http.Error(w, "model endpoint rejected the request", 502)
 		return
 	}

@@ -1,0 +1,10 @@
+# Marina's platform API (decision 0033): the marina.dev/v1 resources, the
+# access Marina needs to reconcile them and check callers, and client roles.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../../../marina/api/crds
+  - rbac.yaml
+labels:
+  - pairs: {app.kubernetes.io/part-of: the-platform}
+    includeSelectors: false

@@ -2,13 +2,11 @@ package command
 
 import (
 	"bytes"
-	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"os"
@@ -21,7 +19,8 @@ import (
 	"github.com/jmlero/the-platform/cli/internal/deck"
 )
 
-// Use only the public API of a separate Deck process and isolated database.
+// Use only the public operator API of a separate Deck process and isolated
+// database. Deck runs without Marina here.
 func TestRealDeckOperatorSession(t *testing.T) {
 	binary := os.Getenv("DECK_TEST_BINARY")
 	if binary == "" {
@@ -48,7 +47,7 @@ func TestRealDeckOperatorSession(t *testing.T) {
 	baseURL := "http://" + address
 	var logs bytes.Buffer
 	process := exec.Command(binary)
-	process.Env = append(os.Environ(), "DECK_ADDR="+address, "DECK_DATA_DIR="+filepath.Join(directory, "data"), "DECK_DEMO_AGENT=false", "DECK_OPERATOR_AUTH_FILE="+policyFile, "DECK_OPERATOR_COOKIE_SECURE=false", "DECK_SERVICE_AUTH_FILE=")
+	process.Env = append(os.Environ(), "DECK_ADDR="+address, "DECK_DATA_DIR="+filepath.Join(directory, "data"), "DECK_OPERATOR_AUTH_FILE="+policyFile, "DECK_OPERATOR_COOKIE_SECURE=false")
 	process.Stdout = &logs
 	process.Stderr = &logs
 	if err = process.Start(); err != nil {
@@ -100,38 +99,9 @@ func TestRealDeckOperatorSession(t *testing.T) {
 	if !strings.Contains(invoke("tasks", "get", task.ID), "Session-authenticated work") {
 		t.Fatal("task not inspected")
 	}
-	// The service boundary is independently configurable; this fixture leaves only
-	// machine authentication disabled so it can establish a run for cancellation.
-	post := func(path string, input any) map[string]any {
-		t.Helper()
-		body, _ := json.Marshal(input)
-		request, _ := http.NewRequestWithContext(context.Background(), http.MethodPost, baseURL+path, bytes.NewReader(body))
-		request.Header.Set("Content-Type", "application/json")
-		request.Header.Set("Idempotency-Key", path)
-		response, err := httpClient.Do(request)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer response.Body.Close()
-		encoded, _ := io.ReadAll(response.Body)
-		if response.StatusCode >= 300 {
-			t.Fatalf("fixture %s: %s", path, encoded)
-		}
-		result := map[string]any{}
-		if err = json.Unmarshal(encoded, &result); err != nil {
-			t.Fatal(err)
-		}
-		return result
-	}
-	post("/api/v1/agents", map[string]any{"id": "agt_cli", "installation_id": "cli-test", "name": "CLI test", "kind": "controller"})
-	claimed := post("/api/v1/tasks/"+task.ID+"/claim", map[string]any{"agent_id": "agt_cli", "lease_seconds": 60, "expected_task_version": task.Version})
-	runID, _ := claimed["id"].(string)
-	if runID == "" {
-		t.Fatalf("missing run: %v", claimed)
-	}
-	out = invoke("runs", "cancel", "--reason", "Operator stops work", runID)
-	if !strings.Contains(out, `"type": "cancel"`) || !strings.Contains(out, `"status": "pending"`) {
-		t.Fatalf("cancel not recorded: %s", out)
+	// Run control goes through Marina; a run Deck does not know is refused.
+	if code, _, _ := runForTest(t, []string{"--deck-url", baseURL, "--token-file", tokenFile, "runs", "cancel", "--reason", "Operator stops work", "run-unknown"}, emptyEnvironment); code == 0 {
+		t.Fatal("cancel of an unknown run accepted")
 	}
 	code, _, _ := runForTest(t, []string{"--deck-url", baseURL, "tasks", "list"}, emptyEnvironment)
 	if code == 0 {

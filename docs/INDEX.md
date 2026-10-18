@@ -21,7 +21,7 @@ Start here. The documentation has two kinds of files:
 | [status.md](status.md) | What works today, what still needs acceptance proof, and what is not supported. |
 | [backlog.md](backlog.md) | What comes next, in order, with stable IDs and acceptance status. |
 | [decisions/](decisions/) | Why a choice was made. Numbered records; add new ones instead of rewriting old ones. |
-| [plans/](plans/) | Designs for work that is not built yet: the [platform components plan](plans/platform-components.md). The shipped kagent work is recorded in [final validation](validation/kint-12-17-2026-10-01.md). Remove a plan once its work ships. |
+| [plans/](plans/) | Designs for work that is not built yet: the [platform components plan](plans/platform-components.md) and the [Marina platform API plan](plans/marina-platform-api.md). The shipped kagent work is recorded in [final validation](validation/kint-12-17-2026-10-01.md). Remove a plan once its work ships. |
 | [validation/](validation/) | Dated, redacted evidence from checks on a named installation. Never edited after the fact. |
 
 ## Next to the code
@@ -75,3 +75,4 @@ One fact lives in one place. Other documents link to it instead of copying it.
 | [0030](decisions/0030-ordered-prd-tasks-and-acceptance.md) | Ordered PRD task approval, source links and evidenced PRD acceptance. |
 | [0031](decisions/0031-explicit-per-project-profiles.md) | Explicit per-project execution profiles, one active task across Marina. |
 | [0032](decisions/0032-agent-and-application-platform.md) | Marina becomes a pluggable agent and application platform; the factory is one workload; the platform deploys apps. |
+| [0033](decisions/0033-marina-platform-api.md) | Marina owns the platform API (HTTP/JSON and Kubernetes resources); Deck becomes a client. |

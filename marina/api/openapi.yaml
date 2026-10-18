@@ -1,0 +1,628 @@
+openapi: 3.1.0
+info:
+  title: Marina platform API
+  version: v1
+  description: |
+    The HTTP/JSON surface of Marina's platform API (decision 0033). The same
+    objects are Kubernetes custom resources in API group marina.dev; their
+    schemas under crds/ are generated from components.schemas here. Requests
+    carry a Kubernetes bearer token; Marina authenticates it with TokenReview
+    and authorizes each request with SubjectAccessReview.
+servers:
+  - url: https://marina.marina-system.svc:8090
+security:
+  - kubernetesToken: []
+paths:
+  /apis/marina.dev/v1/capabilities:
+    get:
+      operationId: getCapabilities
+      summary: What this installation offers
+      responses:
+        "200": {description: Capabilities, content: {application/json: {schema: {$ref: "#/components/schemas/Capabilities"}}}}
+        default: {$ref: "#/components/responses/Error"}
+  /apis/marina.dev/v1/namespaces/{namespace}/projects:
+    parameters: [{$ref: "#/components/parameters/Namespace"}]
+    get: {operationId: listProjects, responses: {"200": {description: Projects, content: {application/json: {schema: {$ref: "#/components/schemas/ProjectList"}}}}, default: {$ref: "#/components/responses/Error"}}}
+    post:
+      operationId: createProject
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/Project"}}}}
+      responses:
+        "200": {description: Exact replay of an existing object, content: {application/json: {schema: {$ref: "#/components/schemas/Project"}}}}
+        "201": {description: Created, content: {application/json: {schema: {$ref: "#/components/schemas/Project"}}}}
+        default: {$ref: "#/components/responses/Error"}
+  /apis/marina.dev/v1/namespaces/{namespace}/projects/{name}:
+    parameters: [{$ref: "#/components/parameters/Namespace"}, {$ref: "#/components/parameters/Name"}]
+    get: {operationId: getProject, responses: {"200": {description: Project, content: {application/json: {schema: {$ref: "#/components/schemas/Project"}}}}, default: {$ref: "#/components/responses/Error"}}}
+    put:
+      operationId: replaceProject
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/Project"}}}}
+      responses: {"200": {description: Replaced, content: {application/json: {schema: {$ref: "#/components/schemas/Project"}}}}, default: {$ref: "#/components/responses/Error"}}
+    delete: {operationId: deleteProject, responses: {"200": {description: Deleted, content: {application/json: {schema: {$ref: "#/components/schemas/Status"}}}}, default: {$ref: "#/components/responses/Error"}}}
+  /apis/marina.dev/v1/namespaces/{namespace}/workloads:
+    parameters: [{$ref: "#/components/parameters/Namespace"}]
+    get: {operationId: listWorkloads, responses: {"200": {description: Workloads, content: {application/json: {schema: {$ref: "#/components/schemas/WorkloadList"}}}}, default: {$ref: "#/components/responses/Error"}}}
+    post:
+      operationId: createWorkload
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/Workload"}}}}
+      responses:
+        "200": {description: Exact replay of an existing object, content: {application/json: {schema: {$ref: "#/components/schemas/Workload"}}}}
+        "201": {description: Created, content: {application/json: {schema: {$ref: "#/components/schemas/Workload"}}}}
+        default: {$ref: "#/components/responses/Error"}
+  /apis/marina.dev/v1/namespaces/{namespace}/workloads/{name}:
+    parameters: [{$ref: "#/components/parameters/Namespace"}, {$ref: "#/components/parameters/Name"}]
+    get: {operationId: getWorkload, responses: {"200": {description: Workload, content: {application/json: {schema: {$ref: "#/components/schemas/Workload"}}}}, default: {$ref: "#/components/responses/Error"}}}
+    put:
+      operationId: replaceWorkload
+      description: A new Workload spec applies to new Runs and Turns only.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/Workload"}}}}
+      responses: {"200": {description: Replaced, content: {application/json: {schema: {$ref: "#/components/schemas/Workload"}}}}, default: {$ref: "#/components/responses/Error"}}
+    delete: {operationId: deleteWorkload, responses: {"200": {description: Deleted, content: {application/json: {schema: {$ref: "#/components/schemas/Status"}}}}, default: {$ref: "#/components/responses/Error"}}}
+  /apis/marina.dev/v1/namespaces/{namespace}/runs:
+    parameters: [{$ref: "#/components/parameters/Namespace"}]
+    get: {operationId: listRuns, responses: {"200": {description: Runs, content: {application/json: {schema: {$ref: "#/components/schemas/RunList"}}}}, default: {$ref: "#/components/responses/Error"}}}
+    post:
+      operationId: createRun
+      description: metadata.name is the idempotency key. The same spec returns the original Run; a different spec is 409.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/Run"}}}}
+      responses:
+        "200": {description: Exact replay of an existing object, content: {application/json: {schema: {$ref: "#/components/schemas/Run"}}}}
+        "201": {description: Created, content: {application/json: {schema: {$ref: "#/components/schemas/Run"}}}}
+        default: {$ref: "#/components/responses/Error"}
+  /apis/marina.dev/v1/namespaces/{namespace}/runs/{name}:
+    parameters: [{$ref: "#/components/parameters/Namespace"}, {$ref: "#/components/parameters/Name"}]
+    get: {operationId: getRun, responses: {"200": {description: Run, content: {application/json: {schema: {$ref: "#/components/schemas/Run"}}}}, default: {$ref: "#/components/responses/Error"}}}
+    delete: {operationId: deleteRun, description: Cancels an active Run; history stays in the journal., responses: {"200": {description: Deleted, content: {application/json: {schema: {$ref: "#/components/schemas/Status"}}}}, default: {$ref: "#/components/responses/Error"}}}
+  /apis/marina.dev/v1/namespaces/{namespace}/runs/{name}/cancel:
+    parameters: [{$ref: "#/components/parameters/Namespace"}, {$ref: "#/components/parameters/Name"}, {$ref: "#/components/parameters/IdempotencyKey"}]
+    post: {operationId: cancelRun, responses: {"200": {description: Cancel requested, content: {application/json: {schema: {$ref: "#/components/schemas/Run"}}}}, default: {$ref: "#/components/responses/Error"}}}
+  /apis/marina.dev/v1/namespaces/{namespace}/runs/{name}/events:
+    parameters: [{$ref: "#/components/parameters/Namespace"}, {$ref: "#/components/parameters/Name"}, {$ref: "#/components/parameters/After"}]
+    get:
+      operationId: listRunEvents
+      responses:
+        "200": {description: Ordered events; text/event-stream streams them, content: {application/json: {schema: {$ref: "#/components/schemas/EventPage"}}, text/event-stream: {schema: {type: string}}}}
+        default: {$ref: "#/components/responses/Error"}
+  /apis/marina.dev/v1/namespaces/{namespace}/runs/{name}/artifacts/{digest}:
+    parameters:
+      - {$ref: "#/components/parameters/Namespace"}
+      - {$ref: "#/components/parameters/Name"}
+      - {name: digest, in: path, required: true, schema: {$ref: "#/components/schemas/Digest"}}
+    get: {operationId: getRunArtifact, responses: {"200": {description: Artifact bytes, content: {application/octet-stream: {schema: {type: string, contentEncoding: binary}}}}, default: {$ref: "#/components/responses/Error"}}}
+  /apis/marina.dev/v1/namespaces/{namespace}/turns:
+    parameters: [{$ref: "#/components/parameters/Namespace"}]
+    get: {operationId: listTurns, responses: {"200": {description: Turns, content: {application/json: {schema: {$ref: "#/components/schemas/TurnList"}}}}, default: {$ref: "#/components/responses/Error"}}}
+    post:
+      operationId: createTurn
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/Turn"}}}}
+      responses:
+        "200": {description: Exact replay of an existing object, content: {application/json: {schema: {$ref: "#/components/schemas/Turn"}}}}
+        "201": {description: Created, content: {application/json: {schema: {$ref: "#/components/schemas/Turn"}}}}
+        default: {$ref: "#/components/responses/Error"}
+  /apis/marina.dev/v1/namespaces/{namespace}/turns/{name}:
+    parameters: [{$ref: "#/components/parameters/Namespace"}, {$ref: "#/components/parameters/Name"}]
+    get: {operationId: getTurn, responses: {"200": {description: Turn, content: {application/json: {schema: {$ref: "#/components/schemas/Turn"}}}}, default: {$ref: "#/components/responses/Error"}}}
+    delete: {operationId: deleteTurn, responses: {"200": {description: Deleted, content: {application/json: {schema: {$ref: "#/components/schemas/Status"}}}}, default: {$ref: "#/components/responses/Error"}}}
+  /apis/marina.dev/v1/namespaces/{namespace}/turns/{name}/cancel:
+    parameters: [{$ref: "#/components/parameters/Namespace"}, {$ref: "#/components/parameters/Name"}, {$ref: "#/components/parameters/IdempotencyKey"}]
+    post: {operationId: cancelTurn, responses: {"200": {description: Cancel requested, content: {application/json: {schema: {$ref: "#/components/schemas/Turn"}}}}, default: {$ref: "#/components/responses/Error"}}}
+  /apis/marina.dev/v1/namespaces/{namespace}/turns/{name}/events:
+    parameters: [{$ref: "#/components/parameters/Namespace"}, {$ref: "#/components/parameters/Name"}, {$ref: "#/components/parameters/After"}]
+    get:
+      operationId: listTurnEvents
+      responses:
+        "200": {description: Ordered events, content: {application/json: {schema: {$ref: "#/components/schemas/EventPage"}}, text/event-stream: {schema: {type: string}}}}
+        default: {$ref: "#/components/responses/Error"}
+  /apis/marina.dev/v1/namespaces/{namespace}/decisions:
+    parameters: [{$ref: "#/components/parameters/Namespace"}]
+    get: {operationId: listDecisions, responses: {"200": {description: Decisions, content: {application/json: {schema: {$ref: "#/components/schemas/DecisionList"}}}}, default: {$ref: "#/components/responses/Error"}}}
+  /apis/marina.dev/v1/namespaces/{namespace}/decisions/{name}:
+    parameters: [{$ref: "#/components/parameters/Namespace"}, {$ref: "#/components/parameters/Name"}]
+    get: {operationId: getDecision, responses: {"200": {description: Decision, content: {application/json: {schema: {$ref: "#/components/schemas/Decision"}}}}, default: {$ref: "#/components/responses/Error"}}}
+  /apis/marina.dev/v1/namespaces/{namespace}/decisions/{name}/answer:
+    parameters: [{$ref: "#/components/parameters/Namespace"}, {$ref: "#/components/parameters/Name"}, {$ref: "#/components/parameters/IdempotencyKey"}]
+    post:
+      operationId: answerDecision
+      description: An exact replay of the accepted answer returns it again; a different or late answer is 409.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/DecisionAnswer"}}}}
+      responses: {"200": {description: Answered, content: {application/json: {schema: {$ref: "#/components/schemas/Decision"}}}}, default: {$ref: "#/components/responses/Error"}}
+components:
+  securitySchemes:
+    kubernetesToken: {type: http, scheme: bearer, description: A Kubernetes service account or user token.}
+  parameters:
+    Namespace: {name: namespace, in: path, required: true, schema: {$ref: "#/components/schemas/Name"}}
+    Name: {name: name, in: path, required: true, schema: {$ref: "#/components/schemas/Name"}}
+    After: {name: after, in: query, required: false, schema: {type: integer, minimum: 0}}
+    IdempotencyKey: {name: Idempotency-Key, in: header, required: true, schema: {type: string, minLength: 1, maxLength: 200}}
+  responses:
+    Error: {description: Kubernetes Status describing the failure, content: {application/json: {schema: {$ref: "#/components/schemas/Status"}}}}
+  schemas:
+    Name: {type: string, minLength: 1, maxLength: 63, pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"}
+    Digest: {type: string, pattern: "^sha256:[0-9a-f]{64}$"}
+    Revision: {type: string, pattern: "^[0-9a-f]{40}$"}
+    Time: {type: string, format: date-time}
+    ObjectMeta:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: {$ref: "#/components/schemas/Name"}
+        namespace: {$ref: "#/components/schemas/Name"}
+        uid: {type: string}
+        resourceVersion: {type: string}
+        generation: {type: integer}
+        creationTimestamp: {$ref: "#/components/schemas/Time"}
+        labels: {type: object, additionalProperties: {type: string}}
+        annotations: {type: object, additionalProperties: {type: string}}
+    ListMeta:
+      type: object
+      additionalProperties: false
+      properties:
+        resourceVersion: {type: string}
+        continue: {type: string}
+    Condition:
+      type: object
+      additionalProperties: false
+      required: [type, status]
+      properties:
+        type: {type: string, maxLength: 64}
+        status: {type: string, enum: ["True", "False", "Unknown"]}
+        reason: {type: string, maxLength: 64}
+        message: {type: string, maxLength: 1024}
+        observedGeneration: {type: integer}
+        lastTransitionTime: {$ref: "#/components/schemas/Time"}
+    Conditions: {type: array, maxItems: 16, items: {$ref: "#/components/schemas/Condition"}}
+    Budget:
+      type: object
+      additionalProperties: false
+      required: [timeMinutes, maxTokens, maxAttempts]
+      properties:
+        timeMinutes: {type: integer, minimum: 1, maximum: 1440}
+        maxTokens: {type: integer, minimum: 1}
+        maxAttempts: {type: integer, minimum: 1, maximum: 20}
+        maxCostMinor: {type: integer, minimum: 0}
+        currency: {type: string, pattern: "^[A-Z]{3}$"}
+    TurnBudget:
+      type: object
+      additionalProperties: false
+      required: [timeMinutes, maxTokens]
+      properties:
+        timeMinutes: {type: integer, minimum: 1, maximum: 60}
+        maxTokens: {type: integer, minimum: 1}
+    ContextItem:
+      type: object
+      additionalProperties: false
+      required: [name, kind, trust, digest]
+      description: One selected input. Guidance may steer the agent; data never grants authority.
+      properties:
+        name: {type: string, minLength: 1, maxLength: 200}
+        kind: {type: string, enum: [document, message, repository-file]}
+        trust: {type: string, enum: [guidance, data]}
+        digest: {$ref: "#/components/schemas/Digest"}
+        content: {type: string, maxLength: 262144}
+        path: {type: string, maxLength: 1024}
+        revision: {$ref: "#/components/schemas/Revision"}
+        source:
+          type: object
+          additionalProperties: false
+          properties:
+            system: {type: string, maxLength: 64}
+            id: {type: string, maxLength: 200}
+            revision: {type: integer, minimum: 0}
+    Usage:
+      type: object
+      additionalProperties: false
+      properties:
+        tokens: {type: integer, minimum: 0}
+        reservedTokens: {type: integer, minimum: 0}
+        costMinor: {type: integer, minimum: 0}
+        reservedCostMinor: {type: integer, minimum: 0}
+        currency: {type: string, pattern: "^[A-Z]{3}$"}
+        attempts: {type: integer, minimum: 0}
+        maxAttempts: {type: integer, minimum: 0}
+    Evidence:
+      type: object
+      additionalProperties: false
+      required: [id, kind, passed, sourceRevision]
+      properties:
+        id: {type: string, maxLength: 200}
+        kind: {type: string, enum: [review, verification, ci, landing, publication]}
+        passed: {type: boolean}
+        summary: {type: string, maxLength: 2048}
+        sourceRevision: {$ref: "#/components/schemas/Revision"}
+        artifactDigest: {$ref: "#/components/schemas/Digest"}
+        recordedAt: {$ref: "#/components/schemas/Time"}
+    TaskProposal:
+      type: object
+      additionalProperties: false
+      required: [title, acceptanceCriteria]
+      properties:
+        title: {type: string, minLength: 1, maxLength: 200}
+        description: {type: string, maxLength: 16384}
+        acceptanceCriteria: {type: string, minLength: 1, maxLength: 16384}
+    ProjectSpec:
+      type: object
+      additionalProperties: false
+      required: [repository]
+      properties:
+        displayName: {type: string, maxLength: 200}
+        repository:
+          type: object
+          additionalProperties: false
+          required: [provider, url, baseBranch, credentialSecret]
+          properties:
+            provider: {type: string, enum: [github]}
+            url: {type: string, pattern: "^https://[^@?#]+$", maxLength: 1024}
+            baseBranch: {type: string, minLength: 1, maxLength: 255}
+            credentialSecret:
+              type: object
+              additionalProperties: false
+              required: [name, key]
+              description: A Secret in the Project's namespace; its value never appears in the API.
+              properties:
+                name: {$ref: "#/components/schemas/Name"}
+                key: {type: string, minLength: 1, maxLength: 253}
+        defaultWorkload: {$ref: "#/components/schemas/Name"}
+    ProjectStatus:
+      type: object
+      additionalProperties: false
+      properties:
+        observedGeneration: {type: integer}
+        bindingVersion: {type: integer, minimum: 0}
+        conditions: {$ref: "#/components/schemas/Conditions"}
+    Project:
+      type: object
+      additionalProperties: false
+      required: [apiVersion, kind, metadata, spec]
+      properties:
+        apiVersion: {type: string, const: marina.dev/v1}
+        kind: {type: string, const: Project}
+        metadata: {$ref: "#/components/schemas/ObjectMeta"}
+        spec: {$ref: "#/components/schemas/ProjectSpec"}
+        status: {$ref: "#/components/schemas/ProjectStatus"}
+    Limits:
+      type: object
+      additionalProperties: false
+      properties:
+        maxTimeMinutes: {type: integer, minimum: 1, maximum: 1440}
+        maxTokens: {type: integer, minimum: 1}
+        maxAttempts: {type: integer, minimum: 1, maximum: 20}
+    Check:
+      type: object
+      additionalProperties: false
+      required: [id, command]
+      properties:
+        id: {type: string, pattern: "^[a-z0-9][-a-z0-9_.]{0,63}$"}
+        directory: {type: string, maxLength: 1024}
+        command: {type: array, minItems: 1, maxItems: 32, items: {type: string, maxLength: 4096}}
+    WorkloadSpec:
+      type: object
+      additionalProperties: false
+      required: [type]
+      description: The factory's choices. Platform invariants apply whatever these say.
+      properties:
+        type: {type: string, enum: [repository-change, conversation]}
+        repositoryChange:
+          type: object
+          additionalProperties: false
+          required: [checks, allowedPaths, model, delivery]
+          properties:
+            model: {type: string, maxLength: 200}
+            checks: {type: array, minItems: 1, maxItems: 16, items: {$ref: "#/components/schemas/Check"}}
+            allowedPaths: {type: array, minItems: 1, maxItems: 64, items: {type: string, minLength: 1, maxLength: 1024}}
+            planApproval: {type: string, enum: [required, none], default: none}
+            review:
+              type: object
+              additionalProperties: false
+              required: [enabled]
+              properties:
+                enabled: {type: boolean}
+                model: {type: string, maxLength: 200}
+            delivery:
+              type: object
+              additionalProperties: false
+              required: [mode]
+              properties:
+                mode: {type: string, enum: [pull-request, land-on-main]}
+                requiredChecks: {type: array, maxItems: 32, items: {type: string, maxLength: 200}}
+            repair:
+              type: object
+              additionalProperties: false
+              properties:
+                maxFailures: {type: integer, minimum: 0, maximum: 5}
+            limits: {$ref: "#/components/schemas/Limits"}
+        conversation:
+          type: object
+          additionalProperties: false
+          required: [model]
+          properties:
+            model: {type: string, maxLength: 200}
+            repositoryTools: {type: boolean, default: true}
+            mcpTools: {type: array, maxItems: 8, items: {type: string, pattern: "^[A-Za-z0-9_-]{1,64}$"}}
+            proposals:
+              type: object
+              additionalProperties: false
+              properties:
+                task: {type: boolean}
+                prd: {type: boolean}
+                prdTasks: {type: boolean}
+            limits: {$ref: "#/components/schemas/Limits"}
+    WorkloadStatus:
+      type: object
+      additionalProperties: false
+      properties:
+        observedGeneration: {type: integer}
+        digest: {$ref: "#/components/schemas/Digest"}
+        conditions: {$ref: "#/components/schemas/Conditions"}
+    Workload:
+      type: object
+      additionalProperties: false
+      required: [apiVersion, kind, metadata, spec]
+      properties:
+        apiVersion: {type: string, const: marina.dev/v1}
+        kind: {type: string, const: Workload}
+        metadata: {$ref: "#/components/schemas/ObjectMeta"}
+        spec: {$ref: "#/components/schemas/WorkloadSpec"}
+        status: {$ref: "#/components/schemas/WorkloadStatus"}
+    RunSpec:
+      type: object
+      additionalProperties: false
+      required: [project, title, acceptanceCriteria, budget]
+      description: Immutable after creation, except cancel, which may only become true.
+      x-kubernetes-validations:
+        - {rule: "!has(oldSelf.cancel) || !oldSelf.cancel || (has(self.cancel) && self.cancel)", message: cancel cannot be withdrawn}
+        - {rule: "has(self.context) == has(oldSelf.context) && has(self.publish) == has(oldSelf.publish) && has(self.dependsOn) == has(oldSelf.dependsOn) && has(self.workload) == has(oldSelf.workload) && has(self.description) == has(oldSelf.description)", message: fields cannot be added or removed}
+      properties:
+        project: {$ref: "#/components/schemas/Name"}
+        workload: {$ref: "#/components/schemas/Name"}
+        title: {type: string, minLength: 1, maxLength: 200}
+        description: {type: string, maxLength: 16384}
+        acceptanceCriteria: {type: string, minLength: 1, maxLength: 16384}
+        budget: {$ref: "#/components/schemas/Budget"}
+        context: {type: array, maxItems: 32, items: {$ref: "#/components/schemas/ContextItem"}}
+        publish:
+          type: object
+          additionalProperties: false
+          required: [path, content, digest]
+          description: Exact document bytes to publish, such as an approved PRD.
+          properties:
+            path: {type: string, pattern: "^[A-Za-z0-9][A-Za-z0-9._/-]{0,511}$"}
+            content: {type: string, maxLength: 262144}
+            digest: {$ref: "#/components/schemas/Digest"}
+        dependsOn: {type: array, maxItems: 16, items: {$ref: "#/components/schemas/Name"}}
+        cancel: {type: boolean, default: false}
+    RunStatus:
+      type: object
+      additionalProperties: false
+      properties:
+        observedGeneration: {type: integer}
+        phase: {type: string, enum: [Pending, Planning, WaitingDecision, Running, Verifying, Succeeded, Blocked, Failed, Cancelled]}
+        reason: {type: string, maxLength: 2048}
+        conditions: {$ref: "#/components/schemas/Conditions"}
+        usage: {$ref: "#/components/schemas/Usage"}
+        revision:
+          type: object
+          additionalProperties: false
+          properties:
+            base: {$ref: "#/components/schemas/Revision"}
+            head: {$ref: "#/components/schemas/Revision"}
+            branch: {type: string, maxLength: 255}
+        landing:
+          type: object
+          additionalProperties: false
+          required: [commit, observedAt]
+          properties:
+            commit: {$ref: "#/components/schemas/Revision"}
+            observedAt: {$ref: "#/components/schemas/Time"}
+        pullRequest:
+          type: object
+          additionalProperties: false
+          properties:
+            url: {type: string, maxLength: 1024}
+            number: {type: integer, minimum: 1}
+        evidence: {type: array, maxItems: 64, items: {$ref: "#/components/schemas/Evidence"}}
+        decisions: {type: array, maxItems: 32, items: {$ref: "#/components/schemas/Name"}}
+        lastEventSequence: {type: integer, minimum: 0}
+        startedAt: {$ref: "#/components/schemas/Time"}
+        finishedAt: {$ref: "#/components/schemas/Time"}
+    Run:
+      type: object
+      additionalProperties: false
+      required: [apiVersion, kind, metadata, spec]
+      properties:
+        apiVersion: {type: string, const: marina.dev/v1}
+        kind: {type: string, const: Run}
+        metadata: {$ref: "#/components/schemas/ObjectMeta"}
+        spec: {$ref: "#/components/schemas/RunSpec"}
+        status: {$ref: "#/components/schemas/RunStatus"}
+    TurnMessage:
+      type: object
+      additionalProperties: false
+      required: [id, role, body]
+      properties:
+        id: {type: string, minLength: 1, maxLength: 200}
+        role: {type: string, enum: [human, agent]}
+        body: {type: string, maxLength: 16384}
+    TurnSpec:
+      type: object
+      additionalProperties: false
+      required: [project, thread, budget]
+      description: Immutable after creation, except cancel. Marina never fetches the thread from the client.
+      x-kubernetes-validations:
+        - {rule: "!has(oldSelf.cancel) || !oldSelf.cancel || (has(self.cancel) && self.cancel)", message: cancel cannot be withdrawn}
+        - {rule: "has(self.context) == has(oldSelf.context) && has(self.workload) == has(oldSelf.workload)", message: fields cannot be added or removed}
+      properties:
+        project: {$ref: "#/components/schemas/Name"}
+        workload: {$ref: "#/components/schemas/Name"}
+        thread:
+          type: object
+          additionalProperties: false
+          required: [id, messages]
+          properties:
+            id: {type: string, minLength: 1, maxLength: 200}
+            messages: {type: array, minItems: 1, maxItems: 64, items: {$ref: "#/components/schemas/TurnMessage"}}
+        context: {type: array, maxItems: 32, items: {$ref: "#/components/schemas/ContextItem"}}
+        budget: {$ref: "#/components/schemas/TurnBudget"}
+        cancel: {type: boolean, default: false}
+    TurnStatus:
+      type: object
+      additionalProperties: false
+      properties:
+        observedGeneration: {type: integer}
+        phase: {type: string, enum: [Pending, Running, WaitingDecision, Succeeded, Failed, Cancelled]}
+        reason: {type: string, maxLength: 2048}
+        conditions: {$ref: "#/components/schemas/Conditions"}
+        repositoryRevision: {$ref: "#/components/schemas/Revision"}
+        reply:
+          type: object
+          additionalProperties: false
+          required: [answer]
+          properties:
+            answer: {type: string, maxLength: 16384}
+        proposals:
+          type: object
+          additionalProperties: false
+          properties:
+            task: {$ref: "#/components/schemas/TaskProposal"}
+            prd:
+              type: object
+              additionalProperties: false
+              required: [path, title, content, digest]
+              properties:
+                path: {type: string, maxLength: 512}
+                title: {type: string, maxLength: 200}
+                content: {type: string, maxLength: 262144}
+                digest: {$ref: "#/components/schemas/Digest"}
+            prdTasks:
+              type: object
+              additionalProperties: false
+              required: [source, tasks]
+              properties:
+                source: {type: string, maxLength: 512}
+                tasks: {type: array, minItems: 1, maxItems: 16, items: {$ref: "#/components/schemas/TaskProposal"}}
+        usage: {$ref: "#/components/schemas/Usage"}
+        decisions: {type: array, maxItems: 8, items: {$ref: "#/components/schemas/Name"}}
+        lastEventSequence: {type: integer, minimum: 0}
+        startedAt: {$ref: "#/components/schemas/Time"}
+        finishedAt: {$ref: "#/components/schemas/Time"}
+    Turn:
+      type: object
+      additionalProperties: false
+      required: [apiVersion, kind, metadata, spec]
+      properties:
+        apiVersion: {type: string, const: marina.dev/v1}
+        kind: {type: string, const: Turn}
+        metadata: {$ref: "#/components/schemas/ObjectMeta"}
+        spec: {$ref: "#/components/schemas/TurnSpec"}
+        status: {$ref: "#/components/schemas/TurnStatus"}
+    DecisionSpec:
+      type: object
+      additionalProperties: false
+      required: [owner, kind, question]
+      description: Written by Marina and immutable, except response, which a client sets once.
+      x-kubernetes-validations:
+        - {rule: "!has(oldSelf.response) || (has(self.response) && self.response == oldSelf.response)", message: response is set once}
+      properties:
+        owner:
+          type: object
+          additionalProperties: false
+          required: [kind, name]
+          properties:
+            kind: {type: string, enum: [Run, Turn]}
+            name: {$ref: "#/components/schemas/Name"}
+        kind: {type: string, enum: [plan-approval, clarification]}
+        question: {type: string, minLength: 1, maxLength: 4096}
+        options: {type: array, maxItems: 6, items: {type: string, maxLength: 200}}
+        recommendation: {type: string, maxLength: 1024}
+        details: {type: string, maxLength: 16384}
+        expiresAt: {$ref: "#/components/schemas/Time"}
+        response:
+          type: object
+          additionalProperties: false
+          required: [answer]
+          properties:
+            answer: {type: string, minLength: 1, maxLength: 16384}
+            answeredBy: {type: string, maxLength: 253}
+            answeredAt: {$ref: "#/components/schemas/Time"}
+    DecisionStatus:
+      type: object
+      additionalProperties: false
+      properties:
+        observedGeneration: {type: integer}
+        phase: {type: string, enum: [Open, Answered, Expired, Closed]}
+        conditions: {$ref: "#/components/schemas/Conditions"}
+    Decision:
+      type: object
+      additionalProperties: false
+      required: [apiVersion, kind, metadata, spec]
+      properties:
+        apiVersion: {type: string, const: marina.dev/v1}
+        kind: {type: string, const: Decision}
+        metadata: {$ref: "#/components/schemas/ObjectMeta"}
+        spec: {$ref: "#/components/schemas/DecisionSpec"}
+        status: {$ref: "#/components/schemas/DecisionStatus"}
+    DecisionAnswer:
+      type: object
+      additionalProperties: false
+      required: [answer]
+      properties:
+        answer: {type: string, minLength: 1, maxLength: 16384}
+    Capabilities:
+      type: object
+      additionalProperties: false
+      required: [apiVersion, kind, workloadTypes, models, tools, limits]
+      properties:
+        apiVersion: {type: string, const: marina.dev/v1}
+        kind: {type: string, const: Capabilities}
+        workloadTypes: {type: array, items: {type: string, enum: [repository-change, conversation]}}
+        models:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [name, roles]
+            properties:
+              name: {type: string, maxLength: 200}
+              roles: {type: array, items: {type: string, enum: [implement, review, conversation]}}
+        tools:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [name]
+            properties:
+              name: {type: string, maxLength: 64}
+              description: {type: string, maxLength: 1024}
+        limits: {$ref: "#/components/schemas/Limits"}
+    Event:
+      type: object
+      additionalProperties: false
+      required: [sequence, type, time]
+      properties:
+        sequence: {type: integer, minimum: 1}
+        type: {type: string, maxLength: 64}
+        time: {$ref: "#/components/schemas/Time"}
+        message: {type: string, maxLength: 2048}
+        fields: {type: object, additionalProperties: {type: [string, number, boolean]}}
+    EventPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: "#/components/schemas/Event"}}
+        nextAfter: {type: integer, minimum: 0}
+    Status:
+      type: object
+      additionalProperties: false
+      required: [apiVersion, kind, status, code]
+      properties:
+        apiVersion: {type: string, const: v1}
+        kind: {type: string, const: Status}
+        status: {type: string, enum: [Success, Failure]}
+        reason: {type: string, enum: [AlreadyExists, Conflict, Forbidden, Unauthorized, NotFound, Invalid, Gone, TooManyRequests, ServiceUnavailable, InternalError]}
+        message: {type: string, maxLength: 2048}
+        code: {type: integer}
+    ProjectList: {type: object, additionalProperties: false, required: [apiVersion, kind, items], properties: {apiVersion: {type: string, const: marina.dev/v1}, kind: {type: string, const: ProjectList}, metadata: {$ref: "#/components/schemas/ListMeta"}, items: {type: array, items: {$ref: "#/components/schemas/Project"}}}}
+    WorkloadList: {type: object, additionalProperties: false, required: [apiVersion, kind, items], properties: {apiVersion: {type: string, const: marina.dev/v1}, kind: {type: string, const: WorkloadList}, metadata: {$ref: "#/components/schemas/ListMeta"}, items: {type: array, items: {$ref: "#/components/schemas/Workload"}}}}
+    RunList: {type: object, additionalProperties: false, required: [apiVersion, kind, items], properties: {apiVersion: {type: string, const: marina.dev/v1}, kind: {type: string, const: RunList}, metadata: {$ref: "#/components/schemas/ListMeta"}, items: {type: array, items: {$ref: "#/components/schemas/Run"}}}}
+    TurnList: {type: object, additionalProperties: false, required: [apiVersion, kind, items], properties: {apiVersion: {type: string, const: marina.dev/v1}, kind: {type: string, const: TurnList}, metadata: {$ref: "#/components/schemas/ListMeta"}, items: {type: array, items: {$ref: "#/components/schemas/Turn"}}}}
+    DecisionList: {type: object, additionalProperties: false, required: [apiVersion, kind, items], properties: {apiVersion: {type: string, const: marina.dev/v1}, kind: {type: string, const: DecisionList}, metadata: {$ref: "#/components/schemas/ListMeta"}, items: {type: array, items: {$ref: "#/components/schemas/Decision"}}}}

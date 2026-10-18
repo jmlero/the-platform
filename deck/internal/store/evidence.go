@@ -39,18 +39,9 @@ func scanEvidence(scanner interface{ Scan(...any) error }) (domain.EvidenceRecor
 	return evidence, nil
 }
 
+// RecordEvidence stores one structured evidence item. An exact replay of the
+// same ID returns the stored item; a changed one conflicts.
 func (s *Store) RecordEvidence(ctx context.Context, input domain.EvidenceInput) (domain.EvidenceRecord, error) {
-	return s.recordEvidence(ctx, nil, input)
-}
-
-func (s *Store) RecordEvidenceGuarded(ctx context.Context, mutation Mutation, input domain.EvidenceInput) (domain.EvidenceRecord, error) {
-	if strings.TrimSpace(input.ID) == "" {
-		return domain.EvidenceRecord{}, fmt.Errorf("a stable evidence id is required for provider retries: %w", domain.ErrInvalidInput)
-	}
-	return s.recordEvidence(ctx, &mutation, input)
-}
-
-func (s *Store) recordEvidence(ctx context.Context, mutation *Mutation, input domain.EvidenceInput) (domain.EvidenceRecord, error) {
 	input.ID = strings.TrimSpace(input.ID)
 	input.RunID = strings.TrimSpace(input.RunID)
 	input.PlanRevisionID = strings.TrimSpace(input.PlanRevisionID)
@@ -66,10 +57,11 @@ func (s *Store) recordEvidence(ctx context.Context, mutation *Mutation, input do
 	input.ArtifactURI = strings.TrimSpace(input.ArtifactURI)
 	input.ArtifactDigest = strings.TrimSpace(input.ArtifactDigest)
 	input.PolicyVersion = strings.TrimSpace(input.PolicyVersion)
+	// CI and landing observations may have no retained artifact file.
 	if input.RunID == "" || input.PlanRevisionID == "" || input.Type == "" ||
 		input.Producer == "" || input.Verifier == "" || input.SubjectDigest == "" ||
 		input.SourceRevision == "" || input.Command == "" || input.ProvenanceURI == "" ||
-		input.ProvenanceDigest == "" || input.ArtifactURI == "" || input.ArtifactDigest == "" ||
+		input.ProvenanceDigest == "" || (input.ArtifactURI == "") != (input.ArtifactDigest == "") ||
 		input.ObservedAt <= 0 {
 		return domain.EvidenceRecord{}, fmt.Errorf("structured evidence fields are required: %w", domain.ErrInvalidInput)
 	}
@@ -86,35 +78,6 @@ func (s *Store) recordEvidence(ctx context.Context, mutation *Mutation, input do
 	run, err := getRunTx(ctx, tx, input.RunID)
 	if err != nil {
 		return domain.EvidenceRecord{}, err
-	}
-	task, err := getTaskTx(ctx, tx, run.TaskID)
-	if err != nil {
-		return domain.EvidenceRecord{}, err
-	}
-	var attempt idempotencyAttempt
-	if mutation != nil {
-		if err := validateRunGuard(run, mutation.Guard); err != nil {
-			return domain.EvidenceRecord{}, err
-		}
-		var replayResult []byte
-		var replayed bool
-		attempt, replayResult, replayed, err = beginIdempotentMutation(
-			ctx, tx, *mutation, task.ProjectID, operationRecordEvidence, input.ID,
-			struct {
-				Input domain.EvidenceInput `json:"input"`
-				Guard *RunGuard            `json:"guard,omitempty"`
-			}{input, mutation.Guard},
-		)
-		if err != nil {
-			return domain.EvidenceRecord{}, err
-		}
-		if replayed {
-			var original domain.EvidenceRecord
-			if err := decodeIdempotencyResult(replayResult, &original); err != nil {
-				return domain.EvidenceRecord{}, err
-			}
-			return original, nil
-		}
 	}
 	revision, err := scanPlanRevision(tx.QueryRowContext(ctx,
 		"SELECT "+planRevisionColumns+" FROM plan_revisions WHERE id = ? AND run_id = ?",
@@ -176,11 +139,6 @@ func (s *Store) recordEvidence(ctx context.Context, mutation *Mutation, input do
 	)
 	if err != nil {
 		return domain.EvidenceRecord{}, fmt.Errorf("create evidence event: %w", err)
-	}
-	if mutation != nil {
-		if err := finishIdempotentMutation(ctx, tx, attempt, evidence); err != nil {
-			return domain.EvidenceRecord{}, err
-		}
 	}
 	if err := tx.Commit(); err != nil {
 		return domain.EvidenceRecord{}, fmt.Errorf("commit evidence: %w", err)

@@ -19,20 +19,20 @@ Then read the affected component's guidance before changing it:
 | --- | --- |
 | Deck | [deck/AGENTS.md](deck/AGENTS.md) and [deck/README.md](deck/README.md) |
 | Marina | [marina/AGENTS.md](marina/AGENTS.md) and [marina/README.md](marina/README.md) |
-| CLI | [cli/README.md](cli/README.md) and the public Deck API used by the change |
+| CLI | [cli/README.md](cli/README.md) and the public Deck or Marina API used by the change |
 
 Read relevant records under [docs/decisions/](docs/decisions/) before revisiting an architectural or product choice. Explicit user decisions take precedence; update docs/VISION.md when the direction changes and docs/status.md when the current state changes. Check claimed behavior against source and tests.
 
 ## Product boundaries
 
-- `cli/` owns `platformctl`: a stateless operator client that uses Deck's public HTTP/JSON API and owns no authoritative platform state.
-- `deck/` owns Deck: human steering and the authoritative work-control ledger.
-- `marina/` owns Marina: durable autonomous execution and reconciliation.
+- `cli/` owns `platformctl`: a stateless operator client of Deck's operator API and Marina's platform API; it owns no authoritative state.
+- `deck/` owns Deck: human steering (projects, threads, backlog, PRDs, acceptance). It is a client of Marina's platform API.
+- `marina/` owns Marina: the platform API (`marina.dev/v1`, HTTP/JSON and Kubernetes resources), the run ledger, and durable autonomous execution ([decision 0033](docs/decisions/0033-marina-platform-api.md)). Marina calls no client.
 - Keep separate Go modules, binaries, databases where applicable, images, identities, deployments, migrations, and release versions.
 - Neither product may import the other's internal packages. Integration goes through the versioned HTTP/JSON contract.
 - Neither service may read the other's database. Terminal clients must not import product internals or read product databases; they interact through supported public APIs.
-- Deck owns its provider-specific OpenAPI and canonical wire fixtures under `deck/api/`.
-- Marina owns provider-neutral ports and the reusable consumer conformance suite under `marina/internal/workcontrol/`.
+- Marina owns the platform contract under `marina/api/`: OpenAPI, CRDs and canonical fixtures. Deck's `deck/api/` documents only its operator API.
+- Marina's API sandbox (`go build -tags sandbox`, command `api-sandbox`) is the real process every client's contract tests run against.
 - Keep OpenAPI, capability discovery, fixtures, persistence, handlers, and consumer expectations synchronized. Additive changes must preserve version-1 semantics; breaking semantics require a new protocol major. See the [contract map](docs/ARCHITECTURE.md#contract).
 - Preserve durable intent, idempotency, version checks, lease fencing, bounded budgets, and source-bound evidence. Handle lost responses, restart, cancellation, and partial success without duplicate work or false completion.
 
@@ -81,7 +81,7 @@ Run the narrowest relevant checks first, from the owning Go module or frontend d
 | Installation scripts or configuration | `make check-installation`, then relevant documented local runtime checks |
 | Joint HTTP/JSON protocol | `make check` and `make conformance` |
 
-A joint contract item is complete only when both product checks and real-process conformance pass. Root `make conformance` exercises the CLI and Marina against real Deck processes; deterministic Git/runtime doubles do not establish live model, Git-provider, Kubernetes, or browser acceptance.
+A joint contract item is complete only when both product checks and real-process conformance pass. Root `make conformance` runs Deck and the CLI against a real Marina API sandbox, the CLI against a real Deck, and Marina's own API contract tests; deterministic Git/runtime doubles do not establish live model, Git-provider, Kubernetes, or browser acceptance.
 
 For documentation-only changes, verify links, referenced commands, and `git diff --check`. Report checks actually run and distinguish deterministic checks from live local runtime evidence. Store redacted installation evidence under `docs/validation/`.
 

@@ -1,0 +1,10 @@
+{"apiVersion":"marina.dev/v1","kind":"Run","metadata":{"name":"task-0042","namespace":"factory-default","generation":1},
+ "spec":{"project":"acceptance","workload":"land-on-main","title":"Reject an empty range","acceptanceCriteria":"A unit test covers min > max and passes.","budget":{"timeMinutes":60,"maxTokens":200000,"maxAttempts":7}},
+ "status":{"observedGeneration":1,"phase":"Succeeded","usage":{"tokens":48210,"reservedTokens":0,"costMinor":61,"reservedCostMinor":0,"currency":"USD","attempts":3,"maxAttempts":7},
+  "revision":{"base":"151d521493f3e6610f09adb343f02cf5fba86a6c","head":"7c1e0f2a9b8d4c3e5f6a7b8c9d0e1f2a3b4c5d6e","branch":"marina/task-0042"},
+  "landing":{"commit":"7c1e0f2a9b8d4c3e5f6a7b8c9d0e1f2a3b4c5d6e","observedAt":"2026-10-17T18:40:12Z"},
+  "evidence":[{"id":"ev-review-1","kind":"review","passed":true,"summary":"Independent review passed the exact patch","sourceRevision":"7c1e0f2a9b8d4c3e5f6a7b8c9d0e1f2a3b4c5d6e","artifactDigest":"sha256:4e1f3c5a7b9d2e4f6a8c0b1d3e5f7a9c2b4d6e8f0a1c3e5b7d9f2a4c6e8b0d1f","recordedAt":"2026-10-17T18:31:00Z"},
+   {"id":"ev-verify-1","kind":"verification","passed":true,"summary":"unit: 44 tests passed in a clean environment","sourceRevision":"7c1e0f2a9b8d4c3e5f6a7b8c9d0e1f2a3b4c5d6e","artifactDigest":"sha256:0a2c4e6f8b1d3f5a7c9e2b4d6f8a0c1e3b5d7f9a2c4e6b8d0f1a3c5e7b9d2f4a","recordedAt":"2026-10-17T18:35:20Z"},
+   {"id":"ev-ci-1","kind":"ci","passed":true,"summary":"Required check test passed on the exact commit","sourceRevision":"7c1e0f2a9b8d4c3e5f6a7b8c9d0e1f2a3b4c5d6e","recordedAt":"2026-10-17T18:39:58Z"},
+   {"id":"ev-landing-1","kind":"landing","passed":true,"summary":"main fast-forwarded to the verified commit","sourceRevision":"7c1e0f2a9b8d4c3e5f6a7b8c9d0e1f2a3b4c5d6e","recordedAt":"2026-10-17T18:40:12Z"}],
+  "decisions":["task-0042-plan-1"],"lastEventSequence":27,"startedAt":"2026-10-17T18:02:00Z","finishedAt":"2026-10-17T18:40:12Z"}}

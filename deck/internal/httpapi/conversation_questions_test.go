@@ -1,71 +1,50 @@
 package httpapi
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"io"
-	"log/slog"
 	"net/http"
-	"net/http/httptest"
-	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/jmlero/the-platform/deck/internal/domain"
+	"github.com/jmlero/the-platform/deck/internal/store"
 )
 
-func TestConversationQuestionServiceAndOperatorScopes(t *testing.T) {
-	s, _ := newTestStoreAndHandler(t)
+func TestChatQuestionAnswersReachMarinaOnceAndAppearInTheThread(t *testing.T) {
+	s, handler, double := newMarinaHandler(t)
 	ctx := context.Background()
+	if err := s.EnsureMarinaAgent(ctx, []string{"prj_default"}); err != nil {
+		t.Fatal(err)
+	}
 	channel, err := s.CreateChannel(ctx, "prj_default", "questions-api")
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.RegisterAgent(ctx, domain.Agent{ID: "agt_questions", InstallationID: "questions", Name: "Questions", Capabilities: []string{"conversation.invoke.prj_default"}})
+	invoked, err := s.InvokeConversation(ctx, domain.ConversationInvocationInput{ChannelID: channel.ID, AgentID: store.MarinaAgentID, Body: "Help", RequestID: "request-api", AuthorID: "operator:one"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	invoked, err := s.InvokeConversation(ctx, domain.ConversationInvocationInput{ChannelID: channel.ID, AgentID: "agt_questions", Body: "Help", RequestID: "request-api", AuthorID: "operator:one"})
+	if err := s.BeginMarinaTurn(ctx, invoked.Message.ID, "deck-turn", "factory", json.RawMessage(`{}`)); err != nil {
+		t.Fatal(err)
+	}
+	q, err := s.EnsureConversationQuestion(ctx, domain.ConversationQuestionInput{InvocationMessageID: invoked.Message.ID, AgentID: store.MarinaAgentID, QuestionID: "deck-turn-q1", Text: "Which provider?"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	policy := filepath.Join(t.TempDir(), "service.json")
-	questionBody, _ := json.Marshal(domain.ConversationQuestionInput{InvocationMessageID: invoked.Message.ID, AgentID: "agt_questions", QuestionID: "scope", Text: "Which provider?"})
-	for _, tc := range []struct {
-		capability, project string
-		status              int
-	}{
-		{capabilityProviderInfo, "prj_default", http.StatusForbidden},
-		{capabilityConversationQuestion, "prj_other", http.StatusForbidden},
-		{capabilityConversationQuestion, "prj_default", http.StatusOK},
-	} {
-		writeServiceAuthPolicy(t, policy, serviceAuthTokenOne, []string{tc.capability}, []string{tc.project})
-		auth, err := NewFileServiceAuthorizer(policy)
-		if err != nil {
-			t.Fatal(err)
-		}
-		handler := New(s, slog.New(slog.NewTextHandler(io.Discard, nil)), WithServiceAuthorizer(auth)).Handler()
-		request := httptest.NewRequest(http.MethodPost, "/api/v1/conversation/questions", bytes.NewReader(questionBody))
-		request.Header.Set("Authorization", "Bearer "+serviceAuthTokenOne)
-		response := httptest.NewRecorder()
-		handler.ServeHTTP(response, request)
-		if response.Code != tc.status {
-			t.Fatalf("%s/%s: %d %s", tc.capability, tc.project, response.Code, response.Body.String())
-		}
+	listed := requestJSON(t, handler, http.MethodGet, "/api/v1/operator/threads/"+invoked.Thread.ID+"/questions", "", nil)
+	if listed.Code != http.StatusOK || !strings.Contains(listed.Body.String(), "Which provider?") {
+		t.Fatalf("questions = %d %s", listed.Code, listed.Body)
 	}
-	questions, err := s.ListConversationQuestions(ctx, invoked.Thread.ID)
-	if err != nil || len(questions) != 1 {
-		t.Fatalf("question persisted: %+v %v", questions, err)
-	}
-	operatorHandler := New(s, slog.New(slog.NewTextHandler(io.Discard, nil))).Handler()
-	answer := []byte(`{"answer":"GitHub","request_id":"answer-api"}`)
+	answer := map[string]string{"answer": "GitHub", "request_id": "answer-api"}
 	for i := 0; i < 2; i++ {
-		request := httptest.NewRequest(http.MethodPost, "/api/v1/operator/conversation/questions/"+questions[0].ID+"/answer", bytes.NewReader(answer))
-		response := httptest.NewRecorder()
-		operatorHandler.ServeHTTP(response, request)
+		response := requestJSON(t, handler, http.MethodPost, "/api/v1/operator/conversation/questions/"+q.ID+"/answer", "", answer)
 		if response.Code != http.StatusOK {
-			t.Fatalf("answer %d: %d %s", i, response.Code, response.Body.String())
+			t.Fatalf("answer %d: %d %s", i, response.Code, response.Body)
 		}
+	}
+	if len(double.requests) != 1 || !strings.HasPrefix(double.requests[0], "POST /apis/marina.dev/v1/namespaces/factory/decisions/deck-turn-q1/answer deck-"+q.ID) {
+		t.Fatalf("forwarded = %v", double.requests)
 	}
 	page, err := s.PageThreadMessages(ctx, invoked.Thread.ID, 100, "")
 	if err != nil || len(page.Items) != 3 {

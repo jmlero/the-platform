@@ -1,0 +1,128 @@
+# Generated from openapi.yaml by: go test ./api -update. Do not edit.
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+    labels:
+        app.kubernetes.io/part-of: the-platform
+    name: projects.marina.dev
+spec:
+    group: marina.dev
+    names:
+        categories:
+            - marina
+        kind: Project
+        listKind: ProjectList
+        plural: projects
+        singular: project
+    scope: Namespaced
+    versions:
+        - additionalPrinterColumns:
+            - jsonPath: .spec.repository.url
+              name: Repository
+              type: string
+            - jsonPath: .metadata.creationTimestamp
+              name: Age
+              type: date
+          name: v1
+          schema:
+            openAPIV3Schema:
+                properties:
+                    apiVersion:
+                        type: string
+                    kind:
+                        type: string
+                    metadata:
+                        type: object
+                    spec:
+                        properties:
+                            defaultWorkload:
+                                maxLength: 63
+                                minLength: 1
+                                pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                                type: string
+                            displayName:
+                                maxLength: 200
+                                type: string
+                            repository:
+                                properties:
+                                    baseBranch:
+                                        maxLength: 255
+                                        minLength: 1
+                                        type: string
+                                    credentialSecret:
+                                        description: A Secret in the Project's namespace; its value never appears in the API.
+                                        properties:
+                                            key:
+                                                maxLength: 253
+                                                minLength: 1
+                                                type: string
+                                            name:
+                                                maxLength: 63
+                                                minLength: 1
+                                                pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                                                type: string
+                                        required:
+                                            - name
+                                            - key
+                                        type: object
+                                    provider:
+                                        enum:
+                                            - github
+                                        type: string
+                                    url:
+                                        maxLength: 1024
+                                        pattern: ^https://[^@?#]+$
+                                        type: string
+                                required:
+                                    - provider
+                                    - url
+                                    - baseBranch
+                                    - credentialSecret
+                                type: object
+                        required:
+                            - repository
+                        type: object
+                    status:
+                        properties:
+                            bindingVersion:
+                                minimum: 0
+                                type: integer
+                            conditions:
+                                items:
+                                    properties:
+                                        lastTransitionTime:
+                                            format: date-time
+                                            type: string
+                                        message:
+                                            maxLength: 1024
+                                            type: string
+                                        observedGeneration:
+                                            type: integer
+                                        reason:
+                                            maxLength: 64
+                                            type: string
+                                        status:
+                                            enum:
+                                                - "True"
+                                                - "False"
+                                                - Unknown
+                                            type: string
+                                        type:
+                                            maxLength: 64
+                                            type: string
+                                    required:
+                                        - type
+                                        - status
+                                    type: object
+                                maxItems: 16
+                                type: array
+                            observedGeneration:
+                                type: integer
+                        type: object
+                required:
+                    - spec
+                type: object
+          served: true
+          storage: true
+          subresources:
+            status: {}

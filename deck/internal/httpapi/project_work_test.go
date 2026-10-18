@@ -46,7 +46,7 @@ func TestProjectChannelCreationIsIsolatedAndReplayable(t *testing.T) {
 	}
 }
 
-func TestReadyDiscoveryAndClaimsWaitForDependencies(t *testing.T) {
+func TestDispatchWaitsForDependencies(t *testing.T) {
 	s, h := newTestStoreAndHandler(t)
 	ctx := context.Background()
 	prerequisite, _ := s.CreateTask(ctx, domain.CreateTaskInput{Title: "First"})
@@ -56,8 +56,8 @@ func TestReadyDiscoveryAndClaimsWaitForDependencies(t *testing.T) {
 		t.Fatalf("dependencies: %s", response.Body.String())
 	}
 	s.MoveTask(ctx, dependent.ID, domain.TaskReady)
-	response = requestJSON(t, h, "GET", "/api/v1/tasks?status=ready", "", nil)
-	if response.Code != 200 || response.Body.String() != "[]\n" {
-		t.Fatalf("ineligible task advertised: %d %s", response.Code, response.Body.String())
+	ready, err := s.MarinaReadyTasks(ctx, []string{"prj_default"})
+	if err != nil || len(ready) != 0 {
+		t.Fatalf("ineligible task offered to Marina: %+v %v", ready, err)
 	}
 }

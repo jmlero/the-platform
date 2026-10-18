@@ -13,31 +13,6 @@ type planSubmissionResult struct {
 	Decision *domain.Decision    `json:"decision,omitempty"`
 }
 
-// SubmitPlan is the protocol-v1 compatibility entry point. Plans are still
-// persisted as immutable revisions; missing structured fields are explicit
-// compatibility defaults rather than an in-place Markdown update.
-func (s *Store) SubmitPlan(
-	ctx context.Context,
-	mutation Mutation,
-	runID string,
-	plan string,
-	requireApproval bool,
-) (*domain.Decision, error) {
-	run, err := s.GetRun(ctx, runID)
-	if err != nil {
-		return nil, err
-	}
-	_, decision, err := s.SubmitPlanRevision(ctx, mutation, runID, domain.PlanRevisionInput{
-		Plan:                 plan,
-		ContextDigest:        run.AcceptanceCriteriaDigest,
-		RiskClass:            "medium",
-		VerificationStrategy: "Verify the task acceptance criteria.",
-		ExpectedSideEffects:  []string{},
-		RollbackApproach:     "Stop the run and request a revised plan.",
-	}, domain.DecisionRequest{Required: requireApproval, Risk: "medium"})
-	return decision, err
-}
-
 func (s *Store) SubmitPlanRevision(
 	ctx context.Context,
 	mutation Mutation,
@@ -182,8 +157,12 @@ func (s *Store) SubmitPlanRevision(
 	var decision *domain.Decision
 	var decisionEvent domain.Event
 	if request.Required {
+		decisionID := request.ID
+		if decisionID == "" {
+			decisionID = newID("dec")
+		}
 		created := domain.Decision{
-			ID: newID("dec"), TaskID: run.TaskID, RunID: &run.ID, PlanRevisionID: revision.ID,
+			ID: decisionID, TaskID: run.TaskID, RunID: &run.ID, PlanRevisionID: revision.ID,
 			Question: fmt.Sprintf("Approve plan revision %d for “%s”?", revision.Revision, task.Title),
 			Options:  []string{"Approve plan", "Request changes"}, Recommendation: "Approve plan",
 			RiskClass: request.Risk, EvidenceSummary: strings.TrimSpace(request.EvidenceSummary),

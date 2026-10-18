@@ -32,6 +32,7 @@ type Gateway struct {
 	Blobs         *artifacts.Store
 	Source        workcontrol.ConversationSource
 	Repository    func(context.Context, workcontrol.RepositoryBinding) (sourcecontrol.RepositoryReader, error)
+	MCP           *MCPTools
 	journal       *sqlite.Store
 	signingKey    []byte
 	model         workerapi.Model
