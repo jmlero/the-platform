@@ -1,0 +1,64 @@
+# One Marina project (decision 0033): its namespace, Project and Workloads,
+# and Deck's access to it as a client. The namespace and Project name form the
+# workflow's project_id (<namespace>.<project>); the Workloads must use the
+# workflow's installed models and choices. Apply twice on a fresh cluster: the
+# marina.dev CRDs must exist before these resources.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: factory-default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: deck-marina-factory
+  namespace: factory-default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: marina-factory
+subjects:
+  - kind: ServiceAccount
+    name: deck
+    namespace: marina-system
+---
+apiVersion: marina.dev/v1
+kind: Project
+metadata:
+  name: acceptance
+  namespace: factory-default
+spec:
+  displayName: Acceptance repository
+  repository:
+    provider: github
+    url: https://github.com/YOUR_OWNER/YOUR_REPOSITORY.git
+    baseBranch: main
+    # Marina uses the credential of the installed workflow profile.
+    credentialSecret: {name: marina-credentials, key: git-token}
+  defaultWorkload: land-on-main
+---
+apiVersion: marina.dev/v1
+kind: Workload
+metadata:
+  name: land-on-main
+  namespace: factory-default
+spec:
+  type: repository-change
+  repositoryChange:
+    model: openai/gpt-6-luna
+    checks:
+      - {id: regression, directory: ".", command: [go, test, ./...]}
+    allowedPaths: [src, tests]
+    planApproval: required
+    review: {enabled: true, model: YOUR_DIFFERENT_REVIEWER_MODEL}
+    delivery: {mode: land-on-main, requiredChecks: [YOUR_REQUIRED_CI_CHECK_NAME]}
+---
+apiVersion: marina.dev/v1
+kind: Workload
+metadata:
+  name: chat
+  namespace: factory-default
+spec:
+  type: conversation
+  conversation:
+    model: openai/gpt-6-luna

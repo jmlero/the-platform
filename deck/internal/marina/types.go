@@ -126,12 +126,22 @@ type Evidence struct {
 	RecordedAt     string `json:"recordedAt"`
 }
 
+// Usage is Marina's model usage for one Run; cost is in minor units.
+type Usage struct {
+	Tokens            int64  `json:"tokens"`
+	ReservedTokens    int64  `json:"reservedTokens"`
+	CostMinor         int64  `json:"costMinor"`
+	ReservedCostMinor int64  `json:"reservedCostMinor"`
+	Currency          string `json:"currency"`
+}
+
 type Run struct {
 	Metadata ObjectMeta `json:"metadata"`
 	Status   struct {
 		Phase      string      `json:"phase"`
 		Reason     string      `json:"reason"`
 		Conditions []Condition `json:"conditions"`
+		Usage      *Usage      `json:"usage"`
 		Landing    *struct {
 			Commit     string `json:"commit"`
 			ObservedAt string `json:"observedAt"`

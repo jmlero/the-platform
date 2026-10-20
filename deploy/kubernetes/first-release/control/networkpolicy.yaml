@@ -9,8 +9,6 @@ spec:
   policyTypes: [Ingress]
   ingress:
     - from:
-        - podSelector:
-            matchLabels: {app.kubernetes.io/name: marina}
         - namespaceSelector:
             matchLabels: {marina.dev/operator-ingress: "true"}
       ports: [{protocol: TCP, port: 8080}]

@@ -70,17 +70,16 @@ not rotate or extend the CA.
 
 ## Rotate credentials (OPS-04)
 
-Operator and service policies reload on requests; credentials must not appear in
-arguments, task text or evidence. Keep stable operator and service identity IDs.
+The operator policy reloads on requests; credentials must not appear in
+arguments, task text or evidence. Keep stable operator IDs. Deck reaches Marina
+with its projected Kubernetes service account token, which the kubelet rotates;
+Deck rereads it for every request, so it needs no manual rotation.
 
-1. Add the new token fingerprint alongside the old fingerprint in the relevant
-   private auth policy. Update `deck-auth` and wait until a new-token request works.
-2. For the service token, replace the private `deck-token` and mounted
-   `marina-credentials` Secret. Wait for projection and confirm `/marina doctor`
-   works. The file is read on each request; no identity recreation is required.
-3. Remove the old fingerprint. Confirm old-token requests fail, new-token
+1. Add the new token fingerprint alongside the old fingerprint in the private
+   operator policy. Update `deck-auth` and wait until a new-token login works.
+2. Remove the old fingerprint. Confirm old-token requests fail, new-token
    requests work, and task/run/agent IDs remain unchanged.
-4. Operator token revocation prevents new logins. Existing sessions intentionally
+3. Operator token revocation prevents new logins. Existing sessions intentionally
    survive until logout or their 12-hour expiry; token rotation does not revoke
    them. Log out each rehearsal session explicitly.
 
@@ -90,10 +89,10 @@ For a repeatable idle local rehearsal, run:
 python3 scripts/verify-local-podman-operations.py ~/.local/share/the-platform/marina-local/installation
 ```
 
-It temporarily rotates operator/service credentials and then restores the original
-Secret data and revokes its temporary tokens. It leaves private operator/token
-files unchanged. If interrupted, restore `deck-auth` and `marina-credentials`
-from the private installation and verify readiness before admitting work.
+It temporarily rotates the operator credential and then restores the original
+Secret data and revokes its temporary token. It leaves private operator/token
+files unchanged. If interrupted, restore `deck-auth` from the private
+installation and verify readiness before admitting work.
 
 For Git/OpenRouter, issue a replacement credential with the same repository/model
 scope, replace `git-token` or `model-token` privately, update the mounted Secret,

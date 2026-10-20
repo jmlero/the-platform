@@ -367,27 +367,33 @@ func definition(all map[string]any, r resource) map[string]any {
 	}
 }
 
+// The Helm chart carries its own copy, because a chart cannot read files
+// outside its directory.
+var crdDirectories = []string{"crds", "../deploy/helm/marina/crds"}
+
 func TestCustomResourceDefinitionsAreGeneratedFromTheSchemas(t *testing.T) {
 	all := schemas(loadOpenAPI(t))
 	for _, r := range resources {
-		path := filepath.Join("crds", r.plural+".yaml")
 		encoded, err := yaml.Marshal(definition(all, r))
 		if err != nil {
 			t.Fatal(err)
 		}
 		generated := append([]byte("# Generated from openapi.yaml by: go test ./api -update. Do not edit.\n"), encoded...)
-		if *update {
-			if err := os.MkdirAll("crds", 0o755); err != nil {
-				t.Fatal(err)
+		for _, directory := range crdDirectories {
+			path := filepath.Join(directory, r.plural+".yaml")
+			if *update {
+				if err := os.MkdirAll(directory, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(path, generated, 0o644); err != nil {
+					t.Fatal(err)
+				}
+				continue
 			}
-			if err := os.WriteFile(path, generated, 0o644); err != nil {
-				t.Fatal(err)
+			current, err := os.ReadFile(path)
+			if err != nil || string(current) != string(generated) {
+				t.Errorf("%s is out of date; run go test ./api -update", path)
 			}
-			continue
-		}
-		current, err := os.ReadFile(path)
-		if err != nil || string(current) != string(generated) {
-			t.Errorf("%s is out of date; run go test ./api -update", path)
 		}
 	}
 }

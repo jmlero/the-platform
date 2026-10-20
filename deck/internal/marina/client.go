@@ -39,6 +39,9 @@ var (
 	digestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 )
 
+// ErrTokenUnavailable reports that Deck cannot read its Marina token.
+var ErrTokenUnavailable = errors.New("Marina token file is unreadable or empty")
+
 // ValidName reports whether value is a Kubernetes-style object name.
 func ValidName(value string) bool {
 	return len(value) <= 63 && namePattern.MatchString(value)
@@ -91,7 +94,12 @@ func statusCode(err error) int {
 	return 0
 }
 
-func IsNotFound(err error) bool { return statusCode(err) == http.StatusNotFound }
+// IsNotFound reports a Kubernetes Status that names the object NotFound. A
+// bare 404, such as from a wrong URL, is not one.
+func IsNotFound(err error) bool {
+	var status *APIError
+	return errors.As(err, &status) && status.Code == http.StatusNotFound && status.Reason == "NotFound"
+}
 
 // IsAlreadyExists reports a create whose name exists with a different spec.
 func IsAlreadyExists(err error) bool {
@@ -103,10 +111,11 @@ func IsAlreadyExists(err error) bool {
 func IsConflict(err error) bool { return statusCode(err) == http.StatusConflict }
 
 // IsRejected reports a request Marina refused for good: retrying the same
-// request cannot succeed.
+// request cannot succeed. A 403 is not one, because granting the missing
+// RBAC permission makes the same request succeed.
 func IsRejected(err error) bool {
 	code := statusCode(err)
-	return code == http.StatusBadRequest || code == http.StatusUnprocessableEntity || code == http.StatusForbidden || IsAlreadyExists(err)
+	return code == http.StatusBadRequest || code == http.StatusUnprocessableEntity || IsAlreadyExists(err)
 }
 
 // New requires https outside loopback, never follows redirects and trusts the
@@ -292,10 +301,24 @@ func object(kind, name string, spec json.RawMessage) any {
 	}{apiVersion, kind, ObjectMeta{Name: name}, spec}
 }
 
-func (c *Client) request(ctx context.Context, method, path, idempotencyKey string, input any) (*http.Request, error) {
+// TokenAvailable reports whether the token file can be read now.
+func (c *Client) TokenAvailable() error {
+	_, err := c.token()
+	return err
+}
+
+func (c *Client) token() (string, error) {
 	token, err := readBounded(c.tokenFile, maxTokenBytes)
 	if err != nil || strings.TrimSpace(string(token)) == "" {
-		return nil, errors.New("Marina token file is unreadable or empty")
+		return "", ErrTokenUnavailable
+	}
+	return strings.TrimSpace(string(token)), nil
+}
+
+func (c *Client) request(ctx context.Context, method, path, idempotencyKey string, input any) (*http.Request, error) {
+	token, err := c.token()
+	if err != nil {
+		return nil, err
 	}
 	var body io.Reader
 	if input != nil {
@@ -315,7 +338,7 @@ func (c *Client) request(ctx context.Context, method, path, idempotencyKey strin
 	}
 	request.Header.Set("Accept", "application/json")
 	request.Header.Set("User-Agent", "deck")
-	request.Header.Set("Authorization", "Bearer "+strings.TrimSpace(string(token)))
+	request.Header.Set("Authorization", "Bearer "+token)
 	if input != nil {
 		request.Header.Set("Content-Type", "application/json")
 	}

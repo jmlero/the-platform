@@ -16,6 +16,7 @@ import subprocess
 ROOT = Path(__file__).resolve().parents[1]
 PROFILE = ROOT / "deploy/kubernetes/kagent-trial"
 KUBE = ["kubectl", "--context", "kind-marina-local"]
+NODE_IP = "10.89.0.2"
 
 
 def run(args, **kwargs):
@@ -54,13 +55,32 @@ def prepare_permanent(resources, policies):
     relabel(policies)
 
 
+def pin_node(policies, address):
+    """Point the profile's node ipBlocks at the selected node."""
+    def pin(value):
+        if isinstance(value, dict):
+            if value.get("cidr") == NODE_IP + "/32":
+                value["cidr"] = address + "/32"
+            for item in value.values():
+                pin(item)
+        elif isinstance(value, list):
+            for item in value:
+                pin(item)
+
+    pin(policies)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("assets", type=Path)
     parser.add_argument("--helm", required=True)
     parser.add_argument("--permanent", action="store_true",
                         help="retain the engine as the local installation, with installation ownership labels")
+    parser.add_argument("--context", default="kind-marina-local")
+    parser.add_argument("--node", default="marina-local-control-plane")
+    parser.add_argument("--node-ip", default=NODE_IP)
     args = parser.parse_args()
+    KUBE[2] = args.context
     assets = args.assets.resolve()
     spec = importlib.util.spec_from_file_location("trial", ROOT / "scripts/render-kagent-trial.py")
     trial = importlib.util.module_from_spec(spec)
@@ -73,16 +93,16 @@ def main():
     policies = json.loads((PROFILE / "network-policy.json").read_text())["items"]
     if args.permanent:
         prepare_permanent(objects, policies)
+    pin_node(policies, args.node_ip)
     manager = "kint-local" if args.permanent else "kint-02"
     label = {"the-platform.dev/installation": "local-kagent"} if args.permanent else trial.LABEL
     if not trial.certificate_api_ready(json.loads(run(KUBE + ["get", "--raw", "/apis/certificates.k8s.io"]))):
         raise ValueError("required beta certificate API is unavailable")
-    # The profile's NetworkPolicy deliberately pins this existing local node.
-    node = json.loads(run(KUBE + ["get", "node", "marina-local-control-plane", "-o", "json"]))
+    # The profile's NetworkPolicy deliberately pins the selected local node.
+    node = json.loads(run(KUBE + ["get", "node", args.node, "-o", "json"]))
     addresses = {x["address"] for x in node["status"]["addresses"] if x["type"] == "InternalIP"}
-    if addresses != {"10.89.0.2"} or node["status"]["nodeInfo"]["architecture"] != "arm64":
+    if addresses != {args.node_ip} or node["status"]["nodeInfo"]["architecture"] != "arm64":
         raise ValueError("node address or architecture differs from the locked local profile")
-    run(["podman", "--connection", "podman-machine-default-root", "inspect", "marina-local-control-plane"])
     existing = []
     for resource in ("namespaces", "crd", "clusterrole", "clusterrolebinding", "priorityclass",
                      "validatingadmissionpolicy", "validatingadmissionpolicybinding"):
@@ -106,7 +126,7 @@ def main():
              ("actor-id-ca-pool", "ate-system", "ca"),
              ("egress-mitm-ca-pool", "ate-system", "ca")]
     for name, namespace, kind in pools:
-        command = [str(assets / "kubectl-ate"), "--context", "kind-marina-local", "admin",
+        command = [str(assets / "kubectl-ate"), "--context", args.context, "admin",
                    "make-" + kind + "-pool", "--" + ("ca-id" if kind == "ca" else "key-id") + "=1",
                    "--name=" + name, "--secret-namespace=" + namespace]
         if name == "egress-mitm-ca-pool":

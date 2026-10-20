@@ -19,12 +19,10 @@ All paths below start with `/api/v1`. Profile metadata contains no credentials.
 | Inspect immutable inputs | `GET /operator/tasks/{task}/context` | Session; selected sources and recorded worker snapshot. |
 | Cancel a run | `POST /operator/runs/{run}/commands` | Session and CSRF; `{"type":"cancel","reason":"Operator request"}`. Completion waits for observed worker termination. |
 | Download evidence | `GET /operator/tasks/{task}/artifacts/{digest}` | Session; use a digest registered in the task's evidence. Deck authenticates the artifact fetch to Marina. |
-| Refresh installed catalog | `PUT /projects/{project}/workloads` | Marina service credential with project scope and `workload.publish`; not an operator mutation. |
 
-An empty catalog can mean no configured workload, no updated publisher or an
-expired publication. Existing installations need the new Deck migration, Marina
-binary and `workload.publish` service grant. The installation preparation script
-adds that grant for newly prepared installations. Discovery and invocation do not
+Deck publishes the catalog from the Marina Workloads mapped in its projects file
+([decision 0033](../../../docs/decisions/0033-marina-platform-api.md)). An empty
+catalog means no mapped Workload or an expired publication. Discovery and invocation do not
 enable task intake, override approvals or increase installation ceilings.
 Existing installations can use the offline
 [native-engine upgrade procedure](../../../deploy/kubernetes/agent-platform/README.md).

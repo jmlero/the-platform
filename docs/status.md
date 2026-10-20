@@ -82,9 +82,11 @@ executions that have already started.
 - Exact answer replay preserves the original human decision. Changed replays,
   expired questions and answers after the turn ends are rejected
   ([final question acceptance](validation/kint-12-17-2026-10-01.md#questions-and-publications)).
-- It can create a Backlog draft, or a Ready task within a fixed delegation budget
-  when the request clearly asks for work. Results and blockers appear in the
-  originating thread, and feedback on a finished task creates a linked follow-up.
+- It can propose a task, which Deck records as a Backlog draft. Results and
+  blockers appear in the originating thread, and feedback on a finished task
+  creates a linked follow-up. Direct delegation of a Ready task within a fixed
+  budget ended with the platform API: the client decides what to run
+  ([decision 0033](decisions/0033-marina-platform-api.md)).
 - Publications survive lost responses and restarts without duplicate messages or
   tasks.
 
@@ -203,18 +205,29 @@ These additions and the corrected strict chat PRD response schema are recorded i
 - **PLAT-06, PLAT-08, PLAT-09 through Marina:** Marina's model calls are
   configured to go through agentgateway, and its chat gateway can offer
   allow-listed MCP tools. Marina records one trace per task with step and model
-  spans. Product checks pass; the installed Marina image predates the MCP and
-  trace code, and no chat turn or task has yet run through the new path
+  spans. Product checks pass. The installed Marina has this code since
+  2026-10-18 and exports traces; MCP tools are not enabled in the local
+  workflow, and no chat turn or task has yet run through the new path
   ([evidence](validation/plat-05-09-2026-10-17.md)).
 
-- **MAR-01 to MAR-09, Marina's platform API:** Marina serves `marina.dev/v1`
+- **MAR-01 to MAR-11, Marina's platform API:** Marina serves `marina.dev/v1`
   over HTTP/JSON and as Kubernetes resources from its own run ledger, with
   Kubernetes identity and RBAC. Deck creates Runs and Turns and mirrors them;
-  `platformctl` and `kubectl` work with the same resources. Product and
-  real-process checks pass against Marina's API sandbox, and kubectl worked
-  against the Kind API server. The installed release still runs the earlier
-  Deck-provider pair until the cutover (MAR-10)
-  ([evidence](validation/mar-01-09-2026-10-18.md)).
+  `platformctl` and `kubectl` work with the same resources
+  ([evidence](validation/mar-01-09-2026-10-18.md)). On 2026-10-18 the local
+  installation switched to it, and Marina now runs from its Helm chart. Old
+  history stays readable, and Runs created by Deck and by kubectl were accepted
+  and cancelled ([evidence](validation/mar-10-11-2026-10-18.md)).
+- **Marina alone on a fresh local cluster:** `scripts/marina-local.py` installs
+  Marina, kagent with gVisor sandboxes, agentgateway, a fake model, Kyverno,
+  the collector and Jaeger, and kgateway on a new Kind cluster without Deck
+  ([guide](../deploy/kubernetes/marina-local/README.md)). On 2026-10-20 a
+  kubectl Turn succeeded through the new API (fake model, and once with a real
+  model through agentgateway), the example agent ran in a sandbox, and a
+  kubectl Run bound to GitHub reached plan approval and was cancelled. Fixing
+  the Turn gateway was needed: before, every platform-API Turn failed at its
+  first model call. Tested with Podman only; a Run landing on main is still open
+  ([evidence](validation/marina-local-2026-10-20.md)).
 
 ## Not supported
 

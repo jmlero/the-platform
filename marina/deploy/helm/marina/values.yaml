@@ -1,0 +1,87 @@
+# Marina's Helm chart (MAR-11). Clients such as Deck, platformctl or kubectl use
+# the marina.dev/v1 API with their own Kubernetes identities; none is installed
+# here. Secrets and the workflow configuration are referenced, never created.
+
+image:
+  repository: ghcr.io/jmlero/the-platform-marina
+  # Prefer an immutable digest (sha256:...). The tag is used only without one.
+  digest: ""
+  tag: ""
+
+# New work stays waiting until an operator enables intake. runID admits one
+# work item only (the --intake-task-id flag).
+intake:
+  enabled: false
+  runID: ""
+
+# Installed execution profiles: a ConfigMap with key workflow.json. Each
+# profile's project_id is <namespace>.<project> of a marina.dev Project.
+workflow:
+  configMap: marina-workflow
+
+# Existing Secrets. credentials holds the files workflow.json names under
+# /run/marina-secrets; artifactAuth holds `token`; tls is a kubernetes.io/tls
+# Secret for Marina's service name.
+secrets:
+  credentials: marina-credentials
+  artifactAuth: marina-artifact-auth
+  tls: marina-worker-tls
+
+# ConfigMap with ca.crt: the installation CA, trusted for outbound TLS
+# (SSL_CERT_FILE). It must also contain any other roots Marina needs.
+trust:
+  caConfigMap: marina-worker-ca
+
+persistence:
+  # Reuse an existing claim, for example when moving an installation to this chart.
+  existingClaim: ""
+  size: 1Gi
+  storageClass: ""
+
+reconcile:
+  interval: 3s
+  runLease: 120s
+  renewBefore: 60s
+
+resources:
+  requests: {cpu: 100m, memory: 128Mi}
+  limits: {cpu: "2", memory: 1Gi}
+
+hostAliases: []
+
+# Client roles marina-viewer, marina-factory and marina-admin. Bind them per
+# project namespace with a RoleBinding.
+clientRoles: true
+
+networkPolicy:
+  enabled: true
+  # Pods allowed to call Marina's API, besides workers, as NetworkPolicy peers.
+  clients: []
+  # Site-specific destinations: the Kubernetes API server, Git and model hosts.
+  egress: []
+
+# Workers run independent verification Jobs in their own namespace.
+workers:
+  namespace: marina-workers
+  createNamespace: true
+  quota:
+    count/jobs.batch: "8"
+    count/secrets: "12"
+    limits.cpu: "8"
+    limits.memory: 16Gi
+    pods: "4"
+    requests.cpu: "8"
+    requests.memory: 16Gi
+
+# Optional platform components. Each one also owns its own side of the network
+# policy (see deploy/kubernetes/platform).
+platform:
+  # kagent engine for repository and conversation work.
+  engine:
+    enabled: false
+    namespace: kint-engine
+    # Namespace and labels of the engine's egress proxy that calls Marina's gateway.
+    egress: {namespace: ate-system, podLabels: {app: atenet-egress}}
+  # OpenTelemetry traces (PLAT-09), for example http://otel-collector.platform-observability.svc:4318
+  telemetry:
+    otlpEndpoint: ""

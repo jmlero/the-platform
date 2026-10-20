@@ -11,10 +11,6 @@ spec:
   policyTypes: [Egress]
   egress:
     - to:
-        - podSelector:
-            matchLabels: {app.kubernetes.io/name: deck}
-      ports: [{protocol: TCP, port: 8080}]
-    - to:
         - namespaceSelector:
             matchLabels: {kubernetes.io/metadata.name: kube-system}
       ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]

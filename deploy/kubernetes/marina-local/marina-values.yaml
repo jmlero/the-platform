@@ -1,0 +1,30 @@
+# Marina chart values for the local platform (see README.md). The install
+# script adds the image digest and the Kubernetes API server address.
+image:
+  repository: localhost:5000/the-platform/marina
+networkPolicy:
+  clients:
+    # The local ingress Gateway serves Marina's API at https://marina.localhost:9443.
+    - namespaceSelector:
+        matchLabels: {kubernetes.io/metadata.name: platform-ingress}
+      podSelector:
+        matchLabels: {gateway.networking.k8s.io/gateway-name: platform}
+  egress:
+    # The fake model, when selected instead of agentgateway.
+    - to:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: platform-gateway}
+          podSelector:
+            matchLabels: {app.kubernetes.io/name: fake-model}
+      ports: [{protocol: TCP, port: 8443}]
+    # Git over HTTPS (GitHub). Public addresses only; pin them for a tighter setup.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 100.64.0.0/10]
+      ports: [{protocol: TCP, port: 443}]
+platform:
+  engine:
+    enabled: true
+  telemetry:
+    otlpEndpoint: http://otel-collector.platform-observability.svc:4318

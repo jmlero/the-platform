@@ -868,6 +868,11 @@ func (p *Platform) RequestCancel(ctx context.Context, workID, requestedBy, reaso
 	if err := p.appendEvent(ctx, tx, workID, "run.cancel_requested", "Cancellation requested", map[string]any{"by": requestedBy}, ""); err != nil {
 		return err
 	}
+	if w.Status == workReady {
+		if err := p.appendEvent(ctx, tx, workID, "run.cancelled", "Run cancelled", nil, ""); err != nil {
+			return err
+		}
+	}
 	return tx.Commit()
 }
 

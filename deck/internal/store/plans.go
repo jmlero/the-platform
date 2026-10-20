@@ -244,25 +244,6 @@ const planRevisionColumns = `
 	expected_side_effects_json, rollback_approach, source_revision, policy_version, created_at
 `
 
-func (s *Store) ListPlanRevisions(ctx context.Context, runID string) ([]domain.PlanRevision, error) {
-	rows, err := s.db.QueryContext(ctx,
-		"SELECT "+planRevisionColumns+" FROM plan_revisions WHERE run_id = ? ORDER BY revision", runID,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("list plan revisions: %w", err)
-	}
-	defer rows.Close()
-	revisions := make([]domain.PlanRevision, 0)
-	for rows.Next() {
-		revision, scanErr := scanPlanRevision(rows)
-		if scanErr != nil {
-			return nil, fmt.Errorf("scan plan revision: %w", scanErr)
-		}
-		revisions = append(revisions, revision)
-	}
-	return revisions, rows.Err()
-}
-
 func (s *Store) listPlanRevisionsForTask(ctx context.Context, taskID string) ([]domain.PlanRevision, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT p.id, p.run_id, p.revision, p.plan, p.context_digest, p.risk_class,

@@ -10,11 +10,13 @@ spec:
           env:
             - {name: DECK_TLS_CERT_FILE, value: /run/deck-tls/tls.crt}
             - {name: DECK_TLS_KEY_FILE, value: /run/deck-tls/tls.key}
-            - {name: DECK_SERVICE_AUTH_FILE, value: /run/deck/service-auth.json}
             - {name: DECK_OPERATOR_AUTH_FILE, value: /run/deck/operator-auth.json}
-            - {name: DECK_ARTIFACT_URL, value: "https://marina.marina-system.svc:8090"}
-            - {name: DECK_ARTIFACT_TOKEN_FILE, value: /run/artifacts/token}
-            - {name: DECK_ARTIFACT_CA_FILE, value: /run/worker-ca/ca.crt}
+            # Deck is a client of Marina's platform API (decision 0033). It
+            # presents its own Kubernetes service account token.
+            - {name: DECK_MARINA_URL, value: "https://marina.marina-system.svc:8090"}
+            - {name: DECK_MARINA_TOKEN_FILE, value: /run/marina-token/token}
+            - {name: DECK_MARINA_CA_FILE, value: /run/worker-ca/ca.crt}
+            - {name: DECK_MARINA_PROJECTS_FILE, value: /run/deck-marina/projects.json}
           startupProbe:
             httpGet: {scheme: HTTPS}
           readinessProbe:
@@ -23,14 +25,19 @@ spec:
             httpGet: {scheme: HTTPS}
           volumeMounts:
             - {name: auth, mountPath: /run/deck, readOnly: true}
-            - {name: artifacts, mountPath: /run/artifacts, readOnly: true}
+            - {name: marina-token, mountPath: /run/marina-token, readOnly: true}
+            - {name: marina-projects, mountPath: /run/deck-marina, readOnly: true}
             - {name: worker-ca, mountPath: /run/worker-ca, readOnly: true}
             - {name: tls, mountPath: /run/deck-tls, readOnly: true}
       volumes:
         - name: auth
           secret: {secretName: deck-auth, defaultMode: 288}
-        - name: artifacts
-          secret: {secretName: marina-artifact-auth, defaultMode: 288}
+        - name: marina-token
+          projected:
+            sources:
+              - serviceAccountToken: {path: token, expirationSeconds: 3600}
+        - name: marina-projects
+          configMap: {name: deck-marina-projects}
         - name: worker-ca
           configMap: {name: marina-worker-ca}
         - name: tls

@@ -22,6 +22,42 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
+// Platform API Turns are identified as <namespace>.<name>, not by a Deck message ID.
+func TestGatewayAdmitsPlatformTurnIdentity(t *testing.T) {
+	ctx := context.Background()
+	journal, err := sqlite.Open(ctx, t.TempDir()+"/journal.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer journal.Close()
+	deadline := time.Now().Add(time.Minute).UTC().Truncate(time.Millisecond)
+	message := workcontrol.ConversationMessage{ID: "demo.hello-1", ProjectID: "demo.hello", ChannelID: "turn:demo.hello-1", ThreadID: "thr_1", AuthorType: "human", Body: "Say hello", InvokedAgentID: "agt_1", InvocationRequestID: "req_1"}
+	if _, err := journal.EnsureConversationTurn(ctx, message, deadline, 5000); err != nil {
+		t.Fatal(err)
+	}
+	spec := rt.Specification{Workload: "conversation/v1", ExecutionID: message.ID, AttemptID: message.ID, IdempotencyKey: "conversation-" + message.ID,
+		InputDigest: strings.Repeat("a", 64), ProfileDigest: strings.Repeat("b", 64), ContextURI: "artifact://sha256:" + strings.Repeat("c", 64), ContextDigest: "sha256:" + strings.Repeat("c", 64),
+		HarnessVersion: "conversation-byo/v1", NetworkPolicy: "gateway-only", FilesystemPolicy: "ephemeral", Limits: rt.Limits{CPUMillis: 100, MemoryBytes: 1, EphemeralStorageBytes: 1, WallTimeSeconds: 60, MaxProcesses: 1},
+		AuthorityFence: 1, DeadlineAt: deadline, PolicyVersion: "test", Engine: &rt.EngineSelection{Backend: "kagent", Version: "v", Endpoint: "engine", Namespace: "test", Harness: "conversation", Template: "turn-1", Revision: strings.Repeat("d", 64)},
+		CredentialReferences: []rt.CredentialReference{{Kind: "engine-gateway", Reference: "secret://test/turn-1/gateway", ExpiresAt: deadline}}}
+	if err := journal.SaveConversationSpecification(ctx, message.ID, spec); err != nil {
+		t.Fatal(err)
+	}
+	client := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"output":[{"type":"message","content":[{"type":"output_text","text":"Hello"}]}],"usage":{"input_tokens":10,"output_tokens":5}}`))}, nil
+	})}
+	key := []byte(strings.Repeat("k", 32))
+	gateway := NewGateway(journal, key, workerapi.Model{Endpoint: "https://model.example/v1", Name: "fixture", MaxOutputTokens: 100, Currency: "USD"}, spec.ProfileDigest, spec.PolicyVersion, client)
+	r := httptest.NewRequest(http.MethodPost, "https://marina.example/conversation/model/v1/responses", bytes.NewBufferString(`{"input":"hello"}`))
+	r.TLS = &tls.ConnectionState{}
+	r.Header.Set("Authorization", "Bearer "+message.ID+"."+rt.CredentialToken(key, spec))
+	w := httptest.NewRecorder()
+	gateway.ServeHTTP(w, r)
+	if w.Code != 200 {
+		t.Fatalf("platform turn call: status=%d body=%s", w.Code, w.Body)
+	}
+}
+
 func TestGatewayDeniesToolsAndSecondModelCall(t *testing.T) {
 	ctx := context.Background()
 	journal, err := sqlite.Open(ctx, t.TempDir()+"/journal.db")

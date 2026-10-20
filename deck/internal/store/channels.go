@@ -197,14 +197,6 @@ func scanChannelMessage(scanner interface{ Scan(...any) error }) (domain.Channel
 	return message, nil
 }
 
-func (s *Store) GetChannelMessage(ctx context.Context, id string) (domain.ChannelMessage, error) {
-	message, err := scanChannelMessage(s.db.QueryRowContext(ctx, "SELECT "+channelMessageColumns+" FROM channel_messages WHERE id=?", id))
-	if err != nil {
-		return domain.ChannelMessage{}, normalizeStoreError(err)
-	}
-	return message, nil
-}
-
 // Channel cursors name a persisted message, never a transient row offset.
 // SQLite insertion order keeps concurrent appends and equal timestamps stable.
 type ChannelMessagePage struct {

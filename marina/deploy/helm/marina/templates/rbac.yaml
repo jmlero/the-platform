@@ -1,0 +1,86 @@
+# Marina reconciles every marina.dev resource and reviews callers' tokens and
+# access for the HTTP API (decision 0033). Rules match
+# deploy/kubernetes/platform/marina-api/rbac.yaml.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: marina-platform-controller
+  labels: {{- include "marina.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [marina.dev]
+    resources: [projects, workloads, runs, turns, decisions]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [marina.dev]
+    resources: [projects/status, workloads/status, runs/status, turns/status, decisions/status]
+    verbs: [get, update, patch]
+  - apiGroups: [authentication.k8s.io]
+    resources: [tokenreviews]
+    verbs: [create]
+  - apiGroups: [authorization.k8s.io]
+    resources: [subjectaccessreviews]
+    verbs: [create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: marina-platform-controller
+  labels: {{- include "marina.labels" . | nindent 4 }}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: marina-platform-controller}
+subjects:
+  - {kind: ServiceAccount, name: marina, namespace: {{ .Release.Namespace }}}
+{{- if .Values.clientRoles }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: marina-viewer
+  labels: {{- include "marina.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [marina.dev]
+    resources: [projects, workloads, runs, turns, decisions, runs/events, runs/artifacts, turns/events]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: marina-factory
+  labels: {{- include "marina.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [marina.dev]
+    resources: [projects, workloads, runs, turns, decisions, runs/events, runs/artifacts, turns/events]
+    verbs: [get, list, watch]
+  - apiGroups: [marina.dev]
+    resources: [runs, turns]
+    verbs: [create, delete, patch]
+  - apiGroups: [marina.dev]
+    resources: [runs/cancel, turns/cancel, decisions/answer, decisions]
+    verbs: [update, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: marina-admin
+  labels: {{- include "marina.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [marina.dev]
+    resources: [projects, workloads, runs, turns, decisions, runs/events, runs/artifacts, turns/events]
+    verbs: [get, list, watch]
+  - apiGroups: [marina.dev]
+    resources: [projects, workloads, runs, turns]
+    verbs: [create, update, patch, delete]
+  - apiGroups: [marina.dev]
+    resources: [runs/cancel, turns/cancel, decisions/answer, decisions]
+    verbs: [update, patch]
+---
+# Capabilities are cluster-scoped: bind this with a ClusterRoleBinding to each
+# client that reads them.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: marina-capabilities
+  labels: {{- include "marina.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [marina.dev]
+    resources: [capabilities]
+    verbs: [get]
+{{- end }}

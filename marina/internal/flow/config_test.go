@@ -48,12 +48,13 @@ func TestRepositoryEngineAcceptsOnlyPinnedLocalNativeProfile(t *testing.T) {
 	}
 	c.Conversation = &conversation.Profile{Engine: runtimeapi.EngineSelection{Backend: "kagent", Version: kagent.Version, Endpoint: "kint-engine-controller.kint-engine.svc:8083", Namespace: "kint-engine", Harness: "kint-conversation-byo"}, MaxTokens: 10000, BudgetMinutes: 5,
 		Delegation: &workcontrol.ConversationBudget{TimeMinutes: 5, MaxAttempts: 3, MaxTokens: 20000, MaxConcurrency: 1, Authority: legacy.Authority}}
-	if err := c.Validate(); err != nil {
-		t.Fatalf("explicit review delegation: %v", err)
+	// A Turn proposes tasks and its client decides what to run (decision 0033).
+	if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "conversation.delegation is retired") {
+		t.Fatalf("retired chat delegation accepted: %v", err)
 	}
-	c.Conversation.Delegation.MaxAttempts = 2
-	if err := c.Validate(); err == nil || c.Conversation.Delegation.MaxAttempts != 2 {
-		t.Fatal("undersized delegation accepted or silently expanded")
+	c.Conversation.Delegation = nil
+	if err := c.Validate(); err != nil {
+		t.Fatalf("conversation without delegation: %v", err)
 	}
 	c.Conversation = nil
 	c.RequiredCI = []string{"ci"}

@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -62,7 +63,11 @@ func TestReadinessReportsStoreHealthAndWhetherMarinaIsConfigured(t *testing.T) {
 		return response.Code, payload.Readiness
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	client, err := marina.New(marina.Config{URL: "http://127.0.0.1:1", TokenFile: "/dev/null"})
+	token := filepath.Join(t.TempDir(), "token")
+	if err := os.WriteFile(token, []byte("deck-token"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	client, err := marina.New(marina.Config{URL: "http://127.0.0.1:1", TokenFile: token})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,8 +75,15 @@ func TestReadinessReportsStoreHealthAndWhetherMarinaIsConfigured(t *testing.T) {
 		t.Fatalf("without Marina = %d %#v", status, checks)
 	}
 	configured := New(appStore, logger, WithMarina(client)).Handler()
-	if status, checks := readiness(configured); status != http.StatusOK || checks["marina"] != "configured" {
+	if status, checks := readiness(configured); status != http.StatusOK || checks["marina"] != "configured" || checks["marina_token"] != "available" {
 		t.Fatalf("with Marina = %d %#v", status, checks)
+	}
+	// A configured Marina without a readable token cannot work: Deck is not ready.
+	if err := os.Remove(token); err != nil {
+		t.Fatal(err)
+	}
+	if status, checks := readiness(configured); status != http.StatusServiceUnavailable || checks["marina_token"] != "unavailable" {
+		t.Fatalf("without a token = %d %#v", status, checks)
 	}
 	if err := appStore.Close(); err != nil {
 		t.Fatal(err)

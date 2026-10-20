@@ -95,13 +95,11 @@ func (s *Store) GetProviderStatus(ctx context.Context, projectID string) (domain
 		ProjectID: projectID, Connectivity: "unknown", SyncState: "unknown",
 		LeaseState: "none", DegradedDependencies: []string{},
 	}
+	// Marina's last successful contact for this project, whether or not any of
+	// the project's runs are its own yet.
 	var lastSeen sql.NullInt64
 	if err := s.db.QueryRowContext(ctx, `
-		SELECT MAX(a.last_seen_at)
-		FROM agents a
-		JOIN runs r ON r.agent_id = a.id
-		JOIN tasks t ON t.id = r.task_id
-		WHERE t.project_id = ?
+		SELECT MAX(last_success_at) FROM projection_health WHERE project_id = ?
 	`, projectID).Scan(&lastSeen); err != nil {
 		return domain.ProviderStatus{}, fmt.Errorf("load provider connectivity: %w", err)
 	}

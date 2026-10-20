@@ -2,7 +2,9 @@ package marina
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/url"
 	"slices"
@@ -32,11 +34,20 @@ type Engine struct {
 	Tick         time.Duration
 
 	agentProjects string
+	mappings      []ProjectMapping
 	synced        map[string]time.Time
 	turnBudgets   map[string]TurnBudget
 	profiles      map[string]map[string]bool
 	problems      map[string]string
+	// reachable records, per cycle, whether a Marina Project answered.
+	reachable map[string]error
+	// logged and logging hold the problems logged in the last and the current
+	// cycle, so a lasting problem is logged once instead of every tick.
+	logged, logging map[string]string
 }
+
+// errProjectsFile marks a projects file that cannot be used.
+var errProjectsFile = errors.New("Deck's Marina projects file is invalid")
 
 // Run cycles until ctx ends.
 func (e *Engine) Run(ctx context.Context) {
@@ -61,14 +72,24 @@ func (e *Engine) Run(ctx context.Context) {
 // Cycle runs one pass: project sync, dispatch, and mirroring of Runs and Turns.
 // Every step is replay-safe, so a crash at any point is repaired by the next.
 func (e *Engine) Cycle(ctx context.Context) error {
-	mappings, err := LoadProjects(e.ProjectsFile)
-	if err != nil {
-		return err
-	}
 	if e.synced == nil {
 		e.synced, e.turnBudgets, e.profiles = map[string]time.Time{}, map[string]TurnBudget{}, map[string]map[string]bool{}
 	}
-	e.problems = map[string]string{}
+	e.problems, e.reachable, e.logged, e.logging = map[string]string{}, map[string]error{}, e.logging, map[string]string{}
+	// An invalid file keeps the last valid mapping, so active work is still
+	// mirrored while the problem shows in the provider status.
+	mappings, fileErr := LoadProjects(e.ProjectsFile)
+	if fileErr != nil {
+		if e.mappings == nil {
+			return fileErr
+		}
+		mappings = e.mappings
+		for _, m := range mappings {
+			e.problem(m.DeckProject, "read its projects file", fmt.Errorf("%w: %v", errProjectsFile, fileErr))
+		}
+	} else {
+		e.mappings = mappings
+	}
 	ids := make([]string, 0, len(mappings))
 	for _, m := range mappings {
 		ids = append(ids, m.DeckProject)
@@ -106,12 +127,16 @@ func (e *Engine) problem(project, action string, err error) {
 	if err == nil || errors.Is(err, context.Canceled) {
 		return
 	}
-	e.Log.Warn("Marina "+action, "project", project, "error", err)
+	e.warn(project+" "+action, "Marina "+action, err, "project", project)
 	if _, seen := e.problems[project]; seen {
 		return
 	}
 	var status *APIError
 	switch {
+	case errors.Is(err, errProjectsFile):
+		e.problems[project] = errProjectsFile.Error() + "; the last valid mapping stays in use"
+	case errors.Is(err, ErrTokenUnavailable):
+		e.problems[project] = "Deck cannot read its Marina token"
 	case errors.As(err, &status):
 		reason := status.Reason
 		if reason == "" {
@@ -123,6 +148,40 @@ func (e *Engine) problem(project, action string, err error) {
 	default:
 		e.problems[project] = "Deck could not " + action
 	}
+}
+
+// warn logs a problem when it appears or changes, not again while it lasts.
+func (e *Engine) warn(key, message string, err error, args ...any) {
+	detail := err.Error()
+	if e.logged[key] != detail && e.logging[key] != detail {
+		e.Log.Warn(message, append(args, "error", err)...)
+	}
+	e.logging[key] = detail
+}
+
+// gone reports whether a lookup error proves a Marina object no longer
+// exists: Marina named it NotFound and the Project it belongs to answered in
+// this cycle. A wrong URL or a Marina without this API never ends work.
+func (e *Engine) gone(ctx context.Context, err error, namespace string, spec json.RawMessage) (bool, error) {
+	if !IsNotFound(err) {
+		return false, err
+	}
+	var owner struct {
+		Project string `json:"project"`
+	}
+	if json.Unmarshal(spec, &owner) != nil || owner.Project == "" {
+		return false, err
+	}
+	key := namespace + "/" + owner.Project
+	projectErr, checked := e.reachable[key]
+	if !checked {
+		_, projectErr = e.Client.Project(ctx, namespace, owner.Project)
+		e.reachable[key] = projectErr
+	}
+	if projectErr != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // syncProject copies what the UI needs from Marina: the bound repository and

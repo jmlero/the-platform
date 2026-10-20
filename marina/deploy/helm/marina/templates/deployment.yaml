@@ -1,0 +1,143 @@
+{{- if not .Values.workflow.configMap }}{{ fail "workflow.configMap is required" }}{{ end }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: marina
+  labels: {{- include "marina.labels" . | nindent 4 }}
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: marina
+  labels: {{- include "marina.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector: {{- include "marina.labels" . | nindent 4 }}
+  ports:
+    - {name: http, port: 8090, targetPort: http, protocol: TCP}
+    # The engine gateway calls Marina on the default HTTPS port.
+    - {name: https, port: 443, targetPort: http, protocol: TCP}
+{{- if not .Values.persistence.existingClaim }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: marina-data
+  labels: {{- include "marina.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: [ReadWriteOnce]
+  {{- with .Values.persistence.storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+  resources:
+    requests: {storage: {{ .Values.persistence.size }}}
+{{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: marina
+  labels: {{- include "marina.labels" . | nindent 4 }}
+spec:
+  # One writer for the SQLite journal: never scale, never overlap.
+  replicas: 1
+  revisionHistoryLimit: 2
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {{- include "marina.labels" . | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "marina.labels" . | nindent 8 }}
+      annotations:
+        marina.dev/workflow-configmap: {{ .Values.workflow.configMap }}
+    spec:
+      serviceAccountName: marina
+      # Marina needs its token for the marina.dev resources, TokenReview,
+      # SubjectAccessReview and worker Jobs.
+      automountServiceAccountToken: true
+      enableServiceLinks: false
+      # The gateway drains the current conversation cycle before exiting.
+      terminationGracePeriodSeconds: 330
+      {{- with .Values.hostAliases }}
+      hostAliases: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: marina
+          image: {{ include "marina.image" . }}
+          imagePullPolicy: IfNotPresent
+          args:
+            - serve
+            {{- if not .Values.intake.enabled }}
+            - --intake-enabled=false
+            {{- else if .Values.intake.runID }}
+            - --intake-task-id={{ .Values.intake.runID }}
+            {{- end }}
+          env:
+            - {name: MARINA_ADDR, value: ":8090"}
+            - {name: MARINA_JOURNAL_PATH, value: /data/marina.db}
+            - {name: MARINA_CONFIG_FILE, value: /etc/marina/workflow.json}
+            - {name: MARINA_TLS_CERT_FILE, value: /run/marina-tls/tls.crt}
+            - {name: MARINA_TLS_KEY_FILE, value: /run/marina-tls/tls.key}
+            - {name: SSL_CERT_FILE, value: /run/service-ca/ca.crt}
+            - {name: MARINA_RECONCILE_INTERVAL, value: {{ .Values.reconcile.interval | quote }}}
+            - {name: MARINA_RUN_LEASE, value: {{ .Values.reconcile.runLease | quote }}}
+            - {name: MARINA_LEASE_RENEW_BEFORE, value: {{ .Values.reconcile.renewBefore | quote }}}
+            {{- with .Values.platform.telemetry.otlpEndpoint }}
+            - {name: OTEL_EXPORTER_OTLP_ENDPOINT, value: {{ . | quote }}}
+            - {name: OTEL_SERVICE_NAME, value: marina}
+            {{- end }}
+          ports:
+            - {name: http, containerPort: 8090, protocol: TCP}
+          startupProbe:
+            httpGet: {path: /healthz, port: http, scheme: HTTPS}
+            failureThreshold: 12
+            periodSeconds: 5
+            timeoutSeconds: 2
+          livenessProbe:
+            httpGet: {path: /healthz, port: http, scheme: HTTPS}
+            failureThreshold: 3
+            periodSeconds: 10
+            timeoutSeconds: 2
+          readinessProbe:
+            httpGet: {path: /readyz, port: http, scheme: HTTPS}
+            failureThreshold: 3
+            periodSeconds: 5
+            timeoutSeconds: 2
+          resources: {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - {name: workflow, mountPath: /etc/marina, readOnly: true}
+            - {name: credentials, mountPath: /run/marina-secrets, readOnly: true}
+            - {name: tls, mountPath: /run/marina-tls, readOnly: true}
+            - {name: artifacts, mountPath: /run/artifacts, readOnly: true}
+            - {name: service-ca, mountPath: /run/service-ca, readOnly: true}
+            - {name: data, mountPath: /data}
+            - {name: temporary, mountPath: /tmp}
+      volumes:
+        - name: workflow
+          configMap: {name: {{ .Values.workflow.configMap }}}
+        - name: credentials
+          secret: {secretName: {{ .Values.secrets.credentials }}, defaultMode: 288}
+        - name: tls
+          secret: {secretName: {{ .Values.secrets.tls }}, defaultMode: 288}
+        - name: artifacts
+          secret: {secretName: {{ .Values.secrets.artifactAuth }}, defaultMode: 288}
+        - name: service-ca
+          configMap: {name: {{ .Values.trust.caConfigMap }}}
+        - name: data
+          persistentVolumeClaim: {claimName: {{ .Values.persistence.existingClaim | default "marina-data" }}}
+        - name: temporary
+          emptyDir: {sizeLimit: 64Mi}

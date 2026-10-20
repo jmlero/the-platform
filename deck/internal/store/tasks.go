@@ -726,11 +726,3 @@ func (s *Store) listEventsForTask(ctx context.Context, taskID string) ([]domain.
 	}
 	return events, rows.Err()
 }
-
-func (s *Store) TaskCount(ctx context.Context) (int, error) {
-	var count int
-	if err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM tasks").Scan(&count); err != nil {
-		return 0, fmt.Errorf("count tasks: %w", err)
-	}
-	return count, nil
-}

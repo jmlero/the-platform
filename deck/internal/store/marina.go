@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -326,6 +327,37 @@ func (s *Store) MarkMarinaTurnCreated(ctx context.Context, name string) error {
 func (s *Store) FinishMarinaTurn(ctx context.Context, name string) error {
 	_, err := s.db.ExecContext(ctx, "UPDATE marina_turns SET finished = 1 WHERE name = ?", name)
 	return err
+}
+
+// RecordMarinaUsage records Marina's usage report for a run as a model.usage
+// event when it differs from the last one, so a replayed cycle adds nothing.
+func (s *Store) RecordMarinaUsage(ctx context.Context, runID string, usage map[string]any) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	run, err := getRunTx(ctx, tx, runID)
+	if err != nil {
+		return err
+	}
+	var last string
+	err = tx.QueryRowContext(ctx, "SELECT payload_json FROM events WHERE run_id = ? AND type = 'model.usage' ORDER BY id DESC LIMIT 1", runID).Scan(&last)
+	if err == nil && last == marshalJSON(usage) {
+		return nil
+	}
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	event, err := insertEventTx(ctx, tx, &run.TaskID, &run.ID, &run.AgentID, "model.usage", "Marina reported model usage", usage)
+	if err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	s.publish(event)
+	return nil
 }
 
 // FindEngineQuestion returns the run's decision for one Marina question.

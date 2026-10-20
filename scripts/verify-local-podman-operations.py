@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Rehearse renewed TLS and operator/service credential rotation locally.
+"""Rehearse renewed TLS and operator credential rotation locally.
 
 Requires disabled intake and no active work. Only the dedicated local context is
 used. Temporary credentials stay in memory and are revoked/restored in finally.
@@ -82,13 +82,6 @@ class Client:
         except urllib.error.HTTPError as error:
             return error.code
 
-    def service_status(self, token):
-        try:
-            self.request("/api/v1/provider", token=token)
-            return 200
-        except urllib.error.HTTPError as error:
-            return error.code
-
 
 def identities(bootstrap):
     return ({task["id"]: task["status"] for task in bootstrap["tasks"]},
@@ -107,8 +100,7 @@ def main():
         raise RuntimeError("disable intake before this idle-installation rehearsal")
     client = Client(installation)
     operator = (installation / "operator-token").read_text().strip()
-    service = (installation / "deck-token").read_text().strip()
-    if client.login_status(operator) != 200 or client.service_status(service) != 200:
+    if client.login_status(operator) != 200:
         raise RuntimeError("private installation credentials do not match running installation")
     before = client.request("/api/v1/bootstrap")
     if any(task["status"] in {"planning", "waiting_decision", "running", "verifying"} for task in before["tasks"]):
@@ -141,20 +133,17 @@ def main():
                 kube("rollout", "restart", "deployment/" + name)
             raise
 
+    # Deck reaches Marina with its projected Kubernetes token, which the
+    # kubelet rotates; only the operator credential is rotated here.
     original_auth = get("secret", "deck-auth")["data"]
-    original_credentials = get("secret", "marina-credentials")["data"]
     original_pods = {p["metadata"]["uid"] for p in json.loads(kube("get", "pods", "-o", "json"))["items"]}
-    temporary_operator, temporary_service = secrets.token_hex(32), secrets.token_hex(32)
+    temporary_operator = secrets.token_hex(32)
     auth = copy.deepcopy(original_auth)
-    policies = {}
-    for file, collection, old, new in (("operator-auth.json", "operators", operator, temporary_operator),
-                                       ("service-auth.json", "identities", service, temporary_service)):
-        policy = json.loads(base64.b64decode(auth[file]))
-        old_hash = hashlib.sha256(old.encode()).hexdigest()
-        identity = next(i for i in policy[collection] if old_hash in i["token_sha256"])
-        identity["token_sha256"].append(hashlib.sha256(new.encode()).hexdigest())
-        policies[file] = (policy, identity, old_hash)
-        auth[file] = encoded(json.dumps(policy))
+    policy = json.loads(base64.b64decode(auth["operator-auth.json"]))
+    old_hash = hashlib.sha256(operator.encode()).hexdigest()
+    identity = next(i for i in policy["operators"] if old_hash in i["token_sha256"])
+    identity["token_sha256"].append(hashlib.sha256(temporary_operator.encode()).hexdigest())
+    auth["operator-auth.json"] = encoded(json.dumps(policy))
     temporary_client = Client(installation)
 
     def probe_login(token):
@@ -166,48 +155,26 @@ def main():
 
     try:
         replace_data("deck-auth", auth)
-        wait_for(lambda: probe_login(temporary_operator) == 200
-                 and client.service_status(temporary_service) == 200, "overlapping credentials did not load")
+        wait_for(lambda: probe_login(temporary_operator) == 200, "overlapping credentials did not load")
         assert temporary_client.login_status(temporary_operator) == 200
-        assert client.service_status(service) == 200
         assert probe_login(operator) == 200
-        print("PASS overlapping operator/service fingerprints reload without restart", flush=True)
-        credentials = copy.deepcopy(original_credentials)
-        credentials["deck-token"] = encoded(temporary_service + "\n")
-        replace_data("marina-credentials", credentials)
-        for file, (policy, identity, old_hash) in policies.items():
-            identity["token_sha256"].remove(old_hash)
-            auth[file] = encoded(json.dumps(policy))
+        print("PASS overlapping operator fingerprints reload without restart", flush=True)
+        identity["token_sha256"].remove(old_hash)
+        auth["operator-auth.json"] = encoded(json.dumps(policy))
         replace_data("deck-auth", auth)
-        wait_for(lambda: client.service_status(service) == 401 and probe_login(operator) == 401,
-                 "retired credentials still accepted")
-        wait_for(lambda: "available" in kube("exec", "deployment/marina", "--", "/marina", "doctor"),
-                 "Marina did not load replacement service credential")
+        wait_for(lambda: probe_login(operator) == 401, "retired credential still accepted")
         assert client.request("/api/v1/operator/session")["authenticated"]
         assert temporary_client.request("/api/v1/operator/session")["authenticated"]
         assert identities(client.request("/api/v1/bootstrap")) == identities(before)
         assert {p["metadata"]["uid"] for p in json.loads(kube("get", "pods", "-o", "json"))["items"]} == original_pods
-        print("PASS revoked old tokens, replacement Marina credential, surviving sessions and stable identities", flush=True)
+        print("PASS revoked old token, surviving sessions and stable identities", flush=True)
     finally:
-        # Restore overlapping trust first, then the original client credential,
-        # then revoke the temporary fingerprints. Leave operator files unchanged.
-        overlap = copy.deepcopy(original_auth)
-        for file, (policy, identity, old_hash) in policies.items():
-            if old_hash not in identity["token_sha256"]:
-                identity["token_sha256"].append(old_hash)
-            overlap[file] = encoded(json.dumps(policy))
-        replace_data("deck-auth", overlap)
-        wait_for(lambda: client.service_status(service) == 200, "original service trust restoration")
-        replace_data("marina-credentials", original_credentials)
+        # Restore the original policy, then confirm the temporary token is revoked.
         replace_data("deck-auth", original_auth)
-        wait_for(lambda: client.service_status(temporary_service) == 401
-                 and probe_login(temporary_operator) == 401, "temporary credential revocation")
-        wait_for(lambda: "available" in kube("exec", "deployment/marina", "--", "/marina", "doctor"),
-                 "original Marina credential restoration")
+        wait_for(lambda: probe_login(temporary_operator) == 401, "temporary credential revocation")
         client.request("/api/v1/operator/session", {}, method="DELETE")
         temporary_client.request("/api/v1/operator/session", {}, method="DELETE")
-        print("PASS original credentials restored; temporary tokens and rehearsal sessions revoked", flush=True)
-
+        print("PASS original credential restored; temporary token and rehearsal sessions revoked", flush=True)
 
 if __name__ == "__main__":
     try:

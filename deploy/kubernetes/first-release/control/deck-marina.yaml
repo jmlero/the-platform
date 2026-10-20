@@ -1,0 +1,14 @@
+# Deck reads Marina's cluster-scoped capabilities. Its access to each project
+# is a RoleBinding in that project's namespace (factory.yaml).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: deck-marina-capabilities
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: marina-capabilities
+subjects:
+  - kind: ServiceAccount
+    name: deck
+    namespace: marina-system

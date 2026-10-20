@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "project_id": "prj_default",
+  "project_id": "factory-default.acceptance",
   "public_url": "https://marina.marina-system.svc:8090",
   "tls_cert_file": "/run/marina-tls/tls.crt",
   "tls_key_file": "/run/marina-tls/tls.key",

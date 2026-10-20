@@ -177,9 +177,3 @@ func dependencyReaches(ctx context.Context, tx *sql.Tx, from, to string, seen ma
 	}
 	return false, nil
 }
-
-func (s *Store) TaskDependenciesSatisfied(ctx context.Context, id string) (bool, error) {
-	var eligible bool
-	err := s.db.QueryRowContext(ctx, "SELECT "+dependenciesEligibleSQL+" FROM tasks WHERE id = ?", id).Scan(&eligible)
-	return eligible, err
-}

@@ -253,9 +253,6 @@ func runServe(arguments []string, stderr io.Writer) int {
 			}
 			if configured.Conversation != nil {
 				requiredCapabilities = append(requiredCapabilities, workcontrol.CapabilityConversationList, workcontrol.CapabilityConversationContext, workcontrol.CapabilityChannelRead, workcontrol.CapabilityConversationQuestion, workcontrol.CapabilityConversationOutcome, workcontrol.CapabilityConversationPRD, workcontrol.CapabilityConversationPRDTasks)
-				if configured.Conversation.Delegation != nil {
-					requiredCapabilities = append(requiredCapabilities, workcontrol.CapabilityConversationDelegate)
-				}
 			}
 		}
 	}

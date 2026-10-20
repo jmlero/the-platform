@@ -1,0 +1,29 @@
+# agentgateway for the local platform: the shared setup plus a second client
+# key, `agents`, for your own kagent agents. Secret agentgateway-clients holds
+# both keys (marina, agents).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../platform/gateway
+configMapGenerator:
+  - name: agentgateway
+    namespace: platform-gateway
+    behavior: replace
+    files: [config.yaml]
+patches:
+  - target: {kind: Deployment, name: agentgateway}
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: AGENTS_CLIENT_KEY
+          valueFrom: {secretKeyRef: {name: agentgateway-clients, key: agents}}
+  - target: {kind: NetworkPolicy, name: agentgateway}
+    patch: |-
+      - op: add
+        path: /spec/ingress/0/from/-
+        value:
+          namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: ate-system}
+          podSelector:
+            matchLabels: {app: atenet-egress}

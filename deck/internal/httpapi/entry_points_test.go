@@ -74,9 +74,9 @@ func TestRepositoryPromotionExplainsReadinessWithoutCreatingWork(t *testing.T) {
 	if response.Code != http.StatusUnprocessableEntity || !strings.Contains(response.Body.String(), "two attempts") || !strings.Contains(response.Body.String(), "pull_request.create") {
 		t.Fatalf("missing readiness explanation: %d %s", response.Code, response.Body.String())
 	}
-	count, err := s.TaskCount(ctx)
-	if err != nil || count != 0 {
-		t.Fatalf("dispatched invalid work: %d %v", count, err)
+	tasks, err := s.ListTasks(ctx)
+	if err != nil || len(tasks) != 0 {
+		t.Fatalf("dispatched invalid work: %d %v", len(tasks), err)
 	}
 	input["status"] = "backlog"
 	response = requestJSON(t, handler, http.MethodPost, "/api/v1/operator/messages/"+message.ID+"/promote", "", input)

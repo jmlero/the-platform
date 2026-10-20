@@ -12,6 +12,8 @@ It is single-operator first. Marina owns its platform API, `marina.dev/v1`, with
 
 Read the [vision](../docs/VISION.md) for the product direction and the dark-factory goal, and [status.md](../docs/status.md) for what is supported today.
 
+To run Marina and its platform components on your own machine, follow [Marina on a local Kind cluster](../deploy/kubernetes/marina-local/README.md).
+
 Read [the root architecture](../docs/ARCHITECTURE.md) for the joint Deck–Marina component boundaries, source-of-truth rules, lifecycle protocol, failure semantics, and delivery gates.
 
 ## Current implementation

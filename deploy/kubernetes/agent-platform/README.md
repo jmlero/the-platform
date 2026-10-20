@@ -50,7 +50,7 @@ must pass from the frozen caches; a missing dependency fails instead of download
 ## Fresh installation or data-preserving upgrade
 
 Prepare a new private directory once with `scripts/prepare-installation.py`.
-Existing installations reuse their directory, CA, credentials, service identity,
+Existing installations reuse their directory, CA, credentials,
 Deck/Marina PVCs and site egress configuration. Use the permanent local engine
 overlay and the version-1 [workflow example](../first-release/workflow.example.json).
 Configure the repository, producer and different reviewer models, explicit
@@ -60,7 +60,7 @@ While work is drained, update the installed `kint-codex` Harness's
 `spec.workload.image` to the registry digest of the newly built `native-codex`
 target. Keep the existing `codex` configuration, worker pool and snapshot policy.
 Let the engine prepare that image before admitting a task, close any temporary
-setup egress, and refresh Deck's repository association for the new profile.
+setup egress, and update the Marina Project and Workloads for the new profile.
 `reviewer_model` has the same fields as `model`; choose its own model ID and
 actual price rates in the same currency. Update the installed
 `kint-conversation-byo` Harness to the newly built BYO image digest, even when
@@ -79,15 +79,10 @@ configuration, exact release image references and complete consistent stores,
 including SQLite WALs and Marina artifacts. Preserve the engine's PostgreSQL and
 snapshot storage. Never reinitialize a PVC to repair an upgrade.
 
-Before enabling conversation on an upgraded release, verify Deck advertises
-`conversation.context.read` and add that capability to the existing project
-service identity in private `service-auth.json`. Preserve its identity, token
-hashes and project scope. New directories from `scripts/prepare-installation.py`
-already include the grant; existing directories require this explicit update.
-`scripts/check-installation.py` rejects a configured conversation profile without
-the project grant. Install Deck's context-capture protocol before accepting new
-invocations: an older invocation without a snapshot returns missing context
-rather than using today's repository or sources.
+Before enabling conversation, map a conversation Workload for the project in
+`deck-marina-projects.json`; `scripts/check-installation.py` rejects a configured
+conversation profile without one. An older invocation without a context snapshot
+returns missing context rather than using today's repository or sources.
 
 Preview the configuration removal with the current Marina validator:
 
@@ -97,7 +92,7 @@ python3 scripts/prepare-kagent-installation.py ~/.local/share/the-platform/marin
 
 The helper requires the already selected native repository engine. It removes
 retired diagnostic settings, replaces the verifier image and preserves repository,
-model, budgets, approvals, credentials and service identity. It keeps a private
+model, budgets, approvals and credentials. It keeps a private
 backup when `--apply` is supplied. It does not touch a database, deploy resources,
 rotate a credential or enable intake. Replace `IMPORTED_DIGEST` before use.
 
@@ -118,8 +113,8 @@ restart, so restart Marina after a workflow-only change. Verify historical tasks
 conversation IDs, model reservations and digest-checked artifacts. Both services
 reject applied migrations unknown to their binary. An older release must use a
 compatible retained snapshot; follow the permanent guide's schema rollback gate.
-Refresh the versioned repository association through Deck after changing profile
-settings. Stale tasks retain their original inputs and must block rather than
+Update the Marina Project and Workloads after changing profile
+settings; Deck picks them up within 30 seconds. Stale tasks retain their original inputs and must block rather than
 silently adopting a new profile.
 
 ## Acceptance and operation
@@ -146,8 +141,7 @@ PRD-01 requires matching Deck, Marina and conversation BYO images. Deck migratio
 `021_prd_drafts.sql` adds durable proposal/approval fields; retain the compatible
 pre-upgrade stores for rollback. The provider advertises `conversation.prd.draft`
 and Marina requires it when conversation is configured. Draft publication uses
-the existing `conversation.outcome.publish` grant; service credentials still
-cannot approve.
+the conversation Turn's outcome; only the operator can approve.
 
 Before enabling PRD publication, explicitly include `docs/prd` in the repository's
 `allowed_paths`, retain `delivery: fast_forward`, review the configured checks,

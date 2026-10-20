@@ -29,22 +29,20 @@ def main():
         write(name, value + "\n")
         return hashlib.sha256(value.encode()).hexdigest()
 
-    service_hash = token("deck-token")
     operator_hash = token("operator-token")
     token("artifact-token")
     token("worker-signing-key")
     write("git-token", "")
     write("model-token", "")
-    capabilities = ["provider.info", "agent.register", "work.ready.list", "work.inspect", "context.read", "repository.read", "repository.write", "workload.publish",
-                    "work.claim.atomic", "work.claim.lookup", "run.assigned.list", "run.lease.renew",
-                    "run.plan.submit", "run.start", "run.verify", "run.complete", "run.block",
-                    "run.progress.append", "command.list", "command.ack", "event.append",
-                    "decision.inspect", "decision.request", "evidence.record",
-                    "conversation.invocation.list", "conversation.context.read", "channel.message.list", "conversation.question.write", "conversation.outcome.publish"]
-    write("service-auth.json", json.dumps({"version": 1, "identities": [{"id": "marina",
-          "token_sha256": [service_hash], "projects": ["prj_default"], "capabilities": capabilities}]}, indent=2) + "\n")
     write("operator-auth.json", json.dumps({"version": 1, "operators": [{"id": "owner", "token_sha256": [operator_hash]}]}, indent=2) + "\n")
-    write("workflow.json", (root / "deploy/kubernetes/first-release/workflow.example.json").read_text())
+    workflow = (root / "deploy/kubernetes/first-release/workflow.example.json").read_text()
+    write("workflow.json", workflow)
+    # Deck is a client of Marina's platform API (decision 0033). Each Marina
+    # project is a namespace; Deck's service account may use it as a factory.
+    namespace, project = json.loads(workflow)["project_id"].split(".", 1)
+    write("deck-marina-projects.json", json.dumps([{"deck_project": "prj_default", "namespace": namespace, "project": project,
+          "workloads": {"repository/v2": "land-on-main"}, "conversation_workload": "chat"}], indent=2) + "\n")
+    write("factory.yaml", (root / "deploy/kubernetes/first-release/factory.example.yaml").read_text())
 
     def openssl(*arguments):
         subprocess.run(["openssl", *arguments], cwd=output, check=True, capture_output=True)
@@ -64,7 +62,7 @@ def main():
     tag = "local" if args.local_podman else "YOUR_RELEASE"
     write("kustomization.yaml", f"""apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-resources: [{base}]
+resources: [{base}, factory.yaml]
 generatorOptions:
   disableNameSuffixHash: true
 configMapGenerator:
@@ -77,13 +75,16 @@ configMapGenerator:
   - name: marina-worker-ca
     namespace: marina-workers
     files: [ca.crt]
+  - name: deck-marina-projects
+    namespace: marina-system
+    files: [projects.json=deck-marina-projects.json]
 secretGenerator:
   - name: deck-auth
     namespace: marina-system
-    files: [service-auth.json, operator-auth.json]
+    files: [operator-auth.json]
   - name: marina-credentials
     namespace: marina-system
-    files: [deck-token, git-token, model-token, worker-signing-key]
+    files: [git-token, model-token, worker-signing-key]
   - name: marina-artifact-auth
     namespace: marina-system
     files: [token=artifact-token]

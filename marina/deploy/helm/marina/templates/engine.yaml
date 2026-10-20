@@ -1,0 +1,55 @@
+{{- if .Values.platform.engine.enabled }}
+{{- $engine := .Values.platform.engine }}
+# Marina creates one Secret, ModelConfig and AgentTemplate per engine attempt
+# and removes them after the attempt's engine instance is gone. It touches only
+# resources it labeled `the-platform.dev/owner: marina` with a `marina-` name.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata: {name: marina-engine-templates, namespace: {{ $engine.namespace }}}
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [get, create, patch, delete]
+  - apiGroups: [kagent.dev]
+    resources: [modelconfigs, agenttemplates]
+    verbs: [get, create, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: {name: marina-engine-templates, namespace: {{ $engine.namespace }}}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: marina-engine-templates}
+subjects:
+  - {kind: ServiceAccount, name: marina, namespace: {{ .Release.Namespace }}}
+{{- if .Values.networkPolicy.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: kagent-from-marina, namespace: {{ $engine.namespace }}}
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: kagent, app.kubernetes.io/component: controller}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: {{ .Release.Namespace }}}
+          podSelector:
+            matchLabels: {app.kubernetes.io/name: marina}
+      ports: [{protocol: TCP, port: 8083}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: kagent-egress-to-marina, namespace: {{ $engine.egress.namespace }}}
+spec:
+  podSelector:
+    matchLabels: {{- toYaml $engine.egress.podLabels | nindent 6 }}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: {{ .Release.Namespace }}}
+          podSelector:
+            matchLabels: {app.kubernetes.io/name: marina}
+      ports: [{protocol: TCP, port: 8090}]
+{{- end }}
+{{- end }}

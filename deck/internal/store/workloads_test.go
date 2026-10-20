@@ -55,9 +55,8 @@ func TestWorkloadInvocationIsPinnedAndReplaysAfterRestart(t *testing.T) {
 	if _, err = s.InvokeWorkload(ctx, "prj_default", mutation, in); !errors.Is(err, domain.ErrConflict) {
 		t.Fatalf("withdrawn profile: %v", err)
 	}
-	count, _ := s.TaskCount(ctx)
-	if count != 1 {
-		t.Fatalf("duplicate tasks: %d", count)
+	if tasks, _ := s.ListTasks(ctx); len(tasks) != 1 {
+		t.Fatalf("duplicate tasks: %d", len(tasks))
 	}
 }
 

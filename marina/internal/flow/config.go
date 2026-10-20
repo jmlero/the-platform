@@ -10,7 +10,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"github.com/jmlero/the-platform/marina/internal/conversation"
@@ -93,8 +92,8 @@ func (c Config) Validate() error {
 		if c.Conversation.MaxTokens > c.MaxTokens || c.Conversation.BudgetMinutes > c.BudgetMinutes {
 			return errors.New("conversation limits cannot exceed installation limits")
 		}
-		if d := c.Conversation.Delegation; d != nil && (!c.RepositoryEnabled() || d.MaxAttempts < 3 || d.MaxTokens > c.MaxTokens || d.TimeMinutes > c.BudgetMinutes || !slices.Equal(d.Authority, c.RepositoryAuthority())) {
-			return errors.New("conversation delegation must fit the installed repository profile")
+		if c.Conversation.Delegation != nil {
+			return errors.New("conversation.delegation is retired: a Turn proposes tasks and its client decides what to run (decision 0033)")
 		}
 	}
 	if c.RepositoryEngine != nil {

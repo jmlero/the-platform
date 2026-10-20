@@ -85,6 +85,9 @@ func marinaRunWaitingForApproval(t *testing.T, s *store.Store) (domain.Run, doma
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := s.MarkMarinaRunCreated(ctx, run.ID); err != nil {
+		t.Fatal(err)
+	}
 	run, _ = s.GetRun(ctx, run.ID)
 	return run, *decision
 }
@@ -133,6 +136,29 @@ func TestOnlyCancelIsForwardedAndARepeatedCancelReturnsTheSameCommand(t *testing
 	}
 	detail, _ := s.GetTaskDetail(context.Background(), run.TaskID)
 	if len(detail.Commands) != 1 || detail.Commands[0].Status != "pending" {
+		t.Fatalf("commands = %+v", detail.Commands)
+	}
+}
+
+func TestACancelBeforeMarinaConfirmedTheRunIsRecordedForTheEngine(t *testing.T) {
+	s, handler, double := newMarinaHandler(t)
+	ctx := context.Background()
+	if err := s.EnsureMarinaAgent(ctx, []string{"prj_default"}); err != nil {
+		t.Fatal(err)
+	}
+	task, err := s.CreateTask(ctx, domain.CreateTaskInput{Title: "Not yet in Marina", AcceptanceCriteria: "Done", Status: domain.TaskReady})
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, err := s.BeginMarinaRun(ctx, task.ID, task.Version, "factory", json.RawMessage(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := requestJSON(t, handler, http.MethodPost, "/api/v1/operator/runs/"+run.ID+"/commands", "", map[string]string{"type": "cancel", "reason": "Not needed"})
+	if response.Code != http.StatusCreated || len(double.requests) != 0 {
+		t.Fatalf("cancel = %d %v", response.Code, double.requests)
+	}
+	if detail, _ := s.GetTaskDetail(ctx, task.ID); len(detail.Commands) != 1 || detail.Commands[0].Status != "pending" {
 		t.Fatalf("commands = %+v", detail.Commands)
 	}
 }

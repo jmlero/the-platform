@@ -1,0 +1,89 @@
+# Host names served by the local Gateway. Routes live next to the Gateway;
+# each backend namespace grants the reference and admits the proxy.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: {name: marina, namespace: platform-ingress}
+spec:
+  parentRefs: [{name: platform}]
+  hostnames: [marina.localhost]
+  rules:
+    - backendRefs: [{name: marina, namespace: marina-system, port: 8090}]
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: {name: kagent, namespace: platform-ingress}
+spec:
+  parentRefs: [{name: platform}]
+  hostnames: [kagent.localhost]
+  rules:
+    - backendRefs: [{name: kint-engine-ui, namespace: kint-engine, port: 8080}]
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: {name: jaeger, namespace: platform-ingress}
+spec:
+  parentRefs: [{name: platform}]
+  hostnames: [jaeger.localhost]
+  rules:
+    - backendRefs: [{name: jaeger, namespace: platform-observability, port: 16686}]
+---
+# Marina serves HTTPS with the installation CA.
+apiVersion: gateway.networking.k8s.io/v1
+kind: BackendTLSPolicy
+metadata: {name: marina, namespace: marina-system}
+spec:
+  targetRefs: [{group: "", kind: Service, name: marina}]
+  validation:
+    caCertificateRefs: [{group: "", kind: ConfigMap, name: marina-worker-ca}]
+    hostname: marina.marina-system.svc
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata: {name: platform-ingress, namespace: marina-system}
+spec:
+  from: [{group: gateway.networking.k8s.io, kind: HTTPRoute, namespace: platform-ingress}]
+  to: [{group: "", kind: Service, name: marina}]
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata: {name: platform-ingress, namespace: kint-engine}
+spec:
+  from: [{group: gateway.networking.k8s.io, kind: HTTPRoute, namespace: platform-ingress}]
+  to: [{group: "", kind: Service, name: kint-engine-ui}]
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata: {name: platform-ingress, namespace: platform-observability}
+spec:
+  from: [{group: gateway.networking.k8s.io, kind: HTTPRoute, namespace: platform-ingress}]
+  to: [{group: "", kind: Service, name: jaeger}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: ui-from-platform-ingress, namespace: kint-engine}
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/component: ui, app.kubernetes.io/instance: kint-engine}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: platform-ingress}
+          podSelector:
+            matchLabels: {gateway.networking.k8s.io/gateway-name: platform}
+      ports: [{protocol: TCP, port: 8080}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: jaeger-from-platform-ingress, namespace: platform-observability}
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: jaeger}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: platform-ingress}
+          podSelector:
+            matchLabels: {gateway.networking.k8s.io/gateway-name: platform}
+      ports: [{protocol: TCP, port: 16686}]

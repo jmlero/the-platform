@@ -99,8 +99,8 @@ The frontend design tokens and interaction rules are in
 | `DECK_OPERATOR_AUTH_FILE` | unset | Operator IDs and token fingerprints |
 | `DECK_OPERATOR_COOKIE_SECURE` | `true` | Require HTTPS for session cookies |
 | `DECK_MARINA_URL` | unset | Marina's platform API; https except on loopback. Unset means no executor |
-| `DECK_MARINA_TOKEN_FILE` | `/var/run/secrets/kubernetes.io/serviceaccount/token` | Kubernetes token Deck presents; reread for every request |
-| `DECK_MARINA_CA_FILE` | unset | PEM bundle trusted in addition to the system roots |
+| `DECK_MARINA_TOKEN_FILE` | `/var/run/secrets/kubernetes.io/serviceaccount/token` | Kubernetes token Deck presents; reread for every request. `/readyz` fails while it is unreadable |
+| `DECK_MARINA_CA_FILE` | unset | PEM bundle trusted in addition to the system roots; read at startup, so restart Deck after the CA rotates |
 | `DECK_MARINA_PROJECTS_FILE` | unset | JSON mapping of Deck projects to Marina; reread every cycle |
 
 The projects file maps each Deck project to a Marina namespace, Project and
@@ -114,8 +114,9 @@ Workloads:
 `repository/v2` lands on main and must map to a Workload with
 `delivery.mode: land-on-main`; `repository/v1` opens a pull request and must map
 to a `pull-request` Workload. Deck submits no work to a Workload whose delivery
-does not match. An invalid file fails closed. Deck's identity needs the
-`marina-factory` Role in each mapped namespace.
+does not match. An invalid file at startup stops Deck; an invalid edit later
+keeps the last valid mapping in use and shows the problem in the provider
+status. Deck's identity needs the `marina-factory` Role in each mapped namespace.
 
 When operator authentication is enabled, the policy contains a stable operator
 ID and one or more SHA-256 fingerprints of tokens with at least 256 bits of
@@ -140,15 +141,19 @@ A loop in the Deck process runs every second:
    profile is mapped is claimed and recorded with its exact Run spec in one
    transaction, then created in Marina. The Run is named from the task
    (`deck-<task>-<attempt>`), so a lost response is replayed (HTTP 200) instead
-   of creating a second Run, also after a restart. Marina's refusal blocks the
-   task with Marina's message.
+   of creating a second Run, also after a restart. A request Marina refuses as
+   invalid blocks the task with Marina's message; a missing RBAC permission
+   (403) or an unavailable Marina is retried and shown in the provider status.
 3. **Mirror**: for each active Run, Deck reads the Run, its Decisions and its
    events after the last mirrored sequence, and applies the matching Deck
    transitions: plan revision and approval decision, start, verification,
    evidence, completion with landing, block, failure or cancellation. Every step
    is idempotent, so replays change nothing. A landing completes the task only
    when Deck's own landing checks pass; otherwise the result waits for operator
-   acceptance.
+   acceptance. Marina's pull request URL is added to the run summary, and its
+   token and cost usage is recorded as a `model.usage` event when it changes.
+   Deck ends a Run or Turn as gone only when Marina reports it `NotFound` and
+   its Project still answers, so a wrong URL never ends work.
 4. **Turns**: each chat request addressed to the Marina agent becomes one Turn
    with the thread and project context frozen at invocation. A clarification
    Decision appears as a question in the thread; a reply, a task proposal
@@ -157,8 +162,12 @@ A loop in the Deck process runs every second:
 
 Operator answers to plan approvals and chat questions, and cancellations, go to
 Marina first with a stable `Idempotency-Key`; Deck records them only after Marina
-accepts. Evidence downloads are proxied from Marina's artifact endpoint and
-checked against their digest. The provider status shows whether Marina was
+accepts. A cancel for a Run Marina has not yet confirmed is recorded in Deck; the
+loop then sends it to a Run Marina did create, and otherwise ends the task
+without ever creating the Run. Marina owns decision expiry. Evidence downloads
+are proxied from Marina's artifact endpoint and checked against their digest;
+evidence recorded before Deck called Marina's platform API keeps its metadata
+but offers no download. The provider status shows whether Marina was
 reachable on the last cycle and the last refusal reason; details are in Deck's
 log.
 

@@ -41,7 +41,6 @@ const (
 	CapabilityConversationPRDTasks = "conversation.prd.tasks"
 	CapabilityConversationPRD      = "conversation.prd.draft"
 	CapabilityConversationOutcome  = "conversation.outcome.publish"
-	CapabilityConversationDelegate = "conversation.task.delegate"
 )
 
 type ProviderInfo struct {

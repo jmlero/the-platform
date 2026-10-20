@@ -168,7 +168,7 @@ func TestReadyTaskBecomesOneRunThatIsApprovedVerifiedAndLanded(t *testing.T) {
 
 func TestALostCreateResponseIsReplayedWithoutASecondRun(t *testing.T) {
 	h := newHarness(t)
-	h.fake.loseNextCreate = true
+	h.fake.loseCreates = 1
 	task := h.readyTask("Survive a lost response")
 	h.cycle()
 	h.cycle()
@@ -340,5 +340,261 @@ func TestChatTurnsReplyAskAndProposeInTheThread(t *testing.T) {
 	h.cycle()
 	if got := messages(failed.Thread.ID); len(got) != 2 || !strings.Contains(got[1], "model unavailable") {
 		t.Fatalf("failed thread = %v", got)
+	}
+}
+
+func (h *harness) providerProblem() string {
+	h.t.Helper()
+	status, err := h.store.GetProviderStatus(h.ctx, h.project.Project.ID)
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	return status.LastError
+}
+
+func TestARunWithoutPlanApprovalStartsEvenWhenDeckMissedPlanningAndMarinaAsked(t *testing.T) {
+	h := newHarness(t)
+	task := h.readyTask("Ask while Deck is away")
+	h.cycle()
+	name, run := h.fake.onlyRun()
+	// While Deck was away, Marina planned without approval, ran and asked.
+	h.fake.update(func() { run.Run.Status.Phase = "Running" })
+	h.fake.decide(name, "Run", name+"-q", "clarification", "API", "Store")
+	h.cycle()
+	detail := h.detail(task.ID)
+	if detail.Task.Status != domain.TaskRunning || len(detail.Decisions) != 1 || detail.Decisions[0].InteractionID != name+"-q" {
+		t.Fatalf("status = %s decisions %+v", detail.Task.Status, detail.Decisions)
+	}
+}
+
+func TestACancelBeforeMarinaConfirmedTheRunNeverCreatesIt(t *testing.T) {
+	h := newHarness(t)
+	h.fake.refuseCreate = 503
+	task := h.readyTask("Cancel while Marina is unavailable")
+	h.cycle()
+	run := h.detail(task.ID).Runs[0]
+	if _, err := h.store.CreateCommand(h.ctx, run.ID, domain.CommandCancel, "Not needed", "operator:local"); err != nil {
+		t.Fatal(err)
+	}
+	h.fake.refuseCreate = 0
+	creates := h.fake.creates
+	h.cycle()
+	h.cycle()
+	detail := h.detail(task.ID)
+	if detail.Task.Status != domain.TaskCancelled || len(h.fake.runs) != 0 || h.fake.creates != creates || detail.Commands[0].Status != "completed" {
+		t.Fatalf("status %s runs %d creates %d commands %+v", detail.Task.Status, len(h.fake.runs), h.fake.creates-creates, detail.Commands)
+	}
+}
+
+func TestACancelAfterALostCreateResponseIsForwardedToMarina(t *testing.T) {
+	h := newHarness(t)
+	h.fake.loseCreates = 2 // the dispatch and the retry in the same cycle
+	task := h.readyTask("Cancel after a lost response")
+	h.cycle()
+	name, run := h.fake.onlyRun()
+	if _, err := h.store.CreateCommand(h.ctx, name, domain.CommandCancel, "Not needed", "operator:local"); err != nil {
+		t.Fatal(err)
+	}
+	h.cycle()
+	if len(h.fake.cancels) != 1 || h.fake.cancels[0] != name+" deck-cancel-"+name || h.fake.creates != 2 {
+		t.Fatalf("cancels %v creates %d", h.fake.cancels, h.fake.creates)
+	}
+	h.fake.update(func() { run.Run.Status.Phase = "Cancelled" })
+	h.cycle()
+	if detail := h.detail(task.ID); detail.Task.Status != domain.TaskCancelled || detail.Commands[0].Status != "completed" {
+		t.Fatalf("status %s commands %+v", detail.Task.Status, detail.Commands)
+	}
+}
+
+func TestARunIsGoneOnlyWhenMarinaNamesItMissingAndItsProjectAnswers(t *testing.T) {
+	h := newHarness(t)
+	task := h.readyTask("Survive a misrouted Marina")
+	h.cycle()
+	name, _ := h.fake.onlyRun()
+	h.fake.update(func() { h.fake.plainNotFound = true })
+	h.cycle()
+	if status := h.detail(task.ID).Task.Status; status != domain.TaskPlanning || h.providerProblem() == "" {
+		t.Fatalf("a bare 404 ended the run: %s %q", status, h.providerProblem())
+	}
+	h.fake.update(func() { h.fake.plainNotFound, h.fake.projectDown = false, true; delete(h.fake.runs, name) })
+	h.cycle()
+	if status := h.detail(task.ID).Task.Status; status != domain.TaskPlanning {
+		t.Fatalf("a missing run with an unreachable project ended the run: %s", status)
+	}
+	h.fake.update(func() { h.fake.projectDown = false })
+	h.cycle()
+	if status := h.detail(task.ID).Task.Status; status != domain.TaskFailed {
+		t.Fatalf("status = %s", status)
+	}
+}
+
+func TestAForbiddenCreateIsRetriedAndShownInTheProviderStatus(t *testing.T) {
+	h := newHarness(t)
+	h.fake.refuseCreate = 403
+	task := h.readyTask("Wait for RBAC")
+	h.cycle()
+	if status := h.detail(task.ID).Task.Status; status != domain.TaskPlanning || !strings.Contains(h.providerProblem(), "Forbidden") {
+		t.Fatalf("status %s problem %q", status, h.providerProblem())
+	}
+	h.fake.refuseCreate = 0
+	h.cycle()
+	if _, run := h.fake.onlyRun(); run == nil || h.providerProblem() != "" {
+		t.Fatalf("problem %q", h.providerProblem())
+	}
+}
+
+func TestAForbiddenChatTurnIsRetried(t *testing.T) {
+	h := newHarness(t)
+	h.fake.refuseCreate = 403
+	invocation, err := h.store.InvokeConversation(h.ctx, domain.ConversationInvocationInput{ChannelID: h.project.Channels[0].ID, AgentID: store.MarinaAgentID, Body: "Hello", RequestID: "r-hello", AuthorID: "operator:local"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.cycle()
+	h.fake.refuseCreate = 0
+	h.cycle()
+	if h.fake.turns[store.MarinaName(invocation.Message.ID, "")] == nil {
+		t.Fatal("the chat turn was not retried")
+	}
+}
+
+func TestAnInvalidProjectsFileKeepsTheLastValidMapping(t *testing.T) {
+	h := newHarness(t)
+	task := h.readyTask("Keep mirroring")
+	h.cycle()
+	_, run := h.fake.onlyRun()
+	if err := os.WriteFile(h.engine.ProjectsFile, []byte("{not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	h.fake.update(func() { run.Run.Status.Phase = "Cancelled" })
+	h.cycle()
+	if status := h.detail(task.ID).Task.Status; status != domain.TaskCancelled || !strings.Contains(h.providerProblem(), "projects file") {
+		t.Fatalf("status %s problem %q", status, h.providerProblem())
+	}
+}
+
+func TestPullRequestAndUsageAreMirroredOnce(t *testing.T) {
+	h := newHarness(t)
+	task := h.readyTask("Open a pull request")
+	h.cycle()
+	_, run := h.fake.onlyRun()
+	h.fake.update(func() {
+		run.Run.Status.Phase = "Running"
+		run.Run.Status.Usage = &Usage{Tokens: 1200, ReservedTokens: 300, CostMinor: 4, Currency: "EUR"}
+	})
+	h.cycle()
+	h.cycle()
+	usage := func() []domain.Event {
+		var found []domain.Event
+		for _, event := range h.detail(task.ID).Events {
+			if event.Type == "model.usage" {
+				found = append(found, event)
+			}
+		}
+		return found
+	}
+	if got := usage(); len(got) != 1 || got[0].Payload["reported_tokens"] != float64(1200) || got[0].Payload["reported_cost_micros"] != float64(40000) || got[0].Payload["currency"] != "EUR" {
+		t.Fatalf("usage = %+v", got)
+	}
+	h.fake.update(func() {
+		succeed(run)
+		run.Run.Status.Landing = nil
+		run.Run.Status.Usage.Tokens = 2000
+		run.Run.Status.PullRequest = &struct {
+			URL string `json:"url"`
+		}{URL: "https://github.com/jmlero/marina-acceptance/pull/7"}
+	})
+	h.cycle()
+	h.cycle()
+	detail := h.detail(task.ID)
+	if len(usage()) != 2 || !strings.Contains(detail.Runs[0].ResultSummary, "https://github.com/jmlero/marina-acceptance/pull/7") {
+		t.Fatalf("usage %d summary %q", len(usage()), detail.Runs[0].ResultSummary)
+	}
+}
+
+func TestAPlanApprovedInMarinaStartsAfterItsExpiryPassedInDeck(t *testing.T) {
+	h := newHarness(t)
+	task := h.readyTask("Approve while Deck is away")
+	h.cycle()
+	name, run := h.fake.onlyRun()
+	h.fake.decide(name, "Run", name+"-plan-1", "plan-approval", "Approve plan", "Request changes")
+	h.fake.update(func() {
+		decision := h.fake.decisions[name+"-plan-1"]
+		decision.Spec.ExpiresAt = "2001-01-01T00:00:00Z"
+		decision.Spec.Response = &struct {
+			Answer     string `json:"answer"`
+			AnsweredBy string `json:"answeredBy"`
+		}{Answer: "Approve plan"}
+		decision.Status.Phase = "Answered"
+		run.Run.Status.Phase = "Running"
+	})
+	h.cycle()
+	if status := h.detail(task.ID).Task.Status; status != domain.TaskRunning {
+		t.Fatalf("status = %s", status)
+	}
+}
+
+func TestAnUnreadableTokenIsNamedInTheProviderStatus(t *testing.T) {
+	h := newHarness(t)
+	client, err := New(Config{URL: "http://127.0.0.1:1", TokenFile: filepath.Join(t.TempDir(), "missing")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.engine.Client, h.engine.synced = client, nil
+	h.cycle()
+	if problem := h.providerProblem(); !strings.Contains(problem, "token") {
+		t.Fatalf("problem = %q", problem)
+	}
+}
+
+func TestARepeatedProblemIsLoggedOnce(t *testing.T) {
+	h := newHarness(t)
+	var logs strings.Builder
+	h.engine.Log = slog.New(slog.NewTextHandler(&logs, nil))
+	h.fake.refuseCreate = 503
+	h.readyTask("Wait for Marina")
+	for range 3 {
+		h.cycle()
+	}
+	if count := strings.Count(logs.String(), "Marina create a run"); count != 1 {
+		t.Fatalf("logged %d times:\n%s", count, logs.String())
+	}
+}
+
+func TestAChatTurnIsGoneOnlyWhenItsProjectAnswers(t *testing.T) {
+	h := newHarness(t)
+	invocation, err := h.store.InvokeConversation(h.ctx, domain.ConversationInvocationInput{ChannelID: h.project.Channels[0].ID, AgentID: store.MarinaAgentID, Body: "Hello", RequestID: "r-hello", AuthorID: "operator:local"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.cycle()
+	replies := func() int {
+		page, err := h.store.PageThreadMessages(h.ctx, invocation.Thread.ID, 50, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return len(page.Items)
+	}
+	h.fake.update(func() { h.fake.projectDown = true; delete(h.fake.turns, store.MarinaName(invocation.Message.ID, "")) })
+	h.cycle()
+	if replies() != 1 {
+		t.Fatal("a missing turn with an unreachable project was ended")
+	}
+	h.fake.update(func() { h.fake.projectDown = false })
+	h.cycle()
+	if replies() != 2 {
+		t.Fatal("a turn Marina no longer has was not ended")
+	}
+}
+
+func TestMarinaIsConnectedAfterAContactEvenWithNoRunInTheProject(t *testing.T) {
+	h := newHarness(t)
+	h.cycle()
+	status, err := h.store.GetProviderStatus(h.ctx, h.project.Project.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.Connectivity != "connected" || status.LastSeenAt == nil {
+		t.Fatalf("connectivity = %q, last seen %v", status.Connectivity, status.LastSeenAt)
 	}
 }

@@ -41,6 +41,10 @@ resource, verb and namespace. Three Roles cover the common clients:
 | `marina-factory` | viewer, plus create Runs and Turns, cancel them, answer Decisions |
 | `marina-admin` | factory, plus manage Projects and Workloads |
 
+Bind these with a RoleBinding in each project namespace. `Capabilities` is
+cluster-scoped, so a client that reads it also needs a ClusterRoleBinding to
+`marina-capabilities`.
+
 ## Resources
 
 | Kind | Scope | Created by | Purpose |

@@ -60,3 +60,13 @@ rules:
   - apiGroups: [marina.dev]
     resources: [runs/cancel, turns/cancel, decisions/answer, decisions]
     verbs: [update, patch]
+---
+# Capabilities are cluster-scoped: bind this with a ClusterRoleBinding to each
+# client that reads them.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata: {name: marina-capabilities}
+rules:
+  - apiGroups: [marina.dev]
+    resources: [capabilities]
+    verbs: [get]

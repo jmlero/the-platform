@@ -59,8 +59,8 @@ this is built yet; the tasks are in the
   attempt like a profile. Custom resources are added only where they add value.
 - Marina owns the platform API and execution state; Deck, `platformctl` and
   `kubectl` are clients ([decision 0033](decisions/0033-marina-platform-api.md),
-  [plan](plans/marina-platform-api.md)). The installed local release still runs
-  the earlier pair until the cutover; see [status](status.md).
+  [plan](plans/marina-platform-api.md)). Marina installs from its own
+  [Helm chart](../marina/deploy/helm/marina/README.md); see [status](status.md).
 - First components on local Kind: Kyverno (policy), kgateway (ingress),
   agentgateway (models and MCP), OpenTelemetry Collector and Jaeger (traces).
   What is accepted is in [status](status.md).
@@ -230,9 +230,11 @@ flowchart LR
 
 Both services use `Recreate` updates and `ReadWriteOnce` storage; neither SQLite
 deployment can scale horizontally. Installation guides:
+[Marina alone on a fresh local Kind cluster](../deploy/kubernetes/marina-local/README.md),
 [local Podman/Kind](../deploy/kubernetes/local-podman/README.md),
 [repository workflow](../deploy/kubernetes/first-release/README.md) and
-[native agent and verifier profile](../deploy/kubernetes/agent-platform/README.md).
+[native agent and verifier profile](../deploy/kubernetes/agent-platform/README.md) and
+[Marina from its Helm chart](../deploy/kubernetes/local-podman-helm/README.md).
 
 ## Repository layout
 

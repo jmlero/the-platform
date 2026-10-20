@@ -5,8 +5,8 @@ on the `podman-machine-default-root` connection. It preserves the ordinary
 rootless Podman connection and its containers.
 
 Deck opens directly at **https://localhost:8443**, without an operator token or
-sign-in step. The local profile disables operator authentication; Marina's
-service authentication remains enabled. Import/export and session controls are
+sign-in step. The local profile disables operator authentication; Deck still
+calls Marina's platform API with its Kubernetes service account token. Import/export and session controls are
 removed from the browser header. This is the operator's current local preference
 ([decision 0005](../../../docs/decisions/0005-operator-authentication.md#local-pilot-update-2026-09-23)).
 

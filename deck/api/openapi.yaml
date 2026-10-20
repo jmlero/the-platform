@@ -493,7 +493,7 @@ paths:
         "403":
           description: Not authorized
         "409":
-          description: Profile expired, unavailable, owned by another service or idempotency conflict
+          description: Profile expired, unavailable, published by another agent or idempotency conflict
         "422":
           description: Invalid input or missing authority
   /operator/projects/{project}/workloads/invoke:
@@ -521,7 +521,7 @@ paths:
         "403":
           description: Not authorized
         "409":
-          description: Profile expired, unavailable, owned by another service or idempotency conflict
+          description: Profile expired, unavailable, published by another agent or idempotency conflict
         "422":
           description: Invalid input or missing authority
   /operator/projects/{project}/repository:
@@ -807,7 +807,7 @@ paths:
         Requires the exact proposal digest, repository/v2 profile and explicit per-task budget.
         Creates all tasks atomically with dependencies enforcing their approved order.
         Each task retains the PRD path and landed revision. Changed input conflicts;
-        a new-key duplicate returns the original tasks. Service bearer credentials are rejected.
+        a new-key duplicate returns the original tasks. Bearer credentials are rejected; an operator session is required.
       parameters:
         - {name: message, in: path, required: true, schema: {type: string}}
         - {$ref: "#/components/parameters/IdempotencyKey"}
@@ -860,7 +860,7 @@ paths:
       operationId: acceptPRD
       security: [{operatorSession: []}]
       summary: Accept the current PRD result set as the operator
-      description: Requires all approved tasks landed with current evidence and the exact results digest; records acceptance in the originating thread. Service credentials cannot accept.
+      description: Requires all approved tasks landed with current evidence and the exact results digest; records acceptance in the originating thread. Requires an operator session.
       parameters:
         - {name: task, in: path, required: true, schema: {type: string}}
         - {$ref: "#/components/parameters/IdempotencyKey"}
@@ -894,7 +894,7 @@ paths:
       description: >-
         Requires an operator session (or trusted local operator mode), Idempotency-Key,
         the exact draft digest and a current repository/v2 profile with explicit bounded
-        budget. Service bearer credentials cannot approve. Changed drafts, repository
+        budget. Bearer credentials cannot approve; an operator session is required. Changed drafts, repository
         bindings, profiles or replay budgets conflict. Duplicate approval, including with
         a new key, returns the original task. The task freezes the approved path and text,
         links the originating thread, and uses normal review, verification, CI and landing.
@@ -994,10 +994,6 @@ components:
       schema:
         type: string
         maxLength: 128
-    WWWAuthenticate:
-      description: Bearer authentication challenge for the Deck service API.
-      schema:
-        type: string
 
   parameters:
     IdempotencyKey:
@@ -1020,18 +1016,16 @@ components:
         type: string
   responses:
     AuthenticationRequired:
-      description: A valid Deck service credential is required
+      description: A valid operator session is required
       headers:
         X-Request-ID:
           $ref: "#/components/headers/RequestId"
-        WWW-Authenticate:
-          $ref: "#/components/headers/WWWAuthenticate"
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
     Forbidden:
-      description: The service identity lacks the required project or capability grant
+      description: The request is not allowed with these credentials, for example a bearer token where an operator session is required
       headers:
         X-Request-ID:
           $ref: "#/components/headers/RequestId"

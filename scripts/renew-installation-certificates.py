@@ -35,8 +35,10 @@ def renew(installation, days=90):
         for service in ("deck", "marina"):
             current = installation / f"{service}.crt"
             openssl("verify", "-CAfile", ca, current)
-            names = openssl("x509", "-in", current, "-noout", "-ext", "subjectAltName")
-            names = names.split("\n", 1)[1].strip().replace("IP Address:", "IP:")
+            # -text instead of -ext: macOS LibreSSL has no -ext option.
+            found = re.search(r"X509v3 Subject Alternative Name:[^\n]*\n\s*([^\n]+)",
+                              openssl("x509", "-in", current, "-noout", "-text"))
+            names = found.group(1).strip().replace("IP Address:", "IP:") if found else ""
             if not names or any(not re.fullmatch(r"(?:DNS:[A-Za-z0-9.*_-]+|IP:[0-9a-fA-F:.]+)",
                                                 name.strip()) for name in names.split(",")):
                 raise ValueError("unsupported or missing certificate subject alternative names")

@@ -1,0 +1,763 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Marina, visually</title>
+<meta name="description" content="A visual tour of Marina: the layers, the projects inside them, how a request flows, how to install it and how to deploy your own agent.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js"}}</script>
+<style>
+:root {
+  --bg: #0b0d0e; --panel: #111416; --raise: #161a1c; --line: #2a3033; --detail: #1f2427;
+  --ink: #d9dedf; --ink-dim: #9aa4a7; --ink-hi: #f4f6f6;
+  --accent: #ffb547; --accent-hi: #ffd68a; --accent-dim: rgba(255,181,71,.16); --accent-ink: #ffc56b;
+  --body3d: #121517; --line3d: #59646a; --detail3d: #2c3438;
+  --glow: 1;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #eceff0; --panel: #f7f9f9; --raise: #ffffff; --line: #c8cfd1; --detail: #dfe4e5;
+    --ink: #24282a; --ink-dim: #5b6366; --ink-hi: #0f1213;
+    --accent: #ffb547; --accent-hi: #e59a22; --accent-dim: rgba(229,154,34,.18); --accent-ink: #8a4f00;
+    --body3d: #f9fbfb; --line3d: #7c8589; --detail3d: #cfd5d7; --glow: 0; color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #eceff0; --panel: #f7f9f9; --raise: #ffffff; --line: #c8cfd1; --detail: #dfe4e5;
+  --ink: #24282a; --ink-dim: #5b6366; --ink-hi: #0f1213;
+  --accent: #ffb547; --accent-hi: #e59a22; --accent-dim: rgba(229,154,34,.18); --accent-ink: #8a4f00;
+  --body3d: #f9fbfb; --line3d: #7c8589; --detail3d: #cfd5d7; --glow: 0; color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scrollbar-color: var(--line) var(--bg); }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 400 17px/1.6 "Schibsted Grotesk", ui-sans-serif, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+::selection { background: var(--accent); color: #111; }
+a { color: var(--accent-ink); text-underline-offset: 3px; text-decoration-thickness: 1px; }
+a:hover { color: var(--ink-hi); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+code, pre, .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: .86em; }
+code { color: var(--ink-hi); background: var(--detail); padding: .1em .35em; border-radius: 4px; }
+h1, h2, h3 { color: var(--ink-hi); text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(2.4rem, 5.4vw, 4.4rem); line-height: 1.02; letter-spacing: -.035em; font-weight: 600; }
+h2 { font-size: clamp(1.7rem, 3vw, 2.4rem); line-height: 1.1; letter-spacing: -.025em; font-weight: 600; margin-bottom: .6rem; }
+h3 { font-size: 1.1rem; letter-spacing: -.01em; font-weight: 600; }
+p { margin: 0 0 1em; max-width: 68ch; }
+
+.top {
+  position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 24px;
+  padding: 12px clamp(16px, 4vw, 48px); background: color-mix(in srgb, var(--bg) 88%, transparent);
+  border-bottom: 1px solid var(--line); backdrop-filter: blur(10px);
+}
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 600; color: var(--ink-hi); letter-spacing: -.01em; }
+.brand svg { width: 22px; height: 22px; }
+.top nav { display: flex; gap: 18px; margin-left: auto; flex-wrap: wrap; }
+.top nav a { color: var(--ink-dim); text-decoration: none; font-size: .92rem; }
+.top nav a:hover { color: var(--ink-hi); }
+.theme { background: none; border: 1px solid var(--line); color: var(--ink-dim); border-radius: 999px; padding: 4px 12px; font: inherit; font-size: .85rem; cursor: pointer; }
+.theme:hover { color: var(--ink-hi); border-color: var(--ink-dim); }
+@media (max-width: 760px) { .top nav { display: none; } .theme { margin-left: auto; } }
+
+main { padding: 0 clamp(16px, 4vw, 48px); }
+section { max-width: 1240px; margin: 0 auto; padding: clamp(64px, 9vw, 120px) 0 0; }
+.lede { font-size: clamp(1.08rem, 1.5vw, 1.25rem); color: var(--ink); max-width: 56ch; }
+.dim { color: var(--ink-dim); }
+
+/* --- hero: stack + panel --- */
+.hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 400px); gap: clamp(24px, 4vw, 56px); padding-top: clamp(40px, 6vw, 72px); align-items: start; }
+.hero-intro { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 32px; align-items: end; }
+.hero-intro p { margin: 0; }
+.stage {
+  position: relative; min-height: 620px; border: 1px solid var(--line); border-radius: 14px;
+  background: radial-gradient(ellipse at 50% 60%, var(--panel), var(--bg) 75%); overflow: hidden; touch-action: pan-y;
+}
+.stage canvas { display: block; width: 100%; height: 100%; position: absolute; inset: 0; cursor: grab; }
+.stage canvas:active { cursor: grabbing; }
+.tags { position: absolute; inset: 0; pointer-events: none; }
+.tag {
+  position: absolute; transform: translate(14px, -50%); pointer-events: auto; cursor: pointer;
+  background: none; border: 0; padding: 2px 0 2px calc(var(--lead, 20px) + 6px); color: var(--ink-dim); font: 500 .9rem/1.2 "Schibsted Grotesk", sans-serif;
+  text-align: left; white-space: nowrap;
+}
+.tag::before { content: ""; position: absolute; left: 0; top: 50%; width: var(--lead, 20px); border-top: 1px solid var(--line3d); }
+.tag small { display: block; font: 400 .74rem/1.3 "IBM Plex Mono", monospace; color: var(--ink-dim); opacity: .8; }
+.tag:hover, .tag[aria-pressed="true"] { color: var(--ink-hi); }
+.tag[aria-pressed="true"]::before { border-color: var(--accent); }
+.tag.above { transform: translate(-50%, calc(-100% - 10px)); padding: 0; text-align: center; }
+.tag.above::before { display: none; }
+.stage-ui { position: absolute; left: 16px; right: 16px; bottom: 14px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.btn {
+  display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--accent); background: var(--accent); color: #17130a;
+  border-radius: 999px; padding: 9px 18px; font: 600 .92rem "Schibsted Grotesk", sans-serif; cursor: pointer;
+  box-shadow: 0 6px 16px -8px rgba(0,0,0,.45);
+  transition: transform .2s cubic-bezier(.16,1,.3,1), box-shadow .2s;
+}
+.btn:hover { transform: translateY(-1px); box-shadow: 0 10px 20px -8px rgba(0,0,0,.5); }
+.btn:disabled { opacity: .55; cursor: default; transform: none; }
+.btn.ghost { background: transparent; color: var(--ink); border-color: var(--line); box-shadow: none; }
+.btn.ghost:hover { border-color: var(--ink-dim); color: var(--ink-hi); }
+.btn svg { width: 14px; height: 14px; }
+.readout { margin-left: auto; font: 400 .78rem "IBM Plex Mono", monospace; color: var(--ink-dim); }
+.caption {
+  position: absolute; left: 16px; top: 16px; max-width: min(420px, calc(100% - 32px)); padding: 12px 14px; border-radius: 10px;
+  background: color-mix(in srgb, var(--raise) 92%, transparent); border: 1px solid var(--line);
+  box-shadow: 0 12px 30px -18px rgba(0,0,0,.6); font-size: .93rem; line-height: 1.45;
+  opacity: 0; transform: translateY(-6px); transition: opacity .35s, transform .35s cubic-bezier(.16,1,.3,1);
+}
+.caption.on { opacity: 1; transform: none; }
+.caption b { color: var(--accent-ink); font: 500 .78rem "IBM Plex Mono", monospace; display: block; margin-bottom: 2px; }
+.stage.tracing .tag.above { opacity: 0; }
+.nogl { position: absolute; inset: 0; display: none; place-items: center; text-align: center; padding: 24px; color: var(--ink-dim); }
+.stage.failed .nogl { display: grid; }
+
+.panel { position: sticky; top: 76px; }
+.layers { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; margin-bottom: 18px; }
+.layers button {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 9px 14px; border: 0; border-top: 1px solid var(--line);
+  background: var(--panel); color: var(--ink-dim); font: 500 .93rem "Schibsted Grotesk", sans-serif; cursor: pointer; text-align: left;
+}
+.layers button:first-child { border-top: 0; }
+.layers button span { font: 400 .74rem "IBM Plex Mono", monospace; opacity: .8; }
+.layers button:hover { color: var(--ink-hi); background: var(--raise); }
+.layers button[aria-pressed="true"] { color: var(--ink-hi); background: var(--raise); box-shadow: inset 2px 0 0 var(--accent); }
+.detail h2 { font-size: 1.7rem; margin-bottom: .25rem; }
+.detail .role { color: var(--accent-ink); font: 500 .8rem "IBM Plex Mono", monospace; margin-bottom: .8rem; display: block; }
+.detail p { font-size: .98rem; }
+.proj { border-top: 1px solid var(--line); padding: 12px 0 2px; }
+.proj h3 { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+.proj h3 span { font: 400 .74rem "IBM Plex Mono", monospace; color: var(--ink-dim); font-weight: 400; }
+.proj p { font-size: .93rem; color: var(--ink); margin: .3rem 0 .6rem; }
+.detail-enter { animation: rise .45s cubic-bezier(.16,1,.3,1); }
+@keyframes rise { from { opacity: 0; transform: translateY(8px); filter: blur(3px); } to { opacity: 1; transform: none; filter: none; } }
+@media (prefers-reduced-motion: reduce) { .detail-enter { animation: none; } .caption, .btn { transition: none; } }
+@media (max-width: 980px) {
+  .hero, .hero-intro { grid-template-columns: minmax(0, 1fr); }
+  .stage { min-height: 480px; }
+  .panel { position: static; }
+}
+@media (max-width: 560px) { .stage { min-height: 420px; } .tag:not(.above) { display: none; } }
+
+/* --- words diagram --- */
+.words { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: clamp(24px, 4vw, 64px); align-items: center; margin-top: 28px; }
+.words svg { width: 100%; height: auto; }
+.wd .box { fill: var(--panel); stroke: var(--line3d); stroke-width: 1; }
+.wd .wire { stroke: var(--line3d); stroke-width: 1; fill: none; }
+.wd text { fill: var(--ink-hi); font: 600 15px "Schibsted Grotesk", sans-serif; }
+.wd text.s { fill: var(--ink-dim); font: 400 11px "IBM Plex Mono", monospace; }
+.wd g { cursor: pointer; }
+.wd g.on .box { stroke: var(--accent); fill: var(--accent-dim); }
+.wd g.on text.s { fill: var(--accent-ink); }
+.defs { display: grid; gap: 4px; }
+.defs button {
+  display: grid; grid-template-columns: 110px 1fr; gap: 16px; text-align: left; background: none; border: 0; border-top: 1px solid var(--line);
+  padding: 12px 4px; color: var(--ink); font: inherit; cursor: pointer;
+}
+.defs button b { color: var(--ink-hi); font-weight: 600; }
+.defs button.on b { color: var(--accent-ink); }
+.defs button:hover b { color: var(--ink-hi); }
+@media (max-width: 860px) { .words { grid-template-columns: minmax(0, 1fr); } .defs button { grid-template-columns: 90px 1fr; } }
+
+/* --- run timeline --- */
+.timeline { margin-top: 36px; position: relative; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0; }
+.timeline::before { content: ""; position: absolute; left: 0; right: 0; top: 11px; border-top: 1px solid var(--line3d); }
+.step { position: relative; padding: 36px 14px 0 0; }
+.step::before {
+  content: ""; position: absolute; top: 4px; left: 0; width: 14px; height: 14px; border-radius: 50%;
+  background: var(--bg); border: 1px solid var(--line3d); transition: background .3s, border-color .3s, box-shadow .3s;
+}
+.step.lit::before { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 calc(14px * var(--glow)) var(--accent); }
+.step h3 { margin-bottom: .3rem; }
+.step p { font-size: .9rem; color: var(--ink-dim); margin: 0; }
+.step .who { font: 400 .74rem "IBM Plex Mono", monospace; color: var(--accent-ink); display: block; margin-bottom: 4px; }
+@media (max-width: 860px) {
+  .timeline { grid-template-columns: 1fr; padding-left: 28px; }
+  .timeline::before { left: 6px; right: auto; top: 0; bottom: 0; border-top: 0; border-left: 1px solid var(--line3d); }
+  .step { padding: 0 0 22px; }
+  .step::before { left: -28px; top: 4px; }
+}
+
+/* --- own agent --- */
+.agent { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: clamp(24px, 4vw, 64px); margin-top: 28px; align-items: start; }
+.agent ol { list-style: none; counter-reset: s; padding: 0; margin: 0; }
+.agent li { counter-increment: s; position: relative; padding: 0 0 22px 44px; }
+.agent li::before {
+  content: counter(s); position: absolute; left: 0; top: 0; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line3d);
+  display: grid; place-items: center; font: 500 .8rem "IBM Plex Mono", monospace; color: var(--ink-dim);
+}
+.agent li p { margin: .2rem 0 .5rem; font-size: .95rem; }
+.keyswap svg { width: 100%; height: auto; }
+.ks .box { fill: var(--panel); stroke: var(--line3d); }
+.ks .wire { stroke: var(--line3d); fill: none; }
+.ks .hot { stroke: var(--accent); }
+.ks text { fill: var(--ink-hi); font: 600 13px "Schibsted Grotesk", sans-serif; }
+.ks text.s { fill: var(--ink-dim); font: 400 10.5px "IBM Plex Mono", monospace; }
+.ks text.k { fill: var(--accent-ink); font: 500 10.5px "IBM Plex Mono", monospace; }
+.ks .dot { fill: var(--accent); }
+@media (max-width: 860px) { .agent { grid-template-columns: minmax(0, 1fr); } }
+
+/* --- code --- */
+.code { position: relative; margin: 8px 0 0; }
+.code pre {
+  margin: 0; padding: 14px 16px; padding-right: 72px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  overflow-x: auto; color: var(--ink-hi); line-height: 1.55; scrollbar-color: var(--line) transparent;
+}
+.code pre .c { color: var(--ink-dim); }
+.copy {
+  position: absolute; top: 8px; right: 8px; background: var(--raise); border: 1px solid var(--line); color: var(--ink-dim);
+  border-radius: 6px; padding: 3px 10px; font: 500 .75rem "Schibsted Grotesk", sans-serif; cursor: pointer;
+}
+.copy:hover { color: var(--ink-hi); border-color: var(--ink-dim); }
+
+/* --- install + dashboards --- */
+.install { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: clamp(24px, 4vw, 64px); margin-top: 28px; align-items: start; }
+.extras { width: 100%; border-collapse: collapse; font-size: .93rem; margin-top: 8px; }
+.extras th, .extras td { text-align: left; padding: 10px 8px 10px 0; border-top: 1px solid var(--line); vertical-align: top; }
+.extras th { color: var(--ink-hi); font-weight: 600; width: 34%; }
+@media (max-width: 860px) { .install { grid-template-columns: minmax(0, 1fr); } }
+.dash { margin-top: 28px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--line); }
+.dash a { display: block; padding: 22px 20px 22px 0; text-decoration: none; color: var(--ink); border-bottom: 1px solid var(--line); }
+.dash a + a { padding-left: 20px; border-left: 1px solid var(--line); }
+.dash a b { display: block; color: var(--ink-hi); font-size: 1.15rem; margin-bottom: 2px; }
+.dash a .mono { color: var(--accent-ink); display: block; margin-bottom: 8px; }
+.dash a span:last-child { color: var(--ink-dim); font-size: .93rem; }
+.dash a:hover b { color: var(--accent-ink); }
+@media (max-width: 860px) { .dash { grid-template-columns: 1fr; } .dash a + a { padding-left: 0; border-left: 0; } }
+
+footer { max-width: 1240px; margin: clamp(72px, 9vw, 120px) auto 0; padding: 24px 0 40px; border-top: 1px solid var(--line); display: flex; gap: 24px; flex-wrap: wrap; color: var(--ink-dim); font-size: .9rem; }
+footer .credit { margin-left: auto; }
+footer .credit a { color: var(--ink-dim); text-decoration: none; }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
+      <path d="M12 3 21 8l-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5"/><path d="m3 16 9 5 9-5" stroke="var(--accent)"/>
+    </svg>
+    Marina
+  </div>
+  <nav aria-label="Sections">
+    <a href="#stack">Layers</a><a href="#words">The words</a><a href="#run">A Run</a><a href="#agent">Your agent</a><a href="#install">Install</a><a href="#dashboards">Dashboards</a>
+  </nav>
+  <button class="theme" id="theme" type="button">Light</button>
+</header>
+
+<main>
+<section class="hero" id="stack">
+  <div class="hero-intro">
+    <h1>Run AI agents on Kubernetes, safely and on a budget.</h1>
+    <p class="lede">Marina is the control layer. You hand it work; it runs agents in locked sandboxes, keeps them inside time, token and cost limits, and accepts a result only with proof. Open-source projects do the rest, one job each. Click a layer to see what is inside.</p>
+  </div>
+
+  <div class="stage" id="stage">
+    <canvas id="gl" aria-label="Isometric drawing of Marina's layers. Use the layer list to explore them; drag to turn the stack." role="img"></canvas>
+    <div class="tags" id="tags"></div>
+    <div class="caption" id="caption" aria-live="polite"></div>
+    <div class="stage-ui">
+      <button class="btn" id="trace" type="button">
+        <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4 2.5v11l9-5.5-9-5.5Z"/></svg>
+        Follow a request
+      </button>
+      <button class="btn ghost" id="explode" type="button" aria-pressed="false">Spread layers</button>
+      <span class="readout" id="readout">drag to turn</span>
+    </div>
+    <div class="nogl"><p>The 3D view needs an internet connection once, to load three.js.<br>The layer list on the right works without it.</p></div>
+  </div>
+
+  <aside class="panel" aria-label="Layer details">
+    <div class="layers" id="layerlist" role="group" aria-label="Layers"></div>
+    <div class="detail" id="detail" aria-live="polite"></div>
+  </aside>
+</section>
+
+<section id="words">
+  <h2>Five words to know</h2>
+  <p class="lede">Marina's API is Kubernetes-native: these are resources you <code>kubectl apply</code>, or the same objects over HTTPS. Click one.</p>
+  <div class="words">
+    <svg class="wd" id="wd" viewBox="0 0 520 300" role="img" aria-label="How Project, Workload, Turn, Run and Decision relate">
+      <path class="wire" d="M130 70 H200"/><path class="wire" d="M330 70 H360 V40 H390"/><path class="wire" d="M330 70 H360 V170 H390"/>
+      <path class="wire" d="M455 196 V240 H330"/>
+      <g data-w="project"><rect class="box" x="10" y="40" width="120" height="60" rx="8"/><text x="24" y="68">Project</text><text class="s" x="24" y="86">one repository</text></g>
+      <g data-w="workload"><rect class="box" x="200" y="40" width="130" height="60" rx="8"/><text x="214" y="68">Workload</text><text class="s" x="214" y="86">model, limits, rules</text></g>
+      <g data-w="turn"><rect class="box" x="390" y="12" width="120" height="56" rx="8"/><text x="404" y="38">Turn</text><text class="s" x="404" y="55">one chat answer</text></g>
+      <g data-w="run"><rect class="box" x="390" y="142" width="120" height="56" rx="8"/><text x="404" y="168">Run</text><text class="s" x="404" y="185">one code change</text></g>
+      <g data-w="decision"><rect class="box" x="200" y="212" width="130" height="56" rx="8"/><text x="214" y="238">Decision</text><text class="s" x="214" y="255">a human answers</text></g>
+    </svg>
+    <div class="defs" id="defs">
+      <button data-w="project" type="button"><b>Project</b><span>One product, bound to one GitHub repository and a base branch. The token stays in a Kubernetes Secret.</span></button>
+      <button data-w="workload" type="button"><b>Workload</b><span>A kind of work in a Project: <code>chat</code> or <code>change</code>. Sets the model, the limits, the checks and the folders agents may touch.</span></button>
+      <button data-w="turn" type="button"><b>Turn</b><span>One question and its answer. Has its own budget: minutes and tokens.</span></button>
+      <button data-w="run" type="button"><b>Run</b><span>One code change from plan to pull request. Budget in minutes, tokens, attempts and cost.</span></button>
+      <button data-w="decision" type="button"><b>Decision</b><span>Marina stops and asks a human, for example to approve a Run's plan. Answer it or cancel the Run.</span></button>
+    </div>
+  </div>
+</section>
+
+<section id="run">
+  <h2>The life of a Run</h2>
+  <p class="lede">An agent never decides it is done. Every step leaves evidence, and a second model reviews the work before any check runs.</p>
+  <div class="timeline" id="timeline">
+    <div class="step"><span class="who">Marina</span><h3>Plan</h3><p>Pins the base commit and writes a plan from the task.</p></div>
+    <div class="step"><span class="who">You</span><h3>Approve</h3><p>A Decision asks you to approve the plan. Nothing changes until you do.</p></div>
+    <div class="step"><span class="who">Codex in a sandbox</span><h3>Implement</h3><p>Changes only the allowed folders, inside gVisor, without any key.</p></div>
+    <div class="step"><span class="who">A second model</span><h3>Review</h3><p>An independent reviewer reads the change and can send it back.</p></div>
+    <div class="step"><span class="who">Clean Job</span><h3>Check</h3><p>Your checks, for example <code>npm test</code>, run in a fresh container.</p></div>
+    <div class="step"><span class="who">GitHub</span><h3>Pull request</h3><p>Opens a PR, or lands on main if the Workload says so. Marina never deploys.</p></div>
+  </div>
+</section>
+
+<section id="agent">
+  <h2>Deploy your own agent</h2>
+  <p class="lede">Any container that speaks A2A on port 80 is an agent. It runs in the same gVisor sandbox as Marina's own agents and never holds a model key.</p>
+  <div class="agent">
+    <ol>
+      <li><h3>Write it</h3><p><a href="../deploy/kubernetes/marina-local/examples/hello-agent">examples/hello-agent</a> is 100 lines of Go: it reads its model settings from kagent and makes one call per message.</p></li>
+      <li><h3>Build and push</h3>
+        <div class="code"><pre>cd deploy/kubernetes/marina-local/examples/hello-agent
+podman build -t localhost/hello-agent:v1 .
+podman push --tls-verify=false localhost/hello-agent:v1 \
+  localhost:5001/hello-agent:v1</pre><button class="copy" type="button">Copy</button></div></li>
+      <li><h3>Register it</h3><p>Two kagent objects in <a href="../deploy/kubernetes/marina-local/examples/hello-agent/agent.yaml">agent.yaml</a>: a <b>Harness</b> (which image) and an <b>AgentTemplate</b> (model and instructions). Apply with <code>kubectl</code>; the image must be pinned by digest.</p></li>
+      <li><h3>Talk to it</h3><p>In the kagent UI at <a href="https://kagent.localhost:9443">kagent.localhost:9443</a>, or with the <code>kagent</code> CLI. <code>verify</code> does all four steps for you.</p></li>
+    </ol>
+    <figure class="keyswap" style="margin:0">
+      <svg class="ks" id="ks" viewBox="0 0 460 300" role="img" aria-label="The agent sends a placeholder key; the egress proxy swaps in the real key from a Secret">
+        <rect class="box" x="10" y="40" width="150" height="120" rx="10" stroke-dasharray="4 3"/>
+        <text x="24" y="64">gVisor sandbox</text>
+        <rect class="box" x="26" y="82" width="118" height="56" rx="8"/><text x="40" y="106">your agent</text><text class="k" x="40" y="124">key: placeholder</text>
+        <path class="wire" id="ks-w1" d="M144 110 H220"/>
+        <rect class="box" x="220" y="80" width="110" height="60" rx="8"/><text x="234" y="104">egress proxy</text><text class="s" x="234" y="122">swaps the key</text>
+        <path class="wire" d="M275 140 V200"/>
+        <rect class="box" x="210" y="200" width="130" height="56" rx="8"/><text x="224" y="224">Secret</text><text class="s" x="224" y="242">named by ModelConfig</text>
+        <path class="wire" id="ks-w2" d="M330 110 H370"/>
+        <rect class="box" x="370" y="80" width="80" height="60" rx="8"/><text x="384" y="104">model</text><text class="k" x="384" y="122">real key</text>
+        <circle class="dot" id="ks-dot" r="4" cx="144" cy="110" opacity="0"/>
+      </svg>
+      <figcaption class="dim" style="font-size:.9rem;margin-top:8px">The sandbox can reach only the egress proxy. The proxy can reach only Marina, the fake model and agentgateway.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section id="install">
+  <h2>Install on your Mac</h2>
+  <p class="lede">An Apple silicon Mac with Podman (8 GB, rootful), plus <code>kind</code>, <code>kubectl</code>, <code>helm</code>, <code>openssl</code>, <code>ruby</code> and <code>python3</code>. One command installs everything; a second proves it works.</p>
+  <div class="install">
+    <div>
+      <div class="code"><pre><span class="c"># once</span>
+podman machine init --cpus 6 --memory 8192 --disk-size 100 --rootful
+podman machine start
+
+<span class="c"># 10 to 20 min the first time, about 5 after</span>
+python3 scripts/marina-local.py up
+
+<span class="c"># about 1 min, every line says PASS</span>
+python3 scripts/marina-local.py verify</pre><button class="copy" type="button">Copy</button></div>
+      <p class="dim" style="margin-top:14px;font-size:.93rem">Remove it with <code>python3 scripts/marina-local.py down</code>. Your keys and CA stay in <code>~/.local/share/the-platform/clusters/marina</code>.</p>
+    </div>
+    <div>
+      <h3>Without keys you get the fake model. Add when you want:</h3>
+      <table class="extras">
+        <tr><th>Real answers</th><td><code>--model-key-file ~/.openrouter-key</code><br><span class="dim">OpenRouter, through agentgateway</span></td></tr>
+        <tr><th>Agents that change code</th><td><code>--github-repo you/repo --github-token-file ~/.github-token --check "npm test" --allowed-path src</code></td></tr>
+        <tr><th>Docker instead of Podman</th><td><code>--provider docker</code><br><span class="dim">supported, not yet tested</span></td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section id="dashboards">
+  <h2>Dashboards</h2>
+  <p class="lede">Trust the local CA once, then open these in your browser.</p>
+  <div class="code"><pre>security add-trusted-cert -r trustRoot -p ssl -k ~/Library/Keychains/login.keychain-db \
+  ~/.local/share/the-platform/clusters/marina/ca.crt</pre><button class="copy" type="button">Copy</button></div>
+  <div class="dash">
+    <a href="https://kagent.localhost:9443"><b>kagent</b><span class="mono">kagent.localhost:9443</span><span>Your agents. Chat with them, see their sessions.</span></a>
+    <a href="https://jaeger.localhost:9443"><b>Jaeger</b><span class="mono">jaeger.localhost:9443</span><span>Traces of every request through Marina and the model gateway.</span></a>
+    <a href="https://marina.localhost:9443/readyz"><b>Marina API</b><span class="mono">marina.localhost:9443</span><span>JSON only. Use a token from <code>kubectl -n demo create token operator</code>, or <code>kubectl --context kind-marina get turns,runs -A</code>.</span></a>
+  </div>
+</section>
+
+<footer>
+  <a href="MARINA.md">Marina in plain words</a>
+  <a href="../deploy/kubernetes/marina-local/README.md">Full install guide</a>
+  <a href="status.md">What works today</a>
+  <span class="credit"><a href="https://iso-glow.vercel.app">Made with ISO-GLOW ↗</a></span>
+</footer>
+</main>
+
+<script>
+// Content: the layers, top to bottom, and the two pillars beside the stack.
+window.LAYERS = [
+  { id: 'entry', name: 'Entry', ns: 'platform-ingress', role: 'the front door',
+    text: 'Every web page and the API come in through one HTTPS address on your Mac, 127.0.0.1:9443. Nothing is open to your network.',
+    projects: [['kgateway', 'Gateway API ingress', 'Routes marina, kagent and jaeger.localhost to their services and checks TLS to Marina with the private CA.']] },
+  { id: 'control', name: 'Control', ns: 'marina-system', role: 'decides what runs',
+    text: 'Marina is the platform API, marina.dev/v1. It accepts work, holds the budget, leases each attempt and records every event and piece of evidence in its own journal. It survives restarts without doing work twice.',
+    projects: [['Marina', 'platform API + journal', 'Projects, Workloads, Runs, Turns and Decisions. Talks to Kubernetes with your identity (TokenReview, SubjectAccessReview). Calls no client.'],
+               ['Marina gateway', 'per-call credentials', 'Each agent call carries a short-lived credential for one Turn or attempt. Marina counts the tokens and stops at the budget.']] },
+  { id: 'agents', name: 'Agents', ns: 'kint-engine', role: 'runs the agents',
+    text: 'kagent turns an image into a running agent. Marina uses it for its own agents; you use it for yours. Same engine, same rules.',
+    projects: [['kagent', 'agent engine + UI', 'A Harness says which image to run, an AgentTemplate says which model and instructions. Prepares a snapshot once, then starts fast.'],
+               ['Marina’s agents', 'chat + Codex', 'The chat agent answers Turns. Codex implements Runs. Both are pinned images in the local registry.'],
+               ['Your agents', 'any A2A container', 'Port 80, A2A protocol. See the example below.']] },
+  { id: 'sandboxes', name: 'Sandboxes', ns: 'ate-system', role: 'isolates every agent',
+    text: 'Each agent runs inside gVisor, a user-space kernel, so it never touches the node. Its only way out is the egress proxy.',
+    projects: [['Agent Substrate', 'gVisor sandboxes', 'atelet on the node starts sandboxes and snapshots them. A small S3 store (rustfs) keeps the snapshots.'],
+               ['Egress proxy', 'adds the keys', 'Agents send a placeholder; the proxy puts in the real credential and only reaches allowed services.']] },
+  { id: 'models', name: 'Models', ns: 'platform-gateway', role: 'the only place a key lives',
+    text: 'All model calls go through a gateway that holds the provider key. Without a key you get a fake model, so everything still works.',
+    projects: [['agentgateway', 'OpenAI Responses API', 'Holds the OpenRouter key. Separate client keys for Marina and for your own agents. Sends traces.'],
+               ['Fake model', 'fixed answers', 'Replies instantly with a fixed text. Used by verify and whenever no key is given.'],
+               ['OpenRouter', 'outside, optional', 'The real models, for example openai/gpt-5-mini.']] },
+  { id: 'base', name: 'Base', ns: 'kind · podman', role: 'Kubernetes on your Mac',
+    text: 'A one-node Kubernetes cluster inside a container, plus a registry for images you build. Created and removed by one script.',
+    projects: [['Kind', 'Kubernetes 1.37', 'The node runs as a Podman (or Docker) container named marina-control-plane.'],
+               ['Local registry', 'localhost:5001', 'Images you build are pushed here; the node and the sandboxes pull them without the internet.']] },
+];
+window.PILLARS = [
+  { id: 'guard', name: 'Guardrails', ns: 'kyverno · calico', role: 'rules for every layer', side: 'left',
+    text: 'Two projects watch every layer: one refuses unsafe workloads, the other lets each part talk only to what it needs.',
+    projects: [['Kyverno', 'admission policy', 'Refuses images without a digest, privileged Pods, Pods without memory limits or without a NetworkPolicy.'],
+               ['Calico', 'network policy', 'Enforces every NetworkPolicy. The default is closed; each path is opened on purpose.']] },
+  { id: 'insight', name: 'Insight', ns: 'platform-observability', role: 'see what happened', side: 'right',
+    text: 'Traces from Marina and agentgateway, so you can follow one request from the API to the model and back.',
+    projects: [['OpenTelemetry Collector', 'collects', 'Receives traces over OTLP from Marina and agentgateway.'],
+               ['Jaeger', 'shows', 'Search and view traces at jaeger.localhost:9443.']] },
+];
+window.TRACE = [
+  ['entry', 'You', 'You create a Turn with kubectl, or send it over HTTPS through kgateway.'],
+  ['control', 'Marina', 'Marina checks your permission, reserves the budget and records the Turn in its journal.'],
+  ['agents', 'kagent', 'Marina asks kagent for its chat agent, prepared from a pinned image.'],
+  ['sandboxes', 'Agent Substrate', 'The agent starts inside a gVisor sandbox. It holds no key.'],
+  ['models', 'agentgateway', 'Its model call leaves through the egress proxy, past Marina’s budget check, to agentgateway, which adds the real key.'],
+  ['control', 'Marina', 'The answer comes back. Marina records the tokens used and marks the Turn Succeeded.'],
+  ['insight', 'Jaeger', 'Every hop left a trace you can open in Jaeger.'],
+];
+</script>
+
+<script>
+// Page behaviour that does not need three.js: layer list, details, words, timeline, copy, theme.
+(() => {
+  const all = [...LAYERS, ...PILLARS];
+  const list = document.getElementById('layerlist'), detail = document.getElementById('detail');
+  const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+  const order = [LAYERS[0], ...LAYERS.slice(1, 5), PILLARS[0], PILLARS[1], LAYERS[5]];
+  for (const l of order) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.dataset.id = l.id; b.setAttribute('aria-pressed', 'false');
+    b.innerHTML = `${esc(l.name)} <span>${esc(l.ns)}</span>`;
+    b.addEventListener('click', () => window.select(l.id));
+    list.append(b);
+  }
+  const listeners = [];
+  window.onSelect = fn => listeners.push(fn);
+  window.selected = null;
+  window.select = id => {
+    const l = all.find(x => x.id === id); if (!l) return;
+    window.selected = id;
+    for (const b of document.querySelectorAll('[data-id]')) b.setAttribute('aria-pressed', String(b.dataset.id === id));
+    detail.innerHTML = `<h2>${esc(l.name)}</h2><span class="role">${esc(l.role)} · ${esc(l.ns)}</span><p>${esc(l.text)}</p>` +
+      l.projects.map(([n, w, t]) => `<div class="proj"><h3>${esc(n)} <span>${esc(w)}</span></h3><p>${esc(t)}</p></div>`).join('');
+    detail.classList.remove('detail-enter'); void detail.offsetWidth; detail.classList.add('detail-enter');
+    listeners.forEach(fn => fn(id));
+  };
+  window.select('control');
+
+  // Five words: diagram and definitions light together.
+  const words = id => document.querySelectorAll('[data-w]').forEach(e => e.classList.toggle('on', e.dataset.w === id));
+  document.querySelectorAll('[data-w]').forEach(e => {
+    e.addEventListener('click', () => words(e.dataset.w));
+    e.addEventListener('mouseenter', () => words(e.dataset.w));
+  });
+  words('turn');
+
+  // Timeline: steps light one by one when it scrolls into view.
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const steps = [...document.querySelectorAll('.step')];
+  new IntersectionObserver((entries, obs) => {
+    if (!entries.some(e => e.isIntersecting)) return;
+    obs.disconnect();
+    steps.forEach((s, i) => setTimeout(() => s.classList.add('lit'), reduce ? 0 : 250 + i * 380));
+  }, { threshold: .5 }).observe(document.getElementById('timeline'));
+
+  // Key swap: a dot travels from the agent to the model.
+  const dot = document.getElementById('ks-dot');
+  const ksPath = [[144, 110], [220, 110], [330, 110], [370, 110]];
+  let ksT0 = null;
+  function ks(now) {
+    if (ksT0 === null) ksT0 = now;
+    const t = ((now - ksT0) % 3200) / 3200, x = 144 + (370 - 144) * Math.min(1, t / .8);
+    dot.setAttribute('cx', x); dot.setAttribute('opacity', t < .85 ? 1 : 0);
+    document.getElementById('ks-w1').classList.toggle('hot', x < 220);
+    document.getElementById('ks-w2').classList.toggle('hot', x >= 330);
+    requestAnimationFrame(ks);
+  }
+  if (!reduce) requestAnimationFrame(ks);
+
+  // Copy buttons.
+  document.querySelectorAll('.copy').forEach(b => b.addEventListener('click', async () => {
+    const text = b.previousElementSibling.textContent.split('\n').filter(l => !l.startsWith('#')).join('\n').trim();
+    try { await navigator.clipboard.writeText(text); b.textContent = 'Copied'; }
+    catch { b.textContent = 'Select and copy'; }
+    setTimeout(() => (b.textContent = 'Copy'), 1600);
+  }));
+
+  // Theme: follows the system until you choose; the choice is remembered.
+  const root = document.documentElement, btn = document.getElementById('theme');
+  const isDark = () => root.dataset.theme ? root.dataset.theme === 'dark' : !matchMedia('(prefers-color-scheme: light)').matches;
+  try { const saved = localStorage.getItem('marina-theme'); if (saved) root.dataset.theme = saved; } catch {}
+  const label = () => (btn.textContent = isDark() ? 'Light' : 'Dark');
+  btn.addEventListener('click', () => {
+    root.dataset.theme = isDark() ? 'light' : 'dark';
+    try { localStorage.setItem('marina-theme', root.dataset.theme); } catch {}
+    label(); window.dispatchEvent(new Event('themechange'));
+  });
+  matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => { label(); window.dispatchEvent(new Event('themechange')); });
+  label();
+})();
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+
+const stage = document.getElementById('stage'), canvas = document.getElementById('gl'), tags = document.getElementById('tags');
+const caption = document.getElementById('caption'), readout = document.getElementById('readout');
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+let renderer;
+try { renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true }); }
+catch { stage.classList.add('failed'); throw new Error('WebGL unavailable'); }
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+
+const scene = new THREE.Scene();
+const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 100);
+const root = new THREE.Group(); scene.add(root);
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const colors = () => ({ body: new THREE.Color(css('--body3d')), line: new THREE.Color(css('--line3d')),
+  detail: new THREE.Color(css('--detail3d')), accent: new THREE.Color(css('--accent')), glow: +css('--glow') });
+let C = colors();
+
+// Geometry: six slabs, two pillars, one wire down the front corner.
+const W = 6, H = 0.52, GAP = 0.5, SPREAD = 0.95;
+const parts = new Map();
+let spread = 0, spreadTarget = 0;
+const yOf = (i, s) => (LAYERS.length - 1 - i) * (H + GAP + s * SPREAD);
+
+function slab(def, w, d, h, plain = false) {
+  const g = new THREE.Group();
+  const bodyMat = new THREE.MeshBasicMaterial({ color: C.body, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
+  const topMat = new THREE.MeshBasicMaterial({ color: C.body, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
+  const box = new THREE.BoxGeometry(w, h, d);
+  const mesh = new THREE.Mesh(box, [bodyMat, bodyMat, topMat, bodyMat, bodyMat, bodyMat]);
+  mesh.userData.id = def.id; g.add(mesh);
+  const edgeMat = new THREE.LineBasicMaterial({ color: C.line });
+  g.add(new THREE.LineSegments(new THREE.EdgesGeometry(box), edgeMat));
+  // texture by repetition: slits on the left face, a row of lights on the right face
+  const slits = [], detailMat = new THREE.LineBasicMaterial({ color: C.detail });
+  if (!plain) for (let x = -w / 2 + 0.3; x < w / 2 - 0.2; x += 0.22) slits.push(x, -h * 0.28, d / 2 + 0.001, x, h * 0.28, d / 2 + 0.001);
+  const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.Float32BufferAttribute(slits, 3));
+  g.add(new THREE.LineSegments(sg, detailMat));
+  const ledMat = new THREE.MeshBasicMaterial({ color: C.detail });
+  const leds = [];
+  if (!plain) for (let k = 0; k < 5; k++) {
+    const led = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.1), ledMat);
+    led.position.set(w / 2 + 0.002, 0, d / 2 - 0.5 - k * 0.32); led.rotation.y = Math.PI / 2; g.add(led); leds.push(led);
+  }
+  const part = { def, g, mesh, bodyMat, topMat, edgeMat, detailMat, ledMat, lift: 0, liftTarget: 0, heat: 0, heatTarget: 0, w, d, h };
+  parts.set(def.id, part); root.add(g);
+  return part;
+}
+LAYERS.forEach((l, i) => slab(l, W, W, H));
+const stackTop = () => yOf(0, spread) + H / 2;
+const pillarH = () => stackTop() + H / 2 + 0.4;
+const pillarPos = { guard: [-5.6, 0], insight: [0, -5.6] };
+PILLARS.forEach(p => slab(p, 0.9, 0.9, 1, true));
+
+// The wire: a hairline down the front corner, with a travelling light.
+const wireMat = new THREE.LineBasicMaterial({ color: C.line });
+const wireGeo = new THREE.BufferGeometry();
+const wire = new THREE.Line(wireGeo, wireMat); root.add(wire);
+const glowTex = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d');
+  const gr = x.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, '#fff'); gr.addColorStop(.25, 'rgba(255,255,255,.55)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  x.fillStyle = gr; x.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c);
+})();
+const pulse = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: C.accent, transparent: true, depthTest: false, blending: THREE.AdditiveBlending }));
+pulse.scale.setScalar(1.1); pulse.visible = false; root.add(pulse);
+const core = new THREE.Mesh(new THREE.SphereGeometry(0.09, 16, 12), new THREE.MeshBasicMaterial({ color: C.accent, depthTest: false }));
+core.visible = false; core.renderOrder = 2; root.add(core);
+const corner = new THREE.Vector3(W / 2 + 0.35, 0, W / 2 + 0.35);
+
+function layout() {
+  LAYERS.forEach((l, i) => { const p = parts.get(l.id); p.g.position.set(0, yOf(i, spread) + p.lift, 0); });
+  const ph = pillarH();
+  PILLARS.forEach(pd => {
+    const p = parts.get(pd.id), [x, z] = pillarPos[pd.id];
+    p.g.scale.set(1, ph, 1); p.g.position.set(x, ph / 2 - H / 2 + p.lift, z);
+  });
+  const top = stackTop() + 0.3, bottom = -H / 2;
+  wireGeo.setFromPoints([new THREE.Vector3(corner.x, top, corner.z), new THREE.Vector3(corner.x, bottom, corner.z),
+]);
+}
+
+// Labels: HTML buttons pinned to each part, so text stays crisp and clickable.
+const tagEls = new Map();
+for (const def of [...LAYERS, ...PILLARS]) {
+  const b = document.createElement('button'); b.type = 'button'; b.className = 'tag' + (def.side ? ' above' : '');
+  b.dataset.id = def.id; b.setAttribute('aria-pressed', 'false'); b.tabIndex = -1;
+  b.innerHTML = `${def.name}<small>${(def.side ? def.projects.map(p => p[0]).join(' · ') : def.projects[0][0])}</small>`;
+  b.addEventListener('click', () => window.select(def.id));
+  b.addEventListener('mouseenter', () => (hover = def.id)); b.addEventListener('mouseleave', () => (hover = null));
+  tags.append(b); tagEls.set(def.id, b);
+}
+const v = new THREE.Vector3();
+function placeTags() {
+  const r = canvas.getBoundingClientRect(), at = new Map();
+  for (const [id] of tagEls) {
+    const p = parts.get(id);
+    v.set(0, 0.5, 0);
+    if (!p.def.side) v.set(W / 2, 0, -W / 2);
+    p.g.localToWorld(v); v.project(camera);
+    at.set(id, [(v.x + 1) / 2 * r.width, (1 - v.y) / 2 * r.height]);
+  }
+  // Layer labels share one column right of the stack; leader lines reach back to each corner.
+  const column = Math.max(...LAYERS.map(l => at.get(l.id)[0])) + 16;
+  for (const [id, el] of tagEls) {
+    const [x, y] = at.get(id);
+    el.style.left = x + 'px'; el.style.top = y + 'px';
+    if (!parts.get(id).def.side) el.style.setProperty('--lead', Math.max(20, column - x) + 'px');
+  }
+}
+
+// Camera: true isometric, fitted to the stage.
+let yaw = 0, yawTarget = 0;
+function fit() {
+  const r = stage.getBoundingClientRect(); renderer.setSize(r.width, r.height, false);
+  const aspect = r.width / r.height, narrow = r.width < 560;
+  view.aspect = aspect; view.base = narrow ? 7.4 : 6.1;
+  root.position.x = narrow ? -0.6 : -1.1; root.position.z = narrow ? 0.6 : 1.1;
+  aim();
+}
+const view = { aspect: 1, base: 6.1 };
+function aim() {
+  const half = view.base + spread * 1.6, cy = 3 + spread * 2.3;
+  camera.left = -half * view.aspect; camera.right = half * view.aspect; camera.top = half; camera.bottom = -half;
+  camera.position.set(20, 20 + cy, 20); camera.lookAt(0, cy, 0);
+  camera.updateProjectionMatrix();
+}
+new ResizeObserver(fit).observe(stage); fit();
+
+// Interaction: hover, click, drag to turn.
+const ray = new THREE.Raycaster(), mouse = new THREE.Vector2();
+let hover = null, drag = null;
+const pick = e => {
+  const r = canvas.getBoundingClientRect();
+  mouse.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+  ray.setFromCamera(mouse, camera);
+  const hit = ray.intersectObjects([...parts.values()].map(p => p.mesh))[0];
+  return hit ? hit.object.userData.id : null;
+};
+canvas.addEventListener('pointermove', e => {
+  if (drag) { yawTarget = Math.max(-0.7, Math.min(0.7, drag.yaw + (e.clientX - drag.x) * 0.006)); drag.moved = Math.abs(e.clientX - drag.x) > 4; return; }
+  hover = pick(e);
+});
+canvas.addEventListener('pointerleave', () => (hover = null));
+canvas.addEventListener('pointerdown', e => { drag = { x: e.clientX, yaw: yawTarget, moved: false }; canvas.setPointerCapture(e.pointerId); });
+canvas.addEventListener('pointerup', e => { const d = drag; drag = null; if (d && !d.moved) { const id = pick(e); if (id) window.select(id); } });
+
+window.onSelect(id => {
+  for (const [pid, p] of parts) p.liftTarget = pid === id && LAYERS.some(l => l.id === pid) ? 0.28 : 0;
+  for (const [pid, el] of tagEls) el.setAttribute('aria-pressed', String(pid === id));
+});
+window.select(window.selected);
+
+const explode = document.getElementById('explode');
+explode.addEventListener('click', () => {
+  spreadTarget = spreadTarget ? 0 : 1; explode.setAttribute('aria-pressed', String(!!spreadTarget));
+  explode.textContent = spreadTarget ? 'Stack layers' : 'Spread layers';
+});
+
+// Follow a request: the light travels down the wire, lighting each layer in turn.
+const traceBtn = document.getElementById('trace');
+let trace = null;
+function layerY(id) {
+  const p = parts.get(id); return p.g.position.y;
+}
+traceBtn.addEventListener('click', () => {
+  if (trace) return;
+  trace = { i: -1, t0: 0 }; traceBtn.disabled = true; stage.classList.add('tracing'); next();
+});
+function next() {
+  trace.i++;
+  if (trace.i >= TRACE.length) {
+    setTimeout(() => {
+      trace = null; traceBtn.disabled = false; caption.classList.remove('on'); stage.classList.remove('tracing'); pulse.visible = core.visible = false;
+      readout.textContent = 'drag to turn';
+    }, reduce ? 400 : 2600);
+    return;
+  }
+  const [id, who, text] = TRACE[trace.i];
+  trace.id = id; trace.from = core.visible ? core.position.clone() : new THREE.Vector3(corner.x, stackTop() + 0.6, corner.z);
+  trace.to = id === 'insight' ? new THREE.Vector3(0, pillarH() * 0.6, -5.6) : new THREE.Vector3(corner.x, layerY(id), corner.z);
+  trace.via = [];
+  trace.t0 = performance.now();
+  caption.innerHTML = `<b>${trace.i + 1} / ${TRACE.length} · ${who}</b>${text}`; caption.classList.add('on');
+  readout.textContent = `step ${trace.i + 1} of ${TRACE.length}`;
+  window.select(id);
+  setTimeout(next, reduce ? 1800 : 2300);
+}
+const ease = t => 1 - Math.pow(1 - t, 4);
+function tracePos(now) {
+  if (!trace || !trace.to) return;
+  const t = reduce ? 1 : ease(Math.min(1, (now - trace.t0) / 900));
+  const pts = [trace.from, ...trace.via, trace.to];
+  const seg = pts.length - 1, f = t * seg, k = Math.min(seg - 1, Math.floor(f));
+  core.position.lerpVectors(pts[k], pts[k + 1], f - k); pulse.position.copy(core.position);
+  core.visible = true; pulse.visible = C.glow > 0;
+  pulse.material.opacity = 0.75 + 0.25 * Math.sin(now / 160);
+}
+
+// Theme changes repaint the drawing.
+function repaint() {
+  C = colors();
+  for (const p of parts.values()) { p.edgeMat.color.copy(C.line); p.detailMat.color.copy(C.detail); }
+  wireMat.color.copy(C.line); pulse.material.color.copy(C.accent); core.material.color.copy(C.accent);
+}
+window.addEventListener('themechange', repaint);
+
+const tmp = new THREE.Color();
+function frame(now) {
+  const k = reduce ? 1 : 0.12;
+  spread += (spreadTarget - spread) * k; yaw += (yawTarget - yaw) * k;
+  root.rotation.y = yaw;
+  for (const [id, p] of parts) {
+    p.lift += (p.liftTarget - p.lift) * k;
+    const live = id === window.selected || (trace && trace.id === id);
+    p.heatTarget = live ? 1 : id === hover ? 0.45 : 0;
+    p.heat += (p.heatTarget - p.heat) * (reduce ? 1 : 0.15);
+    p.edgeMat.color.copy(tmp.copy(C.line).lerp(C.accent, p.heat));
+    p.topMat.color.copy(tmp.copy(C.body).lerp(C.accent, p.heat * (C.glow ? 0.16 : 0.22)));
+    p.ledMat.color.copy(tmp.copy(C.detail).lerp(C.accent, p.heat > 0.6 ? 1 : 0));
+  }
+  canvas.style.cursor = drag ? 'grabbing' : hover ? 'pointer' : 'grab';
+  layout(); aim(); tracePos(now);
+  renderer.render(scene, camera); placeTags();
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+window.stackReady = true;
+</script>
+<script>
+// If three.js cannot load (offline), say so instead of showing an empty frame.
+setTimeout(() => { if (!window.stackReady) document.getElementById('stage').classList.add('failed'); }, 6000);
+</script>
+</body>
+</html>

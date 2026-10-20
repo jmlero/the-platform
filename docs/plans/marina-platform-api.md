@@ -3,7 +3,8 @@
 - Date: 2026-10-17
 - State: direction accepted in [decision 0033](../decisions/0033-marina-platform-api.md).
   MAR-02 to MAR-09 are built ([evidence](../validation/mar-01-09-2026-10-18.md));
-  MAR-01 waits for operator review; MAR-10 and MAR-11 are next.
+  MAR-01 waits for operator review. MAR-10 and MAR-11 are installed on local Kind
+  and wait for their landing proofs ([evidence](../validation/mar-10-11-2026-10-18.md)).
 - Related: [decision 0032](../decisions/0032-agent-and-application-platform.md),
   [platform components plan](platform-components.md)
 

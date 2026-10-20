@@ -15,7 +15,7 @@
 
 {#if workload || usage}
   <section aria-label="Workload execution" class="workload-details">
-    <strong>{workload === 'diagnostic-analysis/v1' ? 'Diagnostic analysis' : workload === 'repository/v1' ? 'Repository change' : 'Execution'}</strong>
+    <strong>{workload.startsWith('repository/') ? 'Repository change' : 'Execution'}</strong>
     {#if harness}<p>{harness}</p>{/if}
     {#if progress}<p>{progress.message}</p>{/if}
     {#if usage}

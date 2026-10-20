@@ -9,10 +9,8 @@ spec:
       containers:
         - name: marina
           env:
-            - {name: MARINA_DECK_URL, value: "https://deck.marina-system.svc:8080"}
             - {name: SSL_CERT_FILE, value: /run/service-ca/ca.crt}
             - {name: MARINA_CONFIG_FILE, value: /etc/marina/workflow.json}
-            - {name: MARINA_DECK_TOKEN_FILE, value: /run/marina-secrets/deck-token}
             - {name: MARINA_RECONCILE_INTERVAL, value: 3s}
             - {name: MARINA_RUN_LEASE, value: 120s}
             - {name: MARINA_LEASE_RENEW_BEFORE, value: 60s}

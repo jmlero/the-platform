@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -158,8 +159,14 @@ func (e *Engine) mirrorRuns(ctx context.Context) {
 		return
 	}
 	for _, item := range items {
-		if !item.Created && !e.createRun(ctx, item) {
-			continue
+		if !item.Created {
+			settled, err := e.settleUncreated(ctx, item)
+			if err != nil {
+				e.problem(item.ProjectID, "withdraw run "+item.Run.ID, err)
+			}
+			if settled || err != nil || !e.createRun(ctx, item) {
+				continue
+			}
 		}
 		if err := e.mirrorRun(ctx, item); err != nil {
 			e.problem(item.ProjectID, "mirror run "+item.Run.ID, err)
@@ -167,16 +174,91 @@ func (e *Engine) mirrorRuns(ctx context.Context) {
 	}
 }
 
+// settleUncreated handles a run Marina has not confirmed before creating it.
+// A run Deck already ended is never created. A cancel requested meanwhile is
+// sent to a Run Marina did commit, and otherwise ends the run in Deck alone.
+func (e *Engine) settleUncreated(ctx context.Context, item store.MarinaRun) (bool, error) {
+	if !active(item.Run.Status) {
+		return true, e.Store.MarkMarinaRunCreated(ctx, item.Run.ID)
+	}
+	cancel, err := e.pendingCancel(ctx, item.Run.ID)
+	if err != nil || cancel == nil {
+		return false, err
+	}
+	remote, err := e.Client.Run(ctx, item.Namespace, item.Run.ID)
+	if err != nil {
+		if gone, err := e.gone(ctx, err, item.Namespace, item.Spec); !gone {
+			return true, err
+		}
+		// Deck ends the run first, so a crash before the mark never creates it.
+		if err := e.Store.AcknowledgeCommand(ctx, mutation(item.Run, "cancel:"+cancel.ID), item.Run.ID, cancel.ID, "completed", "Cancelled before Marina received the run"); err != nil {
+			return true, err
+		}
+		return true, e.Store.MarkMarinaRunCreated(ctx, item.Run.ID)
+	}
+	if err := e.Store.MarkMarinaRunCreated(ctx, item.Run.ID); err != nil {
+		return true, err
+	}
+	return true, e.forwardCancel(ctx, item, remote)
+}
+
+// pendingCancel returns the cancel command not yet sent to Marina, if any.
+func (e *Engine) pendingCancel(ctx context.Context, runID string) (*domain.Command, error) {
+	commands, err := e.Store.ListCommands(ctx, runID, 0, 200)
+	if err != nil {
+		return nil, err
+	}
+	for i := range commands {
+		if commands[i].Type == domain.CommandCancel && commands[i].Status == "pending" {
+			return &commands[i], nil
+		}
+	}
+	return nil, nil
+}
+
+// forwardCancel sends a pending cancel to an unfinished Marina Run, for
+// example one requested while Marina had not confirmed the Run, and marks it
+// acknowledged so it is sent once. The idempotency key matches the operator
+// API's, so a cancel the API already sent is a replay.
+func (e *Engine) forwardCancel(ctx context.Context, item store.MarinaRun, remote Run) error {
+	switch remote.Status.Phase {
+	case "Succeeded", "Blocked", "Failed", "Cancelled":
+		return nil
+	}
+	cancel, err := e.pendingCancel(ctx, item.Run.ID)
+	if err != nil || cancel == nil {
+		return err
+	}
+	if err := e.Client.CancelRun(ctx, item.Namespace, item.Run.ID, "deck-cancel-"+item.Run.ID); err != nil {
+		return err
+	}
+	current, err := e.Store.GetRun(ctx, item.Run.ID)
+	if err != nil {
+		return err
+	}
+	return e.Store.AcknowledgeCommand(ctx, mutation(current, "cancel-sent:"+cancel.ID), current.ID, cancel.ID, "acknowledged", "Cancel sent to Marina")
+}
+
 func (e *Engine) mirrorRun(ctx context.Context, item store.MarinaRun) error {
 	remote, err := e.Client.Run(ctx, item.Namespace, item.Run.ID)
-	if IsNotFound(err) {
+	if err != nil {
+		if gone, err := e.gone(ctx, err, item.Namespace, item.Spec); !gone {
+			return err
+		}
 		return e.Store.FailRun(ctx, mutation(item.Run, "gone"), item.Run.ID, "The Marina run no longer exists")
 	}
-	if err != nil {
+	if err := e.forwardCancel(ctx, item, remote); err != nil {
 		return err
 	}
 	if err := e.mirrorEvents(ctx, item); err != nil {
 		return err
+	}
+	if usage := remote.Status.Usage; usage != nil {
+		// The shape matches the model.usage events the task view reads.
+		if err := e.Store.RecordMarinaUsage(ctx, item.Run.ID, map[string]any{"reported_tokens": usage.Tokens, "reported_cost_micros": usage.CostMinor * 10000,
+			"reserved_tokens": usage.ReservedTokens, "reserved_cost_micros": usage.ReservedCostMinor * 10000, "currency": usage.Currency}); err != nil {
+			return err
+		}
 	}
 	decisions := map[string]Decision{}
 	var order []string
@@ -280,7 +362,8 @@ func (e *Engine) step(ctx context.Context, item store.MarinaRun, local domain.Ru
 				return true, e.submitPlan(ctx, local, item, plan)
 			}
 		}
-		if len(remote.Status.Decisions) == 0 && pastPlanning(phase) {
+		// A clarification asked after planning is no plan approval.
+		if plan == nil && pastPlanning(phase) {
 			return true, e.submitPlan(ctx, local, item, nil)
 		}
 	case domain.RunWaitingDecision:
@@ -320,11 +403,10 @@ func (e *Engine) submitPlan(ctx context.Context, local domain.Run, item store.Ma
 		if details := strings.TrimSpace(plan.Spec.Details); details != "" {
 			input.Plan = details
 		}
+		// Marina owns the expiry: it refuses a late answer and reports the
+		// decision Expired. A Deck copy of the deadline could expire an answer
+		// Marina already accepted and leave the run waiting forever.
 		request = domain.DecisionRequest{ID: plan.Metadata.Name, Required: true, EvidenceSummary: bounded(plan.Spec.Details, 2000)}
-		if plan.Spec.ExpiresAt != "" {
-			expires := parseTime(plan.Spec.ExpiresAt)
-			request.ExpiresAt = &expires
-		}
 		key = "plan:" + plan.Metadata.Name
 	}
 	_, _, err := e.Store.SubmitPlanRevision(ctx, mutation(local, key), local.ID, input, request)
@@ -422,6 +504,11 @@ func (e *Engine) complete(ctx context.Context, item store.MarinaRun, local domai
 		return e.Store.BlockRun(ctx, mutation(local, "block"), local.ID, "Marina reported success without passed evidence")
 	}
 	summary := "Marina run " + local.ID + " succeeded"
+	if pr := remote.Status.PullRequest; pr != nil {
+		if parsed, err := url.Parse(pr.URL); err == nil && parsed.Scheme == "https" && parsed.Host != "" && !strings.ContainsAny(pr.URL, " \t\r\n") {
+			summary += " with pull request " + bounded(pr.URL, 1024)
+		}
+	}
 	if commit != "" {
 		task, err := e.Store.GetTask(ctx, local.TaskID)
 		if err != nil {

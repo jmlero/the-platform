@@ -1,6 +1,7 @@
 <script lang="ts">
   import { taskLabel } from '$lib/project-work';
   import WorkloadDetails from './WorkloadDetails.svelte';
+  import { evidenceDownloadURL } from '$lib/evidence';
   import TaskContextPanel from './TaskContextPanel.svelte';
   import { modal } from '$lib/dialog';
   import {
@@ -84,8 +85,6 @@
     finally { busy = false; }
   }
   $: resultURL = run?.result_summary.match(/https:\/\/[^\s)]+/)?.[0];
-  $: analysisWorkload = task.workload?.id === 'diagnostic-analysis/v1' || task.budget.authority.some((grant) => grant.startsWith('analysis.run.'));
-  $: analysisEvidence = detail.evidence.find((evidence) => evidence.run_id === run?.id && evidence.outcome === 'passed' && evidence.command === 'marina diagnostic-validator/v1');
   $: agent = agents.find((candidate) => candidate.id === (run?.agent_id ?? task.assigned_agent_id));
   $: pendingDecision = detail.decisions.find((decision) => decision.status === 'pending');
   $: progressEvent = detail.events.find(
@@ -304,7 +303,7 @@
           <div class="callout-title">
             <span class="callout-icon"><GitPullRequestArrow size={17} /></span>
             <div>
-              <span class="eyebrow">Agent is paused</span>
+              <span class="eyebrow">Waiting for your decision</span>
               <h2>{pendingDecision.question}</h2>
             </div>
           </div>
@@ -463,9 +462,7 @@
                     <CheckCircle2 size={15} />
                     {run.result_summary}
                   </div>
-                  {#if analysisWorkload && analysisEvidence}
-                    <a href={`/api/v1/operator/tasks/${encodeURIComponent(task.id)}/artifacts/${encodeURIComponent(analysisEvidence.artifact_digest)}`}>Download validated analysis</a>
-                  {:else if resultURL && !analysisWorkload}<a href={resultURL} target="_blank" rel="noopener noreferrer">Review pull request</a>{/if}
+                  {#if resultURL}<a href={resultURL} target="_blank" rel="noopener noreferrer">Review pull request</a>{/if}
                 {/if}
               </div>
             </section>
@@ -536,7 +533,7 @@
                 <div><dt>Artifact</dt><dd>{evidence.artifact_digest}</dd></div>
                 <div><dt>Source</dt><dd>{evidence.source_revision}</dd></div>
               </dl>
-              <a href={`/api/v1/operator/tasks/${encodeURIComponent(task.id)}/artifacts/${encodeURIComponent(evidence.artifact_digest)}`}>Download verification result</a>
+              {#if evidenceDownloadURL(task.id, evidence)}<a href={evidenceDownloadURL(task.id, evidence)}>Download verification result</a>{/if}
             </article>
           {/each}
           {#each detail.artifacts as artifact (artifact.id)}

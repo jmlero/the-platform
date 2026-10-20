@@ -22,11 +22,15 @@ class RenewalTest(unittest.TestCase):
             for name, value in preserved.items():
                 self.assertEqual(value, (installation / name).read_bytes(), name)
             for service in ("deck", "marina"):
+                certificate = str(installation / f"{service}.crt")
+                check = subprocess.run(["openssl", "verify", "-CAfile", str(installation / "ca.crt"), certificate],
+                                       capture_output=True, text=True)
+                self.assertEqual(check.returncode, 0, check.stderr)
+                # macOS LibreSSL has no -verify_hostname; read the names instead.
+                text = subprocess.run(["openssl", "x509", "-in", certificate, "-noout", "-text"],
+                                      capture_output=True, text=True, check=True).stdout
                 for hostname in ("localhost", f"{service}.marina-system.svc"):
-                    check = subprocess.run(["openssl", "verify", "-CAfile", str(installation / "ca.crt"),
-                                            "-verify_hostname", hostname, str(installation / f"{service}.crt")],
-                                           capture_output=True, text=True)
-                    self.assertEqual(check.returncode, 0, check.stderr)
+                    self.assertIn("DNS:" + hostname, text)
                 self.assertEqual((installation / f"{service}.key").stat().st_mode & 0o777, 0o600)
             self.assertNotIn((installation / "operator-token").read_text().strip(), result.stdout)
 

@@ -1,0 +1,124 @@
+# Local profile with Marina installed by its Helm chart (MAR-11). Deck, the
+# shared namespaces, Secrets, ConfigMaps, the Marina PVC and the CRDs stay here;
+# everything the chart owns is removed from this render. kubectl apply does not
+# prune, so the chart adopts those objects (see README.md).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../local-podman-kagent
+patches:
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata: {name: marina, namespace: marina-system}
+      $patch: delete
+  - patch: |-
+      apiVersion: v1
+      kind: Service
+      metadata: {name: marina, namespace: marina-system}
+      $patch: delete
+  - patch: |-
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata: {name: marina, namespace: marina-system}
+      $patch: delete
+  - patch: |-
+      apiVersion: v1
+      kind: ConfigMap
+      metadata: {name: marina-config, namespace: marina-system}
+      $patch: delete
+  - patch: |-
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRole
+      metadata: {name: marina-platform-controller}
+      $patch: delete
+  - patch: |-
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRole
+      metadata: {name: marina-viewer}
+      $patch: delete
+  - patch: |-
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRole
+      metadata: {name: marina-factory}
+      $patch: delete
+  - patch: |-
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRole
+      metadata: {name: marina-admin}
+      $patch: delete
+  - patch: |-
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRole
+      metadata: {name: marina-capabilities}
+      $patch: delete
+  - patch: |-
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      metadata: {name: marina-platform-controller}
+      $patch: delete
+  - patch: |-
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata: {name: marina-worker, namespace: marina-workers}
+      $patch: delete
+  - patch: |-
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: Role
+      metadata: {name: marina-job-controller, namespace: marina-workers}
+      $patch: delete
+  - patch: |-
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: RoleBinding
+      metadata: {name: marina-job-controller, namespace: marina-workers}
+      $patch: delete
+  - patch: |-
+      apiVersion: v1
+      kind: ResourceQuota
+      metadata: {name: marina-workers, namespace: marina-workers}
+      $patch: delete
+  - patch: |-
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata: {name: workers-gateway-only, namespace: marina-workers}
+      $patch: delete
+  - patch: |-
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata: {name: marina-gateway, namespace: marina-system}
+      $patch: delete
+  - patch: |-
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata: {name: marina-bootstrap-egress, namespace: marina-system}
+      $patch: delete
+  - patch: |-
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: Role
+      metadata: {name: marina-engine-templates, namespace: kint-engine}
+      $patch: delete
+  - patch: |-
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: RoleBinding
+      metadata: {name: marina-engine-templates, namespace: kint-engine}
+      $patch: delete
+  - patch: |-
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata: {name: kagent-from-marina, namespace: kint-engine}
+      $patch: delete
+  - patch: |-
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata: {name: kagent-egress-to-marina, namespace: ate-system}
+      $patch: delete
+  - patch: |-
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata: {name: marina-to-kagent, namespace: marina-system}
+      $patch: delete
+  - patch: |-
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata: {name: marina-from-kagent-egress, namespace: marina-system}
+      $patch: delete

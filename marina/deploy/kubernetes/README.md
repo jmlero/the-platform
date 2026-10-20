@@ -8,7 +8,7 @@ The base intentionally deploys:
 - a `ReadWriteOnce` persistent volume for the SQLite journal;
 - `Recreate` rollout semantics so two control-service writers cannot overlap;
 - a non-root, read-only container with all Linux capabilities dropped;
-- no Kubernetes API token, because the current control service does not need one;
+- no Kubernetes API token in this base; an installation that serves the platform API mounts one (see below);
 - liveness, readiness, and startup probes backed by Marina's HTTP endpoints;
 - bounded CPU, memory, and temporary storage.
 
@@ -20,13 +20,13 @@ Do not scale this base above one replica. Move the journal to PostgreSQL before 
 kustomize build deploy/kubernetes/base
 ```
 
-The rendered image defaults to `ghcr.io/jmlero/the-platform-marina:dev`. Set an immutable image tag or digest in an environment overlay before deployment. The base also assumes Deck is reachable as `http://deck:8080`; patch `MARINA_DECK_URL` when its Service has another name or lives outside the namespace.
+The rendered image defaults to `ghcr.io/jmlero/the-platform-marina:dev`. Set an immutable image tag or digest in an environment overlay before deployment.
 
-The base deliberately does not name or create a credential Secret. An environment overlay must mount the selected Secret as a read-only file, set `MARINA_DECK_TOKEN_FILE` to that path, and configure TLS or an authenticated encrypted service mesh for non-loopback traffic. Deck receives only the matching SHA-256 fingerprint through its separate authorization policy. Keep the stable identity and its explicit project/capability grants unchanged when rotating the Secret. See [service-authentication decision 0003](../../../docs/decisions/0003-service-authentication.md).
+Marina calls no client. With a workflow configuration it serves the `marina.dev/v1` platform API and needs its service account token and the CRDs and RBAC from [`deploy/kubernetes/platform/marina-api`](../../../deploy/kubernetes/platform/marina-api); clients present their own Kubernetes tokens ([decision 0033](../../../docs/decisions/0033-marina-platform-api.md)). Configure TLS for non-loopback traffic.
 
 ## Deploy
 
-After publishing the image and selecting a cluster, storage class, namespace, and Deck endpoint:
+After publishing the image and selecting a cluster, storage class and namespace:
 
 ```bash
 kubectl apply -k deploy/kubernetes/base
@@ -37,8 +37,8 @@ The first always-on cluster location remains an explicit product decision. These
 
 ## Storage and recovery
 
-The journal and SQLite WAL files live under `/data`. The cluster's persistent-volume backup and restore mechanism must capture that volume consistently. During this single-replica phase, use a volume snapshot supported by the chosen storage system or stop Marina before copying the database files. A restored control service will reconstruct recovery intents and verify the exact Deck runs before renewing any lease.
+The journal and SQLite WAL files live under `/data`. The cluster's persistent-volume backup and restore mechanism must capture that volume consistently. During this single-replica phase, use a volume snapshot supported by the chosen storage system or stop Marina before copying the database files. A restored control service reconstructs recovery intents from its journal and platform ledger.
 
 ## Current boundary
 
-This base keeps Marina alive when the operator's laptop is off, but it is not a complete paired deployment: the credential Secret, encrypted Deck transport, Deck workload, network policies, and human ingress remain overlay work. It does not create Kubernetes Jobs for agents yet. The next runtime increment must define the provider-neutral start, inspect, resume, cancel, artifact, and termination contract before mapping it to a Kubernetes Job.
+This base runs the control-only mode. The [first-release overlay](../../../deploy/kubernetes/first-release/README.md) adds the workflow, TLS, worker Jobs, network policies and the platform API.

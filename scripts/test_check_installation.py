@@ -7,40 +7,73 @@ import unittest
 SPEC = importlib.util.spec_from_file_location("check_installation", Path(__file__).with_name("check-installation.py"))
 
 
+def example():
+    return json.loads((Path(__file__).resolve().parents[1] / "deploy/kubernetes/first-release/workflow.example.json").read_text())
+
+
+def mapping(namespace):
+    return {"deck_project": "prj_" + namespace, "namespace": namespace, "project": "acceptance",
+            "workloads": {"repository/v2": "land-on-main"}, "conversation_workload": "chat"}
+
+
+def binding(namespace):
+    return f"""apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: deck-marina-factory
+  namespace: {namespace}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: marina-factory
+subjects:
+- kind: ServiceAccount
+  name: deck
+  namespace: marina-system"""
+
+
 class InstallationPreflightTest(unittest.TestCase):
 
-    def test_chat_repository_context_requires_a_project_scoped_read_grant(self):
+    def test_each_configured_project_must_be_mapped_for_deck_with_access(self):
         module = importlib.util.module_from_spec(SPEC)
         SPEC.loader.exec_module(module)
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            config = json.loads((Path(__file__).resolve().parents[1] / "deploy/kubernetes/first-release/workflow.example.json").read_text())
-            config["conversation"] = {"budget_minutes": 5, "max_tokens": 20000}
-            (root / "workflow.json").write_text(json.dumps(config))
-            for projects, capabilities, allowed in (
-                ([config["project_id"]], ["workload.publish"], False),
-                (["another-project"], ["conversation.context.read"], False),
-                ([config["project_id"]], ["workload.publish", "conversation.context.read"], True),
-            ):
-                with self.subTest(projects=projects, capabilities=capabilities):
-                    (root / "service-auth.json").write_text(json.dumps({"identities": [
-                        {"projects": projects, "capabilities": capabilities}]}))
-                    failures = module.check_configuration(root, "")
-                    self.assertEqual(any("CHAT-11" in item for item in failures), not allowed, failures)
-
-    def test_each_configured_project_requires_its_own_service_grant(self):
-        module = importlib.util.module_from_spec(SPEC)
-        SPEC.loader.exec_module(module)
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            first = json.loads((Path(__file__).resolve().parents[1] / "deploy/kubernetes/first-release/workflow.example.json").read_text())
+            first = {**example(), "delivery": "fast_forward"}
             second = json.loads(json.dumps(first))
-            second["project_id"] = "second-project"
+            second["project_id"] = "factory-second.acceptance"
             (root / "workflow.json").write_text(json.dumps({"version": 1, "projects": [first, second]}))
-            for granted, allowed in (([first["project_id"]], False), ([first["project_id"], second["project_id"]], True)):
-                (root / "service-auth.json").write_text(json.dumps({"identities": [{"projects": granted, "capabilities": ["workload.publish"]}]}))
-                failures = module.check_configuration(root, "")
-                self.assertEqual(any("workload.publish" in item for item in failures), not allowed, failures)
+            entries = [mapping("factory-default"), mapping("factory-second")]
+            for mapped, bound, allowed in ((entries[:1], ["factory-default"], False),
+                                           (entries, ["factory-default"], False),
+                                           (entries, ["factory-default", "factory-second"], True)):
+                with self.subTest(mapped=len(mapped), bound=bound):
+                    (root / "deck-marina-projects.json").write_text(json.dumps(mapped))
+                    failures = module.check_configuration(root, "\n---\n".join(binding(namespace) for namespace in bound))
+                    self.assertEqual(any("MAR-10" in item for item in failures), not allowed, failures)
+
+    def test_project_id_must_name_a_marina_namespace_and_project(self):
+        module = importlib.util.module_from_spec(SPEC)
+        SPEC.loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            config = example()
+            config["project_id"] = "prj_default"
+            (root / "workflow.json").write_text(json.dumps(config))
+            failures = module.check_configuration(root, "")
+            self.assertTrue(any("MAR-10: project_id" in item for item in failures), failures)
+
+    def test_chat_profile_requires_a_mapped_conversation_workload(self):
+        module = importlib.util.module_from_spec(SPEC)
+        SPEC.loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "workflow.json").write_text(json.dumps(example()))
+            entry = mapping("factory-default")
+            del entry["conversation_workload"]
+            (root / "deck-marina-projects.json").write_text(json.dumps([entry]))
+            failures = module.check_configuration(root, binding("factory-default"))
+            self.assertTrue(any("conversation" in item and "MAR-10" in item for item in failures), failures)
 
     def test_repository_review_requires_a_different_model_and_cost_rates(self):
         module = importlib.util.module_from_spec(SPEC)
@@ -78,6 +111,22 @@ class InstallationPreflightTest(unittest.TestCase):
             failures = module.check_configuration(root, "")
             self.assertTrue(any("retired" in item for item in failures), failures)
             self.assertTrue(any("native kagent" in item for item in failures), failures)
+
+    def test_marina_installed_by_its_chart_counts_with_its_pinned_image(self):
+        module = importlib.util.module_from_spec(SPEC)
+        SPEC.loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            config = example()
+            config["kubernetes"]["image"] = "registry/verifier@sha256:" + "a" * 64
+            (root / "workflow.json").write_text(json.dumps(config))
+            rendered = "image: registry/deck@sha256:" + "b" * 64 + "\n"
+            for values, pinned in (("image:\n  repository: registry/marina\n  tag: latest\n", False),
+                                   ("image:\n  repository: registry/marina\n  digest: sha256:" + "c" * 64 + "\n", True)):
+                with self.subTest(pinned=pinned):
+                    (root / "marina-values.yaml").write_text(values)
+                    failures = module.check_configuration(root, rendered)
+                    self.assertEqual(any("digest" in item for item in failures), not pinned, failures)
 
     def test_missing_model_and_tokens_are_reported_without_secret_values(self):
         module = importlib.util.module_from_spec(SPEC)

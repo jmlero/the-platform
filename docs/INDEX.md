@@ -12,6 +12,7 @@ Start here. The documentation has two kinds of files:
 | --- | --- |
 | [VISION.md](VISION.md) | What are we building, and why? The agent and application platform, the autonomous software factory on it, the inner and outer loop, landing on main, the three-column experience, principles and direction. |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | How is it built? Components, how the loops map onto them, tech stack, key rules and deployment. |
+| [MARINA.md](MARINA.md) and [marina-visual.html](marina-visual.html) | What is Marina, what is inside, how to install and use it, how to deploy your own agent. The HTML page is a visual tour. |
 | [INDEX.md](INDEX.md) | Where is everything? This file. |
 
 ## Working documents
@@ -34,7 +35,7 @@ Start here. The documentation has two kinds of files:
 | [deck/web/DESIGN.md](../deck/web/DESIGN.md) | Deck's visual design system. |
 | [marina/docs/workloads/](../marina/docs/workloads/) | Workload profile and API contracts. |
 | [marina/docs/decisions/](../marina/docs/decisions/) | Decisions internal to Marina. |
-| [Local Podman/Kind](../deploy/kubernetes/local-podman/README.md), [repository workflow](../deploy/kubernetes/first-release/README.md), [native agent and verifier](../deploy/kubernetes/agent-platform/README.md), [kagent trial](../deploy/kubernetes/kagent-trial/README.md) | Installation guides and runbooks. |
+| [Marina on a local Kind cluster](../deploy/kubernetes/marina-local/README.md) (Marina only, one script), [Local Podman/Kind](../deploy/kubernetes/local-podman/README.md), [repository workflow](../deploy/kubernetes/first-release/README.md), [native agent and verifier](../deploy/kubernetes/agent-platform/README.md), [kagent trial](../deploy/kubernetes/kagent-trial/README.md) | Installation guides and runbooks. |
 | [Context Lens pilot](../deploy/pilots/context-lens/README.md) | The operator's own first real use of the platform. |
 
 ## Where does a fact go?

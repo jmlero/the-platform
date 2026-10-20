@@ -6,11 +6,10 @@ The base intentionally deploys:
 
 - one Deck replica with `Recreate` rollout semantics;
 - a `ReadWriteOnce` persistent volume mounted at `/data`;
-- the demo workspace and Atlas demo agent disabled;
 - a non-root, read-only container with all Linux capabilities dropped;
-- no Kubernetes API token, because Deck does not call the Kubernetes API;
+- no automounted service account token; an overlay that sets `DECK_MARINA_URL` mounts a projected token for Marina at `DECK_MARINA_TOKEN_FILE`;
 - startup and liveness probes backed by `/healthz`;
-- a readiness probe backed by `/readyz`, which checks the SQLite store and configured service- and operator-authentication policies;
+- a readiness probe backed by `/readyz`, which checks the SQLite store, the configured operator-authentication policy and, when Marina is configured, that its token is readable;
 - bounded CPU, memory, and temporary storage;
 - a cluster-internal Service and no ingress.
 

@@ -4,3 +4,4 @@ resources:
   - namespaces.yaml
   - control
   - workers
+  - ../platform/marina-api

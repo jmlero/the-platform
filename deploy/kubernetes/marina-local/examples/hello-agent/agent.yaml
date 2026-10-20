@@ -1,0 +1,51 @@
+# Your own agent on kagent: a Harness says which container to run (in a gVisor
+# sandbox), an AgentTemplate gives it a model and a system prompt. Replace
+# REGISTRY_IMAGE with the pushed image digest (README.md shows how).
+apiVersion: kagent.dev/v1alpha3
+kind: Harness
+metadata: {name: hello-agent, namespace: kint-engine}
+spec:
+  byo: {}
+  workload:
+    image: REGISTRY_IMAGE
+    command: [/hello-agent]
+  substrate:
+    workerPoolRef: {name: kint-worker}
+    snapshotPolicy: {location: s3://ate-snapshots/hello-agent}
+  allowedAgentTemplates:
+    selector:
+      matchLabels: {kagent.dev/harness: hello-agent}
+---
+# The key the egress proxy injects for this agent's model calls. The fake model
+# accepts any value; for agentgateway use the `agents` client key.
+apiVersion: v1
+kind: Secret
+metadata: {name: hello-agent-model, namespace: kint-engine}
+stringData:
+  key: not-a-real-key
+---
+apiVersion: kagent.dev/v1alpha3
+kind: ModelConfig
+metadata:
+  name: hello-agent
+  namespace: kint-engine
+  labels: {kagent.dev/harness: hello-agent}
+spec:
+  provider: OpenAI
+  model: fake/model
+  openAI:
+    baseUrl: https://fake-model.platform-gateway.svc/v1
+    apiFormat: responses
+  apiKeySecret: hello-agent-model
+  apiKeySecretKey: key
+---
+apiVersion: kagent.dev/v1alpha3
+kind: AgentTemplate
+metadata:
+  name: hello-agent
+  namespace: kint-engine
+  labels: {kagent.dev/harness: hello-agent}
+spec:
+  modelConfig: {name: hello-agent}
+  description: Answers each message with one model call.
+  systemPrompt: You are a friendly assistant. Answer in one short sentence.

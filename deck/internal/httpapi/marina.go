@@ -99,6 +99,17 @@ func (s *Server) createOperatorCommand(w http.ResponseWriter, r *http.Request) {
 	if !s.requireMarina(w) {
 		return
 	}
+	if !link.Created {
+		// Marina has not confirmed the Run, so there is nothing to cancel there
+		// yet; the engine withdraws it instead of creating it.
+		command, err := s.store.CreateCommand(r.Context(), link.Run.ID, input.Type, input.Reason, "operator:"+operatorIDFromRequest(r))
+		if err != nil {
+			s.writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusCreated, command)
+		return
+	}
 	if err := s.marina.CancelRun(r.Context(), link.Namespace, link.Run.ID, "deck-cancel-"+link.Run.ID); err != nil {
 		s.writeMarinaError(w, err)
 		return

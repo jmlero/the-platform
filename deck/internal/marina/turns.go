@@ -118,12 +118,12 @@ func (e *Engine) mirrorTurns(ctx context.Context) {
 
 func (e *Engine) mirrorTurn(ctx context.Context, turn store.MarinaTurn) error {
 	remote, err := e.Client.Turn(ctx, turn.Namespace, turn.Name)
-	if IsNotFound(err) {
+	if err != nil {
+		if gone, err := e.gone(ctx, err, turn.Namespace, turn.Spec); !gone {
+			return err
+		}
 		e.failTurn(ctx, turn.InvocationMessageID, turn.Name, "The Marina chat turn no longer exists.")
 		return nil
-	}
-	if err != nil {
-		return err
 	}
 	for _, name := range remote.Status.Decisions {
 		decision, err := e.Client.Decision(ctx, turn.Namespace, name)

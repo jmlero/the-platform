@@ -1,0 +1,17 @@
+# Your own agents' model calls leave the sandbox through the engine's egress
+# proxy, which injects the key. It may reach the fake model and agentgateway.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: kagent-egress-to-models, namespace: ate-system}
+spec:
+  podSelector:
+    matchLabels: {app: atenet-egress}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: platform-gateway}
+          podSelector:
+            matchExpressions:
+              - {key: app.kubernetes.io/name, operator: In, values: [fake-model, agentgateway]}
+      ports: [{protocol: TCP, port: 8443}]

@@ -1,0 +1,51 @@
+# Local ingress without Deck: one HTTPS listener on the Kind node port that
+# kind.yaml publishes as https://*.localhost:9443. TLS ends at the Gateway with
+# the private `ingress-tls` certificate; Marina's API is re-encrypted to Marina.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../platform/ingress-local-kind
+  - routes.yaml
+patches:
+  - patch: |-
+      apiVersion: gateway.networking.k8s.io/v1
+      kind: TLSRoute
+      metadata: {name: deck, namespace: marina-system}
+      $patch: delete
+  - patch: |-
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata: {name: deck-from-platform-ingress, namespace: marina-system}
+      $patch: delete
+  - target: {kind: Gateway, name: platform}
+    patch: |-
+      - op: replace
+        path: /spec/listeners
+        value:
+          - name: https
+            port: 8443
+            protocol: HTTPS
+            hostname: "*.localhost"
+            tls:
+              mode: Terminate
+              certificateRefs: [{name: ingress-tls}]
+            allowedRoutes:
+              namespaces: {from: Same}
+  - target: {kind: NetworkPolicy, name: proxy, namespace: platform-ingress}
+    patch: |-
+      - op: replace
+        path: /spec/egress/1
+        value:
+          to:
+            - namespaceSelector:
+                matchLabels: {kubernetes.io/metadata.name: marina-system}
+              podSelector:
+                matchLabels: {app.kubernetes.io/name: marina}
+            - namespaceSelector:
+                matchLabels: {kubernetes.io/metadata.name: kint-engine}
+              podSelector:
+                matchLabels: {app.kubernetes.io/component: ui, app.kubernetes.io/instance: kint-engine}
+            - namespaceSelector:
+                matchLabels: {kubernetes.io/metadata.name: platform-observability}
+              podSelector:
+                matchLabels: {app.kubernetes.io/name: jaeger}

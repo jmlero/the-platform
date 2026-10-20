@@ -257,8 +257,11 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	bearer, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
-	id, token, found := strings.Cut(bearer, ".")
-	if !ok || !found || len(id) > 128 || !strings.HasPrefix(id, "msg_") || len(token) != 64 || strings.ContainsAny(id, "/\\ \t\r\n") {
+	// Platform Turn IDs (<namespace>.<name>) contain dots; the token never does.
+	separator := strings.LastIndex(bearer, ".")
+	found := separator > 0
+	id, token := bearer[:max(separator, 0)], bearer[separator+1:]
+	if !ok || !found || len(id) > 128 || len(token) != 64 || strings.ContainsAny(id, "/\\ \t\r\n") {
 		http.Error(w, "turn credential required", 401)
 		return
 	}

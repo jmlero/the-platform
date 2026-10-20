@@ -229,6 +229,11 @@ func TestCancelEndsReadyWorkAtOnceAndActiveWorkThroughTheWorkflow(t *testing.T) 
 	if items, _ := p.ListReadyWork(ctx); len(items) != 0 {
 		t.Fatalf("cancelled work is still ready: %+v", items)
 	}
+	// A client following the events sees the Run end.
+	events, err := p.ListEvents(ctx, ready.ID, 0, 10)
+	if err != nil || len(events) == 0 || events[len(events)-1].Type != "run.cancelled" {
+		t.Fatalf("events of the ready work = %+v %v", events, err)
+	}
 	run, _ := approvedRun(t, p, "task-2")
 	if err := p.RequestCancel(ctx, run.WorkItemID, "deck", "stop"); err != nil {
 		t.Fatal(err)

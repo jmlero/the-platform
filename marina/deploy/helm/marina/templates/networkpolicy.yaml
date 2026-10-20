@@ -1,0 +1,51 @@
+{{- if .Values.networkPolicy.enabled }}
+# Marina calls no client. Workers, the engine's egress proxy and the listed
+# clients may call Marina's API and gateway.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: marina-gateway}
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: marina}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: {{ .Values.workers.namespace }}}
+          podSelector:
+            matchLabels: {app.kubernetes.io/name: marina-worker}
+        {{- if .Values.platform.engine.enabled }}
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: {{ .Values.platform.engine.egress.namespace }}}
+          podSelector:
+            matchLabels: {{- toYaml .Values.platform.engine.egress.podLabels | nindent 14 }}
+        {{- end }}
+        {{- with .Values.networkPolicy.clients }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      ports: [{protocol: TCP, port: 8090}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: marina-bootstrap-egress}
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: marina}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: kube-system}
+      ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
+    {{- if .Values.platform.engine.enabled }}
+    - to:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: {{ .Values.platform.engine.namespace }}}
+          podSelector:
+            matchLabels: {app.kubernetes.io/name: kagent, app.kubernetes.io/component: controller}
+      ports: [{protocol: TCP, port: 8083}]
+    {{- end }}
+    {{- with .Values.networkPolicy.egress }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- end }}

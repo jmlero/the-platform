@@ -1,0 +1,6 @@
+apiVersion: v2
+name: marina
+description: Marina, the agent platform, with its marina.dev/v1 API. Installs without Deck or any other client.
+type: application
+version: 0.1.0
+appVersion: dev

@@ -23,12 +23,18 @@ type fakeMarina struct {
 	answers   []string
 	cancels   []string
 	creates   int
-	// loseNextCreate stores the next created object but answers 503, like a
+	// loseCreates stores the next created objects but answers 503, like a
 	// response lost after Marina committed.
-	loseNextCreate bool
-	rejectCreate   string
-	project        []byte
-	workloads      map[string][]byte
+	loseCreates  int
+	rejectCreate string
+	// refuseCreate answers creates with this status code and stores nothing.
+	refuseCreate int
+	// projectDown answers the Project with 503; plainNotFound answers every
+	// request with a bare 404, like a wrong URL or a Marina without this API.
+	projectDown   bool
+	plainNotFound bool
+	project       []byte
+	workloads     map[string][]byte
 }
 
 type fakeRun struct {
@@ -73,6 +79,10 @@ func (f *fakeMarina) serve(w http.ResponseWriter, r *http.Request) {
 		f.status(w, 401, "Unauthorized", "token required")
 		return
 	}
+	if f.plainNotFound {
+		http.NotFound(w, r)
+		return
+	}
 	path := strings.TrimPrefix(r.URL.Path, apiPrefix)
 	if path == "/capabilities" {
 		f.write(w, 200, fixture(f.t, "capabilities.json"))
@@ -81,6 +91,8 @@ func (f *fakeMarina) serve(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(strings.TrimPrefix(path, "/namespaces/factory/"), "/")
 	body, _ := io.ReadAll(r.Body)
 	switch {
+	case parts[0] == "projects" && len(parts) == 2 && f.projectDown:
+		f.status(w, 503, "ServiceUnavailable", "project store unavailable")
 	case parts[0] == "projects" && len(parts) == 2:
 		f.write(w, 200, f.project)
 	case parts[0] == "workloads" && len(parts) == 2 && f.workloads[parts[1]] != nil:
@@ -92,6 +104,10 @@ func (f *fakeMarina) serve(w http.ResponseWriter, r *http.Request) {
 		}
 		_ = json.Unmarshal(body, &object)
 		f.creates++
+		if f.refuseCreate != 0 {
+			f.status(w, f.refuseCreate, http.StatusText(f.refuseCreate), "refused")
+			return
+		}
 		if f.rejectCreate != "" {
 			f.status(w, 422, "Invalid", f.rejectCreate)
 			return
@@ -108,8 +124,8 @@ func (f *fakeMarina) serve(w http.ResponseWriter, r *http.Request) {
 		run.Run.Metadata = object.Metadata
 		run.Run.Status.Phase = "Pending"
 		f.runs[object.Metadata.Name] = run
-		if f.loseNextCreate {
-			f.loseNextCreate = false
+		if f.loseCreates > 0 {
+			f.loseCreates--
 			f.status(w, 503, "ServiceUnavailable", "lost")
 			return
 		}
@@ -152,6 +168,10 @@ func (f *fakeMarina) serve(w http.ResponseWriter, r *http.Request) {
 		}
 		_ = json.Unmarshal(body, &object)
 		f.creates++
+		if f.refuseCreate != 0 {
+			f.status(w, f.refuseCreate, http.StatusText(f.refuseCreate), "refused")
+			return
+		}
 		if f.turns[object.Metadata.Name] == nil {
 			turn := &fakeTurn{Spec: object.Spec}
 			turn.Turn.Metadata = object.Metadata

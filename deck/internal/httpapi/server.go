@@ -365,8 +365,13 @@ func (s *Server) readiness(w http.ResponseWriter, r *http.Request) {
 		checks["store"] = "unavailable"
 	}
 	// Deck serves its UI without Marina; reachability is in the provider status.
+	// A configured Marina without a readable token cannot work at all.
 	if s.marina != nil {
-		checks["marina"] = "configured"
+		checks["marina"], checks["marina_token"] = "configured", "available"
+		if err := s.marina.TokenAvailable(); err != nil {
+			ready = false
+			checks["marina_token"] = "unavailable"
+		}
 	}
 	if s.operatorAuthenticator != nil {
 		checks["operator_auth"] = "available"

@@ -1,0 +1,62 @@
+{{- $ns := .Values.workers.namespace }}
+{{- if .Values.workers.createNamespace }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ $ns }}
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+---
+{{- end }}
+apiVersion: v1
+kind: ServiceAccount
+metadata: {name: marina-worker, namespace: {{ $ns }}}
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata: {name: marina-job-controller, namespace: {{ $ns }}}
+rules:
+  - apiGroups: [batch]
+    resources: [jobs]
+    verbs: [get, create, delete]
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [create, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: {name: marina-job-controller, namespace: {{ $ns }}}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: marina-job-controller}
+subjects:
+  - {kind: ServiceAccount, name: marina, namespace: {{ .Release.Namespace }}}
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata: {name: marina-workers, namespace: {{ $ns }}}
+spec:
+  hard: {{- toYaml .Values.workers.quota | nindent 4 }}
+{{- if .Values.networkPolicy.enabled }}
+---
+# Workers reach only Marina's gateway and cluster DNS.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: workers-gateway-only, namespace: {{ $ns }}}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: {{ .Release.Namespace }}}
+          podSelector:
+            matchLabels: {app.kubernetes.io/name: marina}
+      ports: [{protocol: TCP, port: 8090}]
+    - to:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: kube-system}
+      ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
+{{- end }}

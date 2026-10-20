@@ -9,8 +9,10 @@ It has three independently built components:
 
 - [Deck](deck/README.md): the web UI (projects, what is happening, chat) and the
   work ledger.
-- [Marina](marina/README.md): runs authorized work, recovers it across restarts
-  and publishes results back to Deck.
+- [Marina](marina/README.md): the agent platform and its API. It runs
+  authorized work in sandboxes and recovers it across restarts. New here? Read
+  [Marina in plain words](docs/MARINA.md), with a quick start and a
+  [visual tour](docs/marina-visual.html).
 - [platformctl](cli/README.md): a stateless command-line client for Deck's API.
 
 **Documentation starts at [docs/INDEX.md](docs/INDEX.md).** Read

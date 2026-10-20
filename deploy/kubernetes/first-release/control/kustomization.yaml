@@ -5,6 +5,7 @@ resources:
   - ../../../../deck/deploy/kubernetes/base
   - ../../../../marina/deploy/kubernetes/base
   - networkpolicy.yaml
+  - deck-marina.yaml
 patches:
   - path: deck.yaml
   - path: marina.yaml

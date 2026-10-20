@@ -42,6 +42,12 @@ class TrialInstallTests(unittest.TestCase):
                          ["namespaceSelector"]["matchLabels"],
                          {"the-platform.dev/installation": "local-kagent"})
 
+    def test_policies_follow_the_selected_node_address(self):
+        policies = [{"spec": {"egress": [{"to": [{"ipBlock": {"cidr": "10.89.0.2/32"}}]}]}}]
+        self.install.pin_node(policies, "10.89.1.2")
+        self.assertEqual(policies[0]["spec"]["egress"][0]["to"][0]["ipBlock"]["cidr"],
+                         "10.89.1.2/32")
+
 
 if __name__ == "__main__":
     unittest.main()

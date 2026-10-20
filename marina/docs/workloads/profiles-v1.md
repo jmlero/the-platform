@@ -9,11 +9,11 @@ profiles and immutable execution inputs. Current acceptance is recorded in
 | --- | --- | --- |
 | Identity | `repository/v1` for PR delivery; `repository/v2` for guarded main landing | Explicit Deck agent invocation, separate from task intake |
 | Harness | Native Codex on the pinned kagent engine | Pinned `kint-conversation-byo` Harness |
-| Configuration | `git`, `checks`, `allowed_paths`, `required_ci`, `kubernetes.image`, `repository_engine`, `repository_engine_gateway_url`, `reviewer_model`; optional `delivery: "fast_forward"` | Optional `conversation` with engine, token/time ceilings and fixed delegation budget |
+| Configuration | `git`, `checks`, `allowed_paths`, `required_ci`, `kubernetes.image`, `repository_engine`, `repository_engine_gateway_url`, `reviewer_model`; optional `delivery: "fast_forward"` | Optional `conversation` with engine and token/time ceilings; `conversation.delegation` is retired |
 | Inputs | Authorized task, exact Git commit, versioned repository binding and selected immutable context | Frozen originating thread, repository binding/commit/file index and explicit project-source revisions |
 | Runtime | Native implementation; independent text-only review before every commit; native diagnosis before each repair; clean Kubernetes verification per commit | One attempt-exclusive BYO engine instance |
 | Completion | Exact-patch review, clean checks and required CI; v2 also requires guarded fast-forward | One canonical reply and optional bounded task in the originating thread |
-| Authority | `source.read`, `source.write`, plus `pull_request.create` (v1) or `source.fast_forward` (v2) | No repository mutation; Ready delegation needs separate installation limits and service capability |
+| Authority | `source.read`, `source.write`, plus `pull_request.create` (v1) or `source.fast_forward` (v2) | No repository mutation; a proposed task is the client's to authorize |
 
 The LangChain diagnostic profile is removed under
 [decision 0023](../../../docs/decisions/0023-focus-kagent-cutover.md).
@@ -57,9 +57,7 @@ repair diagnosis. Three starts cover an initial implementation, review and
 verification; seven can cover one complete repair; eleven can cover two. The
 installation caps starts at eleven, and a smaller frozen task budget remains
 smaller. Independently, three failed reviews or implementations block. All starts
-share the original time/token/cost budget; no repair or restart grants more. Chat
-delegation retains its explicitly configured budget and must offer at least three
-starts for this profile. The version-1 runtime-start meaning from
+share the original time/token/cost budget; no repair or restart grants more. The version-1 runtime-start meaning from
 [decision 0025](../../../docs/decisions/0025-repair-attempts-and-budget.md) is
 preserved; [0026](../../../docs/decisions/0026-read-only-review-and-exact-patch.md)
 adds review.
@@ -151,13 +149,13 @@ follow-up exchange of at most four upstream requests, using the same frozen
 repository, token limit and deadline. Uncertain delivery retains reservations
 and blocks instead of sending the answer again blindly.
 
-The service identity needs `conversation.invocation.list`, `channel.message.list`,
-`conversation.context.read`, `conversation.question.write` and
-`conversation.outcome.publish`, scoped to the project. Optional Ready delegation
-additionally needs `conversation.task.delegate`
-and a fixed `conversation.delegation` budget admitted by the repository profile.
-An interpreted task cannot invent limits or grants. Publications are journaled
-before Deck receives them and replay with their original identity.
+Clients create the turn as a Marina Turn ([decision 0033](../../../docs/decisions/0033-marina-platform-api.md));
+Deck needs the `marina-factory` Role in the project namespace. A task the turn
+proposes is only a proposal: the client decides whether to authorize it and with
+which budget, and Marina rejects the retired `conversation.delegation` setting.
+An interpreted task cannot invent limits or grants.
+Outcomes are journaled before a client reads them and replay with their
+original identity.
 
 Invocations made before context capture was installed return missing context;
 they never acquire a new selection from current project sources. Previously

@@ -37,13 +37,16 @@ data or changing intake. A passing preflight does not replace live acceptance.
 ## Boundaries
 
 Deck and Marina have separate images, service accounts and SQLite PVCs.
-Marina owns artifact bytes on its volume; Deck downloads registered evidence
-through an authenticated, digest-checking proxy. Workers have disposable disks,
+Marina owns the platform API, its ledger and artifact bytes on its volume
+([decision 0033](../../../docs/decisions/0033-marina-platform-api.md)). Deck is a
+client: it presents its projected Kubernetes service account token, Marina checks
+it with TokenReview and SubjectAccessReview, and `factory.yaml` binds Deck to
+`marina-factory` in each project namespace. Marina calls no client. Deck downloads
+registered evidence through Marina's API. Workers have disposable disks,
 no Kubernetes API token, no Git write token and no upstream model credential.
-They receive a credential restricted to one attempt. Marina checks the live
-Deck lease/fence on gateway requests and repeatedly during long streams.
-The gateway stops calls when live authority is unavailable. Local lease expiry
-stops the recorded engine attempt even while Deck is offline.
+They receive a credential restricted to one attempt. Marina checks the run's
+live authority on gateway requests and repeatedly during long streams, and
+stops calls when it is unavailable.
 
 Both service connections and the worker gateway use TLS. Worker network policy
 permits only Marina and cluster DNS. Kubernetes must have a CNI that enforces
@@ -95,7 +98,10 @@ endpoint without authentication, set `model.token_file` to an empty string.
 Use a CA bundle containing your other internal roots when Git/model use private
 certificates; keep the installation CA in the same bundle.
 
-Edit `workflow.json`: Git locations and identity, producer and different reviewer model locations/names/rates,
+Edit `workflow.json` and `factory.yaml` together. `project_id` is
+`<namespace>.<project>` of the Marina Project in `factory.yaml`, its Workloads must
+use the workflow's models and choices, and `deck-marina-projects.json` maps Deck's
+project to them. In `workflow.json` set Git locations and identity, producer and different reviewer model locations/names/rates,
 verifier image **digest**, exact native engine selection, trusted commands, allowed paths, required CI names and
 budget. Set the independently built Deck and Marina images in the generated
 `kustomization.yaml`. Push/load your images using your registry's normal process.
@@ -147,6 +153,8 @@ The two SQLite deployments use one replica and Recreate updates. Do not scale
 them horizontally. When you choose to install on the selected cluster:
 
 ```sh
+kubectl --context YOUR_CONTEXT apply -k /private/tmp/marina-install
+# A fresh cluster rejects the Project and Workloads until the CRDs exist; apply again.
 kubectl --context YOUR_CONTEXT apply -k /private/tmp/marina-install
 kubectl --context YOUR_CONTEXT -n marina-system rollout status deployment/deck
 kubectl --context YOUR_CONTEXT -n marina-system rollout status deployment/marina

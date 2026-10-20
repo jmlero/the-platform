@@ -6,7 +6,7 @@ This file applies to the complete monorepo. More specific instructions in a prod
 
 ## Read first
 
-Start with [docs/INDEX.md](docs/INDEX.md): it maps every document, says who it is for, and says where each kind of fact belongs. Before planning or changing cross-product behavior, read:
+Start with [docs/INDEX.md](docs/INDEX.md): it maps every document, says who it is for, and says where each kind of fact belongs. For a plain overview of Marina, its components and the local quick start, read [docs/MARINA.md](docs/MARINA.md). Before planning or changing cross-product behavior, read:
 
 1. [docs/VISION.md](docs/VISION.md): what we are building and why
 2. [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): components, tech stack and safety rules
@@ -87,14 +87,14 @@ For documentation-only changes, verify links, referenced commands, and `git diff
 
 ## Installation and Kubernetes testing
 
-- The user authorizes two development/test environments: local Podman/Kind and the existing GCP Kubernetes cluster. Use the [local Podman/Kind profile](deploy/kubernetes/local-podman/README.md) for local checks and `/Users/jmolero/personal/github/infra-gcp` as the GCP infrastructure source of truth; read its `AGENTS.md` and `README.md` before GCP work. See [decision 0010](docs/decisions/0010-initial-installation-services.md).
-- Inspect and reuse the dedicated `kind-marina-local` context on `podman-machine-default-root`. Select that context and connection explicitly; preserve unrelated containers, contexts, credentials, and persistent data. Required test deployments and service restarts in this profile are covered by the local testing authorization.
+- The user authorizes two development/test environments: local Podman/Kind and the existing GCP Kubernetes cluster. Use [Marina on a local Kind cluster](deploy/kubernetes/marina-local/README.md) (`scripts/marina-local.py up` and `verify`) for local checks and `/Users/jmolero/personal/github/infra-gcp` as the GCP infrastructure source of truth; read its `AGENTS.md` and `README.md` before GCP work. See [decision 0010](docs/decisions/0010-initial-installation-services.md).
+- Inspect and reuse the dedicated `kind-marina` context on `podman-machine-default-root` (Kind cluster `marina`, registry container `marina-registry`; the earlier `kind-marina-local` cluster was deleted on 2026-10-20). Select that context and connection explicitly; preserve unrelated containers, contexts, credentials, and persistent data. Required test deployments and service restarts in this profile are covered by the local testing authorization.
 - GCP uses project `jmlero`, region `europe-west3`, GKE Autopilot cluster `autopilot`, and the configured `gcloud` CLI. Use its IAM-authenticated DNS endpoint and explicit context `gke_jmlero_europe-west3_autopilot`; use a separate kubeconfig to preserve the local default. Relevant test deployments and restarts are authorized within the infrastructure repo's EUR 10/month total budget; check existing spend and projected total before adding billable workloads or storage. Keep temporary workloads short-lived and clean up only resources created for the test.
 - Follow [decision 0010](docs/decisions/0010-initial-installation-services.md): vanilla Kubernetes, OpenRouter inference, GitHub/GHCR, separate SQLite stores, and artifact files on persistent volumes. Backup automation and restore drills are deferred for the pilot; persistence and restart recovery remain required.
 - Keep build/setup downloads separate from runtime egress. Prepackage worker and verification dependencies; preserve gateway-mediated model/source access and worker isolation.
 - Inspect current private configuration and the installation guide before live tests. Do not infer cluster credentials from developer logins, enable new task intake, or spend beyond existing authorization merely because the local services are healthy.
 - First-release acceptance uses local Kubernetes with the Mac running. The operator removed RUN-10; do not require an independent host or laptop-off proof. Identify the local environment when recording Jobs, persistence, recovery, cancellation, and network-isolation evidence.
-- Keep the local test installation accessible through `https://localhost:8443`; LAN exposure and second-device sign-in are outside the current acceptance scope. GCP availability does not transfer local acceptance evidence or require a migration; record each test's environment explicitly.
+- Keep the local test installation accessible through `https://marina.localhost:9443`, `https://kagent.localhost:9443` and `https://jaeger.localhost:9443` (Deck is not installed there); LAN exposure and second-device sign-in are outside the current acceptance scope. GCP availability does not transfer local acceptance evidence or require a migration; record each test's environment explicitly.
 
 ## Git identity and external effects
 

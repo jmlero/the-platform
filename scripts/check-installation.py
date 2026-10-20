@@ -34,6 +34,33 @@ def check_configuration(installation, rendered):
     return sorted(set(failures))
 
 
+def check_deck_mapping(config, installation, rendered):
+    """Deck reaches each Marina project through its mapping and RoleBinding (decision 0033)."""
+    project = config.get("project_id")
+    namespace, _, name = project.partition(".") if isinstance(project, str) else ("", "", "")
+    label = r"[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?"
+    if not re.fullmatch(label, namespace) or not re.fullmatch(label, name):
+        return ["MAR-10: project_id must be <namespace>.<project> of the Marina Project"]
+    try:
+        entries = json.loads((installation / "deck-marina-projects.json").read_text())
+        entry = next(item for item in entries if item.get("namespace") == namespace and item.get("project") == name)
+    except (OSError, ValueError, AttributeError, TypeError, StopIteration):
+        return [f"MAR-10: map a Deck project to Marina project {project} in deck-marina-projects.json"]
+    failures = []
+    profile = "repository/v2" if config.get("delivery") == "fast_forward" else "repository/v1"
+    if config.get("git", {}).get("repository") and not (entry.get("workloads") or {}).get(profile):
+        failures.append(f"MAR-10: map {profile} to a Workload for {project}")
+    if config.get("conversation") and not entry.get("conversation_workload"):
+        failures.append(f"MAR-10: map a conversation Workload for {project}")
+    bound = any("kind: RoleBinding\n" in document and f"namespace: {namespace}\n" in document
+                and re.search(r"^  name: marina-factory$", document, re.MULTILINE)
+                and re.search(r"^  name: deck\n  namespace: marina-system$", document, re.MULTILINE)
+                for document in rendered.split("\n---\n"))
+    if not bound:
+        failures.append(f"MAR-10: bind Deck's service account to marina-factory in namespace {namespace}")
+    return failures
+
+
 def check_profile(config, installation, rendered):
     failures = []
     if re.search(r"YOUR_|REPLACE_", json.dumps(config)):
@@ -42,6 +69,13 @@ def check_profile(config, installation, rendered):
         failures.append("RUN-05: rendered overlay contains unresolved placeholders")
     images = re.findall(r"^\s*image:\s*[\"']?([^\s\"']+)", rendered, re.MULTILINE)
     images.append(config.get("kubernetes", {}).get("image", ""))
+    chart = installation / "marina-values.yaml"
+    if chart.is_file():
+        # Marina installed by its Helm chart (MAR-11): its image is in the values.
+        values = chart.read_text()
+        repository = re.search(r"^  repository:\s*(\S+)", values, re.MULTILINE)
+        digest = re.search(r"^  digest:\s*(\S+)", values, re.MULTILINE)
+        images.append(f"{repository.group(1) if repository else ''}@{digest.group(1) if digest else ''}")
     if len(images) < 3 or any(not re.fullmatch(r"[^\s]+@sha256:[0-9a-f]{64}", image) for image in images):
         failures.append("RUN-05: every control and worker image must be pinned by digest")
     if "analysis" in config or "analysis_engine" in config:
@@ -54,23 +88,7 @@ def check_profile(config, installation, rendered):
                 engine.get("template") or engine.get("revision") or
                 config.get("repository_engine_gateway_url") != "https://marina.marina-system.svc"):
             failures.append("KINT-14: repository work requires the installed native kagent profile and gateway")
-        try:
-            identities = json.loads((installation / "service-auth.json").read_text())["identities"]
-            publishers = [identity for identity in identities if config.get("project_id") in identity["projects"]
-                          and "workload.publish" in identity["capabilities"]]
-            if not publishers:
-                failures.append("KINT-14: the project service identity needs workload.publish")
-        except (OSError, ValueError, KeyError, TypeError):
-            failures.append("KINT-14: a readable service publisher policy is required")
-    if config.get("conversation"):
-        try:
-            identities = json.loads((installation / "service-auth.json").read_text())["identities"]
-            if not any(config.get("project_id") in identity["projects"]
-                       and "conversation.context.read" in identity["capabilities"]
-                       for identity in identities):
-                failures.append("CHAT-11: the project service identity needs conversation.context.read")
-        except (OSError, ValueError, KeyError, TypeError):
-            failures.append("CHAT-11: a readable conversation context service policy is required")
+    failures.extend(check_deck_mapping(config, installation, rendered))
     for name, item in (("git-token", "RUN-03"), ("model-token", "RUN-09")):
         path = installation / name
         if not path.is_file() or not path.read_text().strip():

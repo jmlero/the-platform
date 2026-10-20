@@ -1,0 +1,15 @@
+# Shared local values for the Marina chart (MAR-11). The private installation
+# adds the image digest, intake, host aliases and site egress.
+persistence:
+  existingClaim: marina-data
+workers:
+  createNamespace: false
+networkPolicy:
+  clients:
+    - podSelector:
+        matchLabels: {app.kubernetes.io/name: deck}
+platform:
+  engine:
+    enabled: true
+  telemetry:
+    otlpEndpoint: http://otel-collector.platform-observability.svc:4318

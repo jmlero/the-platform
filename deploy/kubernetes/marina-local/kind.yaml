@@ -1,0 +1,30 @@
+# One-node Kind cluster for the Marina platform (see README.md). Calico replaces
+# the default CNI so NetworkPolicy is enforced. Substrate 0.2.0-beta4 needs the
+# beta certificate API, which Kubernetes 1.37 no longer serves by default.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: marina
+networking:
+  apiServerAddress: "127.0.0.1"
+  disableDefaultCNI: true
+  podSubnet: "192.168.0.0/16"
+runtimeConfig:
+  "certificates.k8s.io/v1beta1": "true"
+containerdConfigPatches:
+  - |-
+    [plugins."io.containerd.cri.v1.images".registry]
+      config_path = "/etc/containerd/certs.d"
+nodes:
+  - role: control-plane
+    image: docker.io/kindest/node:v1.37.0@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5
+    extraPortMappings:
+      # The platform ingress Gateway (kgateway) on https://*.localhost:9443.
+      - containerPort: 30443
+        hostPort: 9443
+        listenAddress: "127.0.0.1"
+        protocol: TCP
+      # The local image registry, which shares the node's network.
+      - containerPort: 5000
+        hostPort: 5001
+        listenAddress: "127.0.0.1"
+        protocol: TCP
