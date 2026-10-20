@@ -8,15 +8,6 @@ what happened. One command installs all of it on your Mac.
 A visual tour of the same content: [marina-visual.html](marina-visual.html)
 (open it in a browser).
 
-## In one minute
-
-| | |
-| --- | --- |
-| **What it is** | The control layer for agents. It has its own API (`marina.dev/v1`) that you use with `kubectl` or HTTP. |
-| **What you ask it for** | A **Turn**: one chat answer. A **Run**: a code change in a GitHub repository, from plan to pull request. |
-| **What it guarantees** | Budgets (time, tokens, cost) per task. Agents never see your keys. Agents only reach what they are allowed to. Work survives restarts. A human approves the plan. |
-| **Who uses it** | You (with `kubectl`), the Deck web app, the `platformctl` CLI or your own apps. Marina calls none of them. |
-
 ## What is inside
 
 Marina is one layer of a stack of open-source projects. Each one has one job.
